@@ -1,3 +1,5 @@
+// js/render-bracket.js — отрисовка страницы сетки
+
 function renderBracketPage() {
   const db = getDB();
   const tournament = db.active;
@@ -142,9 +144,16 @@ function adminFinalizeRound() {
     showToast("❌ Только администратор");
     return;
   }
+  
   const db = getDB();
   if (!db.active || db.active.status !== 'active') {
     showToast("Нет активного турнира");
+    return;
+  }
+  
+  const current = db.active.rounds[db.active.currentRound];
+  if (!current.startedAt) {
+    showToast("❌ Раунд ещё не начался");
     return;
   }
   
