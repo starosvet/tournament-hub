@@ -3,26 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Сетка турнира | Tournament Hub</title>
+<title>Сетка | Tournament Hub</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <header>
-  <div class="header-top">
-    <h1>🏆 Tournament Hub</h1>
-    <div id="userBlock"></div>
+  <div class="header-inner">
+    <a href="index.html" class="logo">🏆 Tournament Hub</a>
+    <nav>
+      <a href="index.html">Главная</a>
+      <a href="bracket.html" class="active">Сетка</a>
+      <a href="history.html">История</a>
+      <a href="admin.html">Admin</a>
+    </nav>
+    <div id="navUser" class="nav-user"></div>
   </div>
-  <nav>
-    <a href="index.html">Главная</a>
-    <a href="bracket.html" class="active">Сетка</a>
-    <a href="history.html">История</a>
-    <a href="admin.html">Admin</a>
-  </nav>
 </header>
 
 <main class="container">
-  <h1>📋 Сетка турнира</h1>
   <div id="bracket"></div>
 </main>
 
@@ -32,9 +31,7 @@
 <script src="js/render-bracket.js"></script>
 <script src="js/auth.js"></script>
 
-<script>
-renderBracketPage();
-</script>
+<script>renderBracketPage();</script>
 
 </body>
 </html>
