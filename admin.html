@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin | Tournament Hub</title>
+<title>Управление | Tournament Hub</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,225 +15,367 @@
       <a href="index.html">Главная</a>
       <a href="bracket.html">Сетка</a>
       <a href="history.html">История</a>
-      <a href="admin.html" class="active">Admin</a>
+      <a href="rules.html">Правила</a>
+      <a href="admin.html" class="active">Управление</a>
     </nav>
+    <div id="navUser" class="nav-user"></div>
   </div>
 </header>
 
 <main class="container">
-
-<!-- LOGIN -->
-<div id="loginPanel">
-  <div class="login-box">
-    <h2>⚙️ Панель администратора</h2>
-    <input type="password" id="adminPass" placeholder="Пароль">
-    <button onclick="enterAdmin()" class="btn-primary" style="width:100%;margin-top:15px">Войти</button>
-  </div>
-</div>
-
-<!-- ADMIN -->
-<div id="adminPanel" style="display:none">
-
-  <div class="admin-grid">
-    <!-- Участники -->
-    <div class="admin-card">
-      <h3>👥 Участники</h3>
-      <p class="hint">Формат: Имя | Ссылка (каждый с новой строки)</p>
-      <textarea id="importBox" rows="6" placeholder="Веспера | https://wiki/vespera&#10;Фрида | https://wiki/frida&#10;Эйрвен | https://wiki/eirwen"></textarea>
-      <div class="btn-row">
-        <button onclick="importPlayers()" class="btn-primary">📥 Импорт</button>
-        <button onclick="clearPlayers()" class="btn-danger">🗑️ Очистить</button>
-      </div>
-      <div id="playersCount" style="margin-top:10px;color:#64748b"></div>
-      <div id="playersList" style="margin-top:15px;max-height:200px;overflow-y:auto"></div>
-    </div>
-
-    <!-- Турнир -->
-    <div class="admin-card">
-      <h3>🏆 Турнир</h3>
-      <input type="text" id="tourName" placeholder="Название турнира">
-      <input type="text" id="tourDesc" placeholder="Описание (необязательно)">
-      <div class="btn-row">
-        <button onclick="createTournament()" class="btn-primary">✨ Создать</button>
-        <button onclick="nextRound()" class="btn-warn">⏭️ Следующий раунд</button>
-      </div>
-      <div id="tourStatus" style="margin-top:10px;color:#64748b"></div>
+  <div id="loginGate" style="max-width:480px; margin:40px auto;">
+    <div class="login-box">
+      <h2>🔐 Вход для администратора</h2>
+      <p>Введите пароль админ-панели</p>
+      <input type="password" id="adminPass" placeholder="Пароль">
+      <button class="btn-admin" style="width:100%; margin-top:16px;" onclick="doAdminLogin()">Войти</button>
     </div>
   </div>
-
-  <!-- Опасная зона -->
-  <div class="admin-card danger-zone">
-    <h3>⚠️ Опасная зона</h3>
-    <button onclick="clearAll()" class="btn-danger">🗑️ Удалить ВСЕ данные</button>
-    <button onclick="logoutAdmin();location.reload()" class="btn-secondary">🚪 Выйти</button>
+  
+  <div id="adminPanel" class="hidden">
+    <h1 class="page-title">⚙️ Панель управления</h1>
+    
+    <div class="admin-grid">
+      <!-- НАСТРОЙКИ САЙТА -->
+      <div class="admin-card">
+        <h3>🎨 Настройки сайта</h3>
+        <label>Название сайта</label>
+        <input type="text" id="siteName" placeholder="Tournament Hub">
+        <label>Описание под заголовком</label>
+        <input type="text" id="siteDesc" placeholder="Голосование за лучших">
+        <label>Цветовая тема</label>
+        <select id="siteTheme">
+          <option value="dark">Тёмная (по умолчанию)</option>
+          <option value="blue">Синяя</option>
+          <option value="purple">Фиолетовая</option>
+        </select>
+        <button class="btn-primary" onclick="saveSiteSettings()">💾 Сохранить настройки</button>
+      </div>
+      
+      <!-- УПРАВЛЕНИЕ ТУРНИРАМИ -->
+      <div class="admin-card">
+        <h3>🏆 Турниры</h3>
+        <div id="tournamentList" class="tournament-list" style="margin-bottom:16px;"></div>
+        <button class="btn-primary" onclick="createNewTournament()">➕ Новый турнир</button>
+      </div>
+      
+      <!-- СОЗДАНИЕ ТУРНИРА -->
+      <div class="admin-card">
+        <h3>⚔️ Создать турнир</h3>
+        <label>Название турнира</label>
+        <input type="text" id="tName" placeholder="Летний турнир 2026">
+        <label>Описание</label>
+        <textarea id="tDesc" placeholder="Краткое описание..."></textarea>
+        <label>Длительность голосования (часов)</label>
+        <input type="number" id="tDuration" value="24" min="1" max="168">
+        <label>Формат</label>
+        <select id="tFormat">
+          <option value="single">Олимпийская система (single elimination)</option>
+          <option value="double">Двойное elimination (в разработке)</option>
+        </select>
+        <button class="btn-primary" onclick="startTournament()">🚀 Запустить турнир</button>
+      </div>
+      
+      <!-- УЧАСТНИКИ -->
+      <div class="admin-card">
+        <h3>👥 Участники</h3>
+        <p class="hint">Добавьте участников перед запуском. Формат: Имя|URL_картинки (каждый с новой строки)</p>
+        <textarea id="participantsInput" placeholder="Игрок1|https://...
+Игрок2|https://..."></textarea>
+        <div class="btn-row">
+          <button class="btn-primary" onclick="saveParticipants()">💾 Сохранить участников</button>
+          <button class="btn-secondary" onclick="clearParticipants()">🗑️ Очистить</button>
+        </div>
+        <div id="participantsPreview" style="margin-top:12px;"></div>
+      </div>
+      
+      <!-- УПРАВЛЕНИЕ РАУНДАМИ -->
+      <div class="admin-card">
+        <h3>⏱️ Управление раундами</h3>
+        <div id="roundControl"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn-warn" onclick="forceEndRound()">🏁 Завершить раунд досрочно</button>
+          <button class="btn-danger" onclick="resetTournament()">♻️ Сбросить турнир</button>
+        </div>
+      </div>
+      
+      <!-- МОДЕРАЦИЯ -->
+      <div class="admin-card danger-zone">
+        <h3>🛡️ Модерация</h3>
+        <label>Пользователи</label>
+        <div id="userList" style="max-height:200px; overflow-y:auto; margin-bottom:12px;"></div>
+        <div class="btn-row">
+          <button class="btn-danger" onclick="clearAllVotes()">🗑️ Очистить все голоса</button>
+          <button class="btn-danger" onclick="clearAllUsers()">🗑️ Удалить всех пользователей</button>
+        </div>
+      </div>
+    </div>
   </div>
-
-</div>
-
 </main>
+
+<footer>
+  <span id="footerText">Tournament Hub</span>
+</footer>
 
 <script src="js/db.js"></script>
 <script src="js/engine.js"></script>
-<script src="js/bracket.js"></script>
 <script src="js/auth.js"></script>
+<script src="js/bracket.js"></script>
 
 <script>
-function enterAdmin() {
-  if (loginAdmin(document.getElementById("adminPass").value)) {
-    document.getElementById("loginPanel").style.display = "none";
-    document.getElementById("adminPanel").style.display = "block";
-    updateStats();
+function doAdminLogin() {
+  let pass = document.getElementById('adminPass').value;
+  if (loginAdmin(pass)) {
+    document.getElementById('loginGate').classList.add('hidden');
+    document.getElementById('adminPanel').classList.remove('hidden');
+    loadAdmin();
+    toast('✅ Добро пожаловать, админ!');
   } else {
-    alert("Неверный пароль");
+    toast('❌ Неверный пароль');
   }
 }
 
-function importPlayers() {
-  let lines = document.getElementById("importBox").value.split("\n").filter(x => x.trim());
-  if (!lines.length) { alert("Введите участников"); return; }
-  
+function loadAdmin() {
   let db = getDB();
-  let added = 0;
-  let timestamp = Date.now();
+  renderNavUser(db);
+  renderAdminLink();
   
-  lines.forEach((line, idx) => {
-    let parts = line.split("|").map(s => s.trim());
-    let name = parts[0];
-    let url = parts[1] || "#";
-    // УНИКАЛЬНЫЙ ID: p_время_индекс
-    let id = "p_" + timestamp + "_" + idx;
-    
-    if (!db.players.find(p => p.name === name)) {
-      db.players.push({ id, name, url, wins: 0 });
-      added++;
-    }
-  });
+  document.getElementById('siteName').value = db.settings?.siteName || 'Tournament Hub';
+  document.getElementById('siteDesc').value = db.settings?.siteDesc || '';
+  document.getElementById('siteTheme').value = db.settings?.theme || 'dark';
   
-  saveDB(db);
-  document.getElementById("importBox").value = "";
-  updateStats();
-  renderPlayersList();
-  alert("✅ Добавлено " + added + " участников");
+  renderTournamentList(db);
+  renderRoundControl(db);
+  renderUserList(db);
+  renderParticipantsPreview(db);
 }
 
-function renderPlayersList() {
+function saveSiteSettings() {
   let db = getDB();
-  let el = document.getElementById("playersList");
-  if (!db.players.length) { el.innerHTML = ""; return; }
-  
-  let html = '<div style="display:flex;flex-direction:column;gap:6px">';
-  db.players.forEach(p => {
-    html += `<div style="display:flex;align-items:center;gap:8px;padding:6px;background:#0f1115;border-radius:8px">
-      <img src="https://via.placeholder.com/28x28/1e293b/94a3b8?text=${encodeURIComponent(p.name[0])}" style="border-radius:50%">
-      <span style="font-size:13px">${p.name}</span>
-    </div>`;
+  db.settings = db.settings || {};
+  db.settings.siteName = document.getElementById('siteName').value || 'Tournament Hub';
+  db.settings.siteDesc = document.getElementById('siteDesc').value;
+  db.settings.theme = document.getElementById('siteTheme').value;
+  saveDB(db);
+  updateSiteBranding();
+  toast('✅ Настройки сохранены');
+}
+
+function updateSiteBranding() {
+  let db = getDB();
+  let name = db.settings?.siteName || 'Tournament Hub';
+  document.title = document.title.replace(/.*\|/, name + ' |');
+  let ft = document.getElementById('footerText');
+  if (ft) ft.textContent = '© ' + new Date().getFullYear() + ' ' + name;
+}
+
+function renderTournamentList(db) {
+  let el = document.getElementById('tournamentList');
+  if (!db.tournaments.length) {
+    el.innerHTML = '<p class="hint">Нет турниров</p>';
+    return;
+  }
+  let html = '';
+  db.tournaments.forEach(t => {
+    let active = t.id === db.activeTournamentId ? ' 🟢' : '';
+    html += '<div class="tournament-item" onclick="switchTournament(' + t.id + ')">' +
+      '<div class="ti-status ' + (t.status === 'active' ? 'active' : 'completed') + '"></div>' +
+      '<div class="ti-info"><h4>' + t.name + active + '</h4>' +
+      '<span>' + formatDate(t.createdAt) + ' • ' + t.status + '</span></div></div>';
   });
-  html += '</div>';
   el.innerHTML = html;
 }
 
-function clearPlayers() {
-  if (!confirm("Удалить всех участников?")) return;
+function switchTournament(id) {
+  let db = getDB();
+  db.activeTournamentId = id;
+  saveDB(db);
+  renderTournamentList(db);
+  renderRoundControl(db);
+  toast('Турнир активирован');
+}
+
+function createNewTournament() {
+  let db = getDB();
+  let t = {
+    id: Date.now(),
+    name: 'Новый турнир ' + (db.tournaments.length + 1),
+    description: '',
+    status: 'draft',
+    config: { totalRounds: 0, voteDurationHours: 24, format: 'single' },
+    rounds: [],
+    currentRound: 0,
+    winner: null,
+    createdAt: new Date().toISOString(),
+    startedAt: null,
+    completedAt: null
+  };
+  db.tournaments.push(t);
+  db.activeTournamentId = t.id;
+  saveDB(db);
+  renderTournamentList(db);
+  toast('✅ Черновик создан');
+}
+
+function startTournament() {
+  let db = getDB();
+  let t = getActiveTournament(db);
+  if (!t) return toast('Сначала создайте турнир');
+  if (!db.players.length) return toast('Добавьте участников!');
+  
+  t.name = document.getElementById('tName').value || t.name;
+  t.description = document.getElementById('tDesc').value;
+  t.config.voteDurationHours = parseInt(document.getElementById('tDuration').value) || 24;
+  t.config.format = document.getElementById('tFormat').value;
+  
+  let bracket = createBracket(db.players);
+  t.rounds = bracket.rounds;
+  t.config.totalRounds = bracket.rounds.length;
+  t.status = 'active';
+  t.startedAt = new Date().toISOString();
+  if (t.rounds[0]) {
+    t.rounds[0].isActive = true;
+    t.rounds[0].startedAt = new Date().toISOString();
+  }
+  
+  saveDB(db);
+  renderTournamentList(db);
+  renderRoundControl(db);
+  toast('🚀 Турнир запущен!');
+}
+
+function saveParticipants() {
+  let raw = document.getElementById('participantsInput').value.trim();
+  if (!raw) return;
+  let db = getDB();
+  db.players = [];
+  raw.split('\n').forEach(line => {
+    let [name, img] = line.split('|');
+    if (name) {
+      db.players.push({
+        id: 'p_' + Math.random().toString(36).substr(2, 8),
+        name: name.trim(),
+        img: (img || '').trim(),
+        wins: 0
+      });
+    }
+  });
+  saveDB(db);
+  renderParticipantsPreview(db);
+  toast('✅ Участники сохранены: ' + db.players.length);
+}
+
+function clearParticipants() {
+  document.getElementById('participantsInput').value = '';
   let db = getDB();
   db.players = [];
   saveDB(db);
-  updateStats();
-  renderPlayersList();
+  renderParticipantsPreview(db);
+  toast('🗑️ Участники очищены');
 }
 
-function createTournament() {
-  let db = getDB();
-  if (db.players.length < 2) { alert("Нужно минимум 2 участника"); return; }
-  
-  let name = document.getElementById("tourName").value.trim() || "Турнир";
-  let desc = document.getElementById("tourDesc").value.trim();
-  
-  // Очищаем старые голоса
-  if (db.activeTournamentId) resetVotes(db.activeTournamentId);
-  
-  // Создаём турнир с КОПИЯМИ участников (чтобы не менять оригиналы)
-  let playerCopies = db.players.map(p => ({...p}));
-  let tournament = createBracket(playerCopies);
-  tournament.name = name;
-  tournament.description = desc;
-  tournament.rounds[0].startedAt = new Date().toISOString();
-  
-  // Сохраняем маппинг id копий → оригиналы для обновления wins
-  tournament._playerMap = {};
-  tournament.rounds[0].matches.forEach(m => {
-    let origA = db.players.find(op => op.name === m.a.name);
-    let origB = db.players.find(op => op.name === m.b.name);
-    if (origA) tournament._playerMap[m.a.id] = origA.id;
-    if (origB) tournament._playerMap[m.b.id] = origB.id;
+function renderParticipantsPreview(db) {
+  let el = document.getElementById('participantsPreview');
+  if (!db.players.length) { el.innerHTML = ''; return; }
+  let html = '<p class="hint">Всего: ' + db.players.length + '</p>';
+  db.players.forEach(p => {
+    html += '<div class="lb-row" style="padding:6px 12px;"><img src="' + (p.img || '') + '" onerror="this.style.display=\'none\'" style="width:28px;height:28px;"><span>' + p.name + '</span></div>';
   });
-  
-  db.tournaments.push(tournament);
-  db.activeTournamentId = tournament.id;
-  saveDB(db);
-  
-  document.getElementById("tourName").value = "";
-  document.getElementById("tourDesc").value = "";
-  updateStats();
-  alert("✅ Турнир \"" + name + "\" создан!\nРаундов: " + tournament.rounds.length);
+  el.innerHTML = html;
 }
 
-function nextRound() {
-  let db = getDB();
+function renderRoundControl(db) {
+  let el = document.getElementById('roundControl');
   let t = getActiveTournament(db);
-  if (!t) { alert("Нет активного турнира"); return; }
-  if (t.status !== "active") { alert("Турнир завершён"); return; }
-  
-  let idx = db.tournaments.findIndex(x => x.id === t.id);
-  
-  // Обновляем маппинг для текущего раунда
+  if (!t || !t.rounds.length) {
+    el.innerHTML = '<p class="hint">Нет активного турнира</p>';
+    return;
+  }
   let round = t.rounds[t.currentRound];
-  round.matches.forEach(m => {
-    if (m.a.name !== "—" && m.a.name !== "TBD") {
-      let orig = db.players.find(op => op.name === m.a.name);
-      if (orig) t._playerMap[m.a.id] = orig.id;
-    }
-    if (m.b.name !== "—" && m.b.name !== "TBD") {
-      let orig = db.players.find(op => op.name === m.b.name);
-      if (orig) t._playerMap[m.b.id] = orig.id;
-    }
-  });
-  
-  db.tournaments[idx] = finalizeRound(t, db.players);
-  saveDB(db);
-  
-  let upd = getActiveTournament(db);
-  if (upd.status === "completed") {
-    alert("🏆 Турнир завершён!\nПобедитель: " + upd.winner.name);
-  } else {
-    alert("🔄 Следующий раунд: " + upd.rounds[upd.currentRound].name);
+  if (!round) {
+    el.innerHTML = '<p class="hint">Турнир завершён</p>';
+    return;
   }
-  updateStats();
+  let left = round.startedAt ? getTimeLeft(round.startedAt, t.config.voteDurationHours) : 0;
+  el.innerHTML = '<p><b>Текущий раунд:</b> ' + round.name + '</p>' +
+    '<p><b>Матчей:</b> ' + round.matches.length + '</p>' +
+    '<p><b>Осталось:</b> <span class="timer">' + formatDuration(left) + '</span></p>';
 }
 
-function clearAll() {
-  if (!confirm("⚠️ Удалить ВСЁ? Это необратимо!")) return;
-  localStorage.clear();
-  location.reload();
-}
-
-function updateStats() {
+function forceEndRound() {
+  if (!confirm('Завершить раунд досрочно?')) return;
   let db = getDB();
-  document.getElementById("playersCount").textContent = "Участников: " + db.players.length;
-  
   let t = getActiveTournament(db);
-  if (t) {
-    let status = t.status === "active" ? "🔥 Раунд " + (t.currentRound + 1) + " / " + t.rounds.length : "✅ Завершён";
-    document.getElementById("tourStatus").innerHTML = "<strong>" + t.name + "</strong><br>" + status;
-  } else {
-    document.getElementById("tourStatus").textContent = "Нет активного турнира";
-  }
+  if (!t) return toast('Нет активного турнира');
+  finalizeRound(t, db.players);
+  saveDB(db);
+  renderRoundControl(db);
+  toast('🏁 Раунд завершён');
 }
 
+function resetTournament() {
+  if (!confirm('Сбросить ВЕСЬ турнир? Все данные раундов будут потеряны!')) return;
+  let db = getDB();
+  let t = getActiveTournament(db);
+  if (!t) return;
+  t.rounds = [];
+  t.currentRound = 0;
+  t.status = 'draft';
+  t.winner = null;
+  t.startedAt = null;
+  t.completedAt = null;
+  resetVotes(t.id);
+  saveDB(db);
+  renderTournamentList(db);
+  renderRoundControl(db);
+  toast('♻️ Турнир сброшен');
+}
+
+function renderUserList(db) {
+  let el = document.getElementById('userList');
+  if (!db.users.length) { el.innerHTML = '<p class="hint">Нет пользователей</p>'; return; }
+  let html = '';
+  db.users.forEach(u => {
+    html += '<div class="lb-row" style="padding:6px 12px; margin-bottom:4px;">' +
+      '<span style="flex:1;">' + u.fandomName + '</span>' +
+      '<span class="hint">' + (u.status === 'verified' ? '✅ Fandom' : '👤 Гость') + '</span>' +
+      '</div>';
+  });
+  el.innerHTML = html;
+}
+
+function clearAllVotes() {
+  if (!confirm('Очистить ВСЕ голоса?')) return;
+  let db = getDB();
+  let t = getActiveTournament(db);
+  if (t) resetVotes(t.id);
+  toast('🗑️ Голоса очищены');
+}
+
+function clearAllUsers() {
+  if (!confirm('Удалить ВСЕХ пользователей?')) return;
+  let db = getDB();
+  db.users = [];
+  saveDB(db);
+  renderUserList(db);
+  toast('🗑️ Пользователи удалены');
+}
+
+function toast(msg) {
+  let existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  let t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2500);
+}
+
+// Проверка авторизации при загрузке
 if (isAdmin()) {
-  document.getElementById("loginPanel").style.display = "none";
-  document.getElementById("adminPanel").style.display = "block";
-  updateStats();
-  renderPlayersList();
+  document.getElementById('loginGate').classList.add('hidden');
+  document.getElementById('adminPanel').classList.remove('hidden');
+  loadAdmin();
 }
 </script>
 
