@@ -11,22 +11,14 @@ body {
 }
 
 .card {
-  background: #1b1f2a;
+  background: #1c1f2a;
   padding: 15px;
   margin: 10px 0;
   border-radius: 10px;
 }
 
 button {
-  padding: 10px;
-  margin: 5px;
-  border: none;
-  background: #2d3345;
-  color: white;
-  border-radius: 8px;
+  padding: 8px 12px;
+  margin-left: 10px;
   cursor: pointer;
-}
-
-button:hover {
-  background: #3a415a;
 }
