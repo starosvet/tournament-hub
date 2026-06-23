@@ -1,102 +1,56 @@
 <!DOCTYPE html>
-
-<html>
-
+<html lang="ru">
 <head>
-
 <meta charset="UTF-8">
-
-<title>Admin</title>
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin | Tournament Hub</title>
 <link rel="stylesheet" href="style.css">
-
 </head>
-
-
 <body>
 
+<header>
+  <h1>🏆 Tournament Hub</h1>
+  <nav>
+    <a href="index.html">Главная</a>
+    <a href="bracket.html">Сетка</a>
+    <a href="history.html">История</a>
+    <a href="admin.html">Admin</a>
+  </nav>
+</header>
 
-<h1>⚙ Admin Panel</h1>
-
+<h1>⚙️ Панель администратора</h1>
 
 <div id="login">
-
-
-<input id="password"
-placeholder="Admin password">
-
-
-<button onclick="enter()">
-Войти
-</button>
-
-
+  <input id="password" type="password" placeholder="Пароль администратора">
+  <button onclick="enter()">Войти</button>
 </div>
 
+<div id="panel" style="display:none">
 
+  <h2>📥 Импорт участников</h2>
+  <p>Формат: <b>Имя | ссылка</b> (каждый с новой строки)</p>
+  <textarea id="importBox" placeholder="Веспера | https://wiki/vespera&#10;Фрида | https://wiki/frida"></textarea>
+  <button onclick="importPlayers()">📥 Импортировать</button>
 
-<div id="panel"
-style="display:none">
+  <hr>
 
+  <h2>🏆 Управление турниром</h2>
+  <button onclick="newTournament()">✨ Создать новый турнир</button>
+  <button onclick="nextRound()">⏭️ Завершить раунд / Следующий</button>
+  <button onclick="clearDB()">🗑️ Очистить всё</button>
 
-<h2>Импорт статей</h2>
+  <hr>
 
-
-<p>
-Формат:
-<br>
-Название | ссылка
-</p>
-
-
-<textarea id="importBox"></textarea>
-
-
-<button onclick="importPlayers()">
-Импортировать
-</button>
-
-
-
-<hr>
-
-
-<button onclick="newTournament()">
-
-Новый турнир
-
-</button>
-
-
-<button onclick="newRound()">
-
-Следующий круг
-
-</button>
-
-
-<button onclick="clearDB()">
-
-Очистить
-
-</button>
-
-
-
-<h2>Статистика</h2>
-
-
-<div id="stats"></div>
-
+  <h2>📊 Статистика</h2>
+  <div id="stats"></div>
 
 </div>
-
 
 <script src="js/db.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/engine.js"></script>
+<script src="js/bracket.js"></script>
 <script src="js/admin.js"></script>
-
 
 </body>
 </html>
