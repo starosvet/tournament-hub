@@ -9,102 +9,63 @@
 <body>
 
 <header>
-  <div class="header-top">
-    <h1>🏆 Tournament Hub</h1>
-    <div id="userBlock"></div>
+  <div class="header-inner">
+    <a href="index.html" class="logo">🏆 Tournament Hub</a>
+    <nav>
+      <a href="index.html">Главная</a>
+      <a href="bracket.html">Сетка</a>
+      <a href="history.html">История</a>
+      <a href="admin.html" class="active">Admin</a>
+    </nav>
   </div>
-  <nav>
-    <a href="index.html">Главная</a>
-    <a href="bracket.html">Сетка</a>
-    <a href="history.html">История</a>
-    <a href="admin.html" class="active">Admin</a>
-  </nav>
 </header>
 
 <main class="container">
 
 <!-- LOGIN -->
 <div id="loginPanel">
-  <div class="login-card">
+  <div class="login-box">
     <h2>⚙️ Панель администратора</h2>
-    <input type="password" id="adminPass" placeholder="Пароль администратора">
-    <button onclick="enterAdmin()" style="width:100%; margin-top:15px;">Войти</button>
+    <input type="password" id="adminPass" placeholder="Пароль">
+    <button onclick="enterAdmin()" class="btn-primary" style="width:100%;margin-top:15px">Войти</button>
   </div>
 </div>
 
-<!-- ADMIN PANEL -->
+<!-- ADMIN -->
 <div id="adminPanel" style="display:none">
 
-  <!-- Участники -->
-  <section class="admin-section">
-    <h2>👥 Управление участниками</h2>
-    <div class="admin-tabs">
-      <button class="admin-tab active" onclick="showAdminTab('players')">📥 Импорт</button>
-      <button class="admin-tab" onclick="showAdminTab('playersList')">📋 Список</button>
-    </div>
-    
-    <div id="admin-tab-players" class="admin-tab-content active">
-      <p style="color:#94a3b8; margin-bottom:10px;">Формат: <b>Имя | Ссылка на вики</b> (каждый с новой строки)</p>
-      <textarea id="importBox" placeholder="Веспера | https://wiki/vespera&#10;Фрида | https://wiki/frida&#10;Эйрвен | https://wiki/eirwen"></textarea>
-      <button onclick="importPlayers()">📥 Импортировать участников</button>
-      <button onclick="clearPlayers()" style="background:#ef4444;">🗑️ Очистить список</button>
-    </div>
-    
-    <div id="admin-tab-playersList" class="admin-tab-content">
-      <div id="playersList"></div>
-    </div>
-  </section>
-
-  <!-- Турниры -->
-  <section class="admin-section">
-    <h2>🏆 Управление турниром</h2>
-    
-    <div class="admin-tabs">
-      <button class="admin-tab active" onclick="showAdminTab('createTour')">✨ Создать</button>
-      <button class="admin-tab" onclick="showAdminTab('manageTour')">⚙️ Управление</button>
-    </div>
-    
-    <div id="admin-tab-createTour" class="admin-tab-content active">
-      <label>Название турнира</label>
-      <input type="text" id="tourName" placeholder="Лучшие Персонажи 2026">
-      
-      <label>Описание</label>
-      <textarea id="tourDesc" placeholder="Описание турнира..."></textarea>
-      
-      <div class="form-row">
-        <div>
-          <label>Количество раундов</label>
-          <input type="number" id="tourRounds" value="10" min="1" max="20">
-        </div>
-        <div>
-          <label>Длительность голосования (часов)</label>
-          <input type="number" id="tourVoteHours" value="24" min="1" max="168">
-        </div>
+  <div class="admin-grid">
+    <!-- Участники -->
+    <div class="admin-card">
+      <h3>👥 Участники</h3>
+      <p class="hint">Формат: Имя | Ссылка (каждый с новой строки)</p>
+      <textarea id="importBox" rows="6" placeholder="Веспера | https://wiki/vespera&#10;Фрида | https://wiki/frida"></textarea>
+      <div class="btn-row">
+        <button onclick="importPlayers()" class="btn-primary">📥 Импорт</button>
+        <button onclick="clearPlayers()" class="btn-danger">🗑️ Очистить</button>
       </div>
-      
-      <label>Выберите участников (удерживайте Ctrl для множественного выбора)</label>
-      <select id="tourPlayers" multiple size="10"></select>
-      
-      <button onclick="createTournament()" style="margin-top:15px;">✨ Создать турнир</button>
+      <div id="playersCount" style="margin-top:10px;color:#64748b"></div>
     </div>
-    
-    <div id="admin-tab-manageTour" class="admin-tab-content">
-      <div id="activeTourManage"></div>
-    </div>
-  </section>
 
-  <!-- Статистика -->
-  <section class="admin-section">
-    <h2>📊 Статистика сайта</h2>
-    <div id="siteStats"></div>
-  </section>
+    <!-- Турнир -->
+    <div class="admin-card">
+      <h3>🏆 Турнир</h3>
+      <input type="text" id="tourName" placeholder="Название турнира">
+      <input type="text" id="tourDesc" placeholder="Описание (необязательно)">
+      <div class="btn-row">
+        <button onclick="createTournament()" class="btn-primary">✨ Создать</button>
+        <button onclick="nextRound()" class="btn-warn">⏭️ Следующий раунд</button>
+      </div>
+      <div id="tourStatus" style="margin-top:10px;color:#64748b"></div>
+    </div>
+  </div>
 
   <!-- Опасная зона -->
-  <section class="admin-section danger">
-    <h2>⚠️ Опасная зона</h2>
-    <button onclick="clearAllData()" style="background:#dc2626;">🗑️ Очистить ВСЕ данные</button>
-    <button onclick="logoutAdmin(); location.reload();" style="background:#64748b;">🚪 Выйти из админки</button>
-  </section>
+  <div class="admin-card danger-zone">
+    <h3>⚠️ Опасная зона</h3>
+    <button onclick="clearAll()" class="btn-danger">🗑️ Удалить ВСЕ данные</button>
+    <button onclick="logoutAdmin();location.reload()" class="btn-secondary">🚪 Выйти</button>
+  </div>
 
 </div>
 
@@ -116,269 +77,116 @@
 <script src="js/auth.js"></script>
 
 <script>
-// ========== ВХОД ==========
 function enterAdmin() {
   if (loginAdmin(document.getElementById("adminPass").value)) {
     document.getElementById("loginPanel").style.display = "none";
     document.getElementById("adminPanel").style.display = "block";
-    loadAdminData();
+    updateStats();
   } else {
     alert("Неверный пароль");
   }
 }
 
-// ========== ТАБЫ ==========
-function showAdminTab(tab) {
-  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
-  event.target.classList.add('active');
-  document.getElementById('admin-tab-' + tab).classList.add('active');
-  
-  if (tab === 'playersList') renderPlayersList();
-  if (tab === 'manageTour') renderActiveTourManage();
-}
-
-// ========== УЧАСТНИКИ ==========
 function importPlayers() {
-  const lines = document.getElementById("importBox").value.split("\n").filter(x => x.trim());
+  let lines = document.getElementById("importBox").value.split("\n").filter(x => x.trim());
   if (!lines.length) { alert("Введите участников"); return; }
   
-  const db = getDB();
-  const existingIds = new Set(db.players.map(p => p.id));
+  let db = getDB();
   let added = 0;
   
-  lines.forEach((line, idx) => {
-    const parts = line.split("|").map(s => s.trim());
-    const name = parts[0];
-    const url = parts[1] || "#";
-    const id = "p_" + name.toLowerCase().replace(/\s+/g, "_");
+  lines.forEach(line => {
+    let parts = line.split("|").map(s => s.trim());
+    let name = parts[0];
+    let url = parts[1] || "#";
+    let id = "p_" + name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
     
-    if (existingIds.has(id)) return;
-    
-    db.players.push({ id, name, url, wins: 0 });
-    added++;
+    if (!db.players.find(p => p.id === id)) {
+      db.players.push({ id, name, url, wins: 0 });
+      added++;
+    }
   });
   
   saveDB(db);
-  alert(`✅ Добавлено ${added} участников. Всего: ${db.players.length}`);
   document.getElementById("importBox").value = "";
-  renderPlayersList();
-  loadTourPlayersSelect();
+  updateStats();
+  alert(`✅ Добавлено ${added} участников`);
 }
 
 function clearPlayers() {
-  if (!confirm("Удалить ВСЕХ участников?")) return;
-  const db = getDB();
+  if (!confirm("Удалить всех участников?")) return;
+  let db = getDB();
   db.players = [];
   saveDB(db);
-  renderPlayersList();
-  loadTourPlayersSelect();
-}
-
-function renderPlayersList() {
-  const db = getDB();
-  const container = document.getElementById("playersList");
-  
-  if (!db.players.length) {
-    container.innerHTML = '<p style="color:#64748b">Нет участников</p>';
-    return;
-  }
-  
-  let html = '<div class="players-grid">';
-  db.players.forEach(p => {
-    html += `
-      <div class="player-mini">
-        <img src="${getWikiImage(p.url)}" alt="" onerror="this.style.display='none'">
-        <div>
-          <div style="font-weight:500">${p.name}</div>
-          <div style="font-size:12px; color:#64748b">${p.url}</div>
-        </div>
-      </div>
-    `;
-  });
-  html += '</div>';
-  container.innerHTML = html;
-}
-
-function getWikiImage(url) {
-  if (!url || url === "#") return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-  const name = url.split('/').pop() || '?';
-  return `https://via.placeholder.com/40x40/2a3142/fff?text=${encodeURIComponent(name[0].toUpperCase())}`;
-}
-
-// ========== ТУРНИРЫ ==========
-function loadTourPlayersSelect() {
-  const db = getDB();
-  const select = document.getElementById("tourPlayers");
-  select.innerHTML = db.players.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
+  updateStats();
 }
 
 function createTournament() {
-  const name = document.getElementById("tourName").value.trim();
-  const desc = document.getElementById("tourDesc").value.trim();
-  const select = document.getElementById("tourPlayers");
-  const selected = Array.from(select.selectedOptions).map(o => o.value);
+  let db = getDB();
+  if (db.players.length < 2) { alert("Нужно минимум 2 участника"); return; }
   
-  if (!name) { alert("Введите название"); return; }
-  if (selected.length < 2) { alert("Выберите минимум 2 участника"); return; }
-  
-  const config = {
-    totalRounds: parseInt(document.getElementById("tourRounds").value) || 10,
-    voteDurationHours: parseInt(document.getElementById("tourVoteHours").value) || 24
-  };
-  
-  const db = getDB();
+  let name = document.getElementById("tourName").value.trim() || "Турнир";
+  let desc = document.getElementById("tourDesc").value.trim();
   
   // Очищаем старые голоса
-  for (let key in localStorage) {
-    if (key.startsWith('vote_')) localStorage.removeItem(key);
-  }
+  if (db.activeTournamentId) resetVotes(db.activeTournamentId);
   
-  db.active = createBracket(db.players.filter(p => selected.includes(p.id)));
-  db.active.name = name;
-  db.active.description = desc;
-  db.active.config = config;
-  db.active.rounds[0].startedAt = new Date();
+  let tournament = createBracket(db.players);
+  tournament.name = name;
+  tournament.description = desc;
+  tournament.rounds[0].startedAt = new Date().toISOString();
   
+  db.tournaments.push(tournament);
+  db.activeTournamentId = tournament.id;
   saveDB(db);
-  alert(`✅ Турнир "${name}" создан!\nУчастников: ${selected.length}\nРаундов: ${config.totalRounds}`);
   
   document.getElementById("tourName").value = "";
   document.getElementById("tourDesc").value = "";
-  renderActiveTourManage();
-  renderSiteStats();
+  updateStats();
+  alert(`✅ Турнир "${name}" создан!\nРаундов: ${tournament.rounds.length}`);
 }
 
-function renderActiveTourManage() {
-  const db = getDB();
-  const container = document.getElementById("activeTourManage");
-  const t = db.active;
+function nextRound() {
+  let db = getDB();
+  let t = getActiveTournament(db);
+  if (!t) { alert("Нет активного турнира"); return; }
+  if (t.status !== "active") { alert("Турнир завершён"); return; }
   
-  if (!t) {
-    container.innerHTML = '<p style="color:#64748b">Нет активного турнира</p>';
-    return;
-  }
-  
-  const statusLabels = { "active": "🔥 Активен", "completed": "✅ Завершён" };
-  
-  let html = `
-    <div class="tour-manage-card">
-      <h3>${t.name}</h3>
-      <div style="color:#94a3b8; margin-bottom:15px;">${statusLabels[t.status] || t.status}</div>
-      
-      <div class="tour-actions">
-  `;
-  
-  if (t.status === "active") {
-    const round = t.rounds[t.currentRound];
-    if (round) {
-      html += `<div style="margin-bottom:10px;">Текущий: ${round.name}</div>`;
-      html += `<button onclick="finalizeCurrentRound()">✅ Завершить раунд</button>`;
-    }
-  }
-  
-  html += `
-        <button onclick="deleteTournament()" style="background:#ef4444;">🗑️ Удалить турнир</button>
-      </div>
-    </div>
-  `;
-  
-  container.innerHTML = html;
-}
-
-function finalizeCurrentRound() {
-  const db = getDB();
-  if (!db.active || db.active.status !== 'active') {
-    alert("Нет активного турнира");
-    return;
-  }
-  
-  const current = db.active.rounds[db.active.currentRound];
-  if (!current.startedAt) {
-    alert("Раунд ещё не начался");
-    return;
-  }
-  
-  db.active = finalizeRound(db.active);
+  let idx = db.tournaments.findIndex(x => x.id === t.id);
+  db.tournaments[idx] = finalizeRound(t, db.players);
   saveDB(db);
   
-  if (db.active.status === 'completed') {
-    alert("🏆 Турнир завершён!\nПобедитель: " + (db.active.winner?.name || "?"));
+  let upd = getActiveTournament(db);
+  if (upd.status === "completed") {
+    alert("🏆 Турнир завершён!\nПобедитель: " + upd.winner.name);
   } else {
-    const nextName = db.active.rounds[db.active.currentRound]?.name || 'следующий раунд';
-    alert("🔄 Раунд завершён!\nСледующий: " + nextName);
+    alert("🔄 Следующий раунд: " + upd.rounds[upd.currentRound].name);
   }
-  
-  renderActiveTourManage();
-  renderSiteStats();
+  updateStats();
 }
 
-function deleteTournament() {
-  if (!confirm("Удалить турнир?")) return;
-  const db = getDB();
-  db.active = null;
-  saveDB(db);
-  renderActiveTourManage();
-  renderSiteStats();
-}
-
-// ========== СТАТИСТИКА ==========
-function renderSiteStats() {
-  const db = getDB();
-  const active = db.active;
-  
-  let html = `
-    <div class="stats-grid">
-      <div class="stat-box">
-        <div class="stat-number">${db.players.length}</div>
-        <div class="stat-label">Участников</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-number">${db.users?.length || 0}</div>
-        <div class="stat-label">Пользователей</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-number">${active ? active.currentRound + 1 : '—'}</div>
-        <div class="stat-label">Текущий раунд</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-number">${active ? '🔥' : '—'}</div>
-        <div class="stat-label">Статус</div>
-      </div>
-    </div>
-  `;
-  
-  if (active) {
-    html += `
-      <div style="margin-top:20px; padding:15px; background:#1a1f2e; border-radius:12px;">
-        <strong>Активный турнир:</strong> ${active.name}<br>
-        <span style="color:#94a3b8">Статус: ${active.status} · Раунд ${active.currentRound + 1}/${active.config?.totalRounds || '?'}</span>
-      </div>
-    `;
-  }
-  
-  document.getElementById("siteStats").innerHTML = html;
-}
-
-function clearAllData() {
-  if (!confirm("⚠️ ВСЕ ДАННЫЕ БУДУТ УДАЛЕНЫ!\nУчастники, турниры, голоса — всё.\nЭто необратимо!\n\nПродолжить?")) return;
+function clearAll() {
+  if (!confirm("⚠️ Удалить ВСЁ? Это необратимо!")) return;
   localStorage.clear();
   location.reload();
 }
 
-// ========== ЗАГРУЗКА ==========
-function loadAdminData() {
-  loadTourPlayersSelect();
-  renderPlayersList();
-  renderActiveTourManage();
-  renderSiteStats();
+function updateStats() {
+  let db = getDB();
+  document.getElementById("playersCount").textContent = `Участников: ${db.players.length}`;
+  
+  let t = getActiveTournament(db);
+  if (t) {
+    let status = t.status === "active" ? `🔥 Раунд ${t.currentRound + 1} / ${t.rounds.length}` : "✅ Завершён";
+    document.getElementById("tourStatus").innerHTML = `<strong>${t.name}</strong><br>${status}`;
+  } else {
+    document.getElementById("tourStatus").textContent = "Нет активного турнира";
+  }
 }
 
-// Автовход если уже залогинен
 if (isAdmin()) {
   document.getElementById("loginPanel").style.display = "none";
   document.getElementById("adminPanel").style.display = "block";
-  loadAdminData();
+  updateStats();
 }
 </script>
 
