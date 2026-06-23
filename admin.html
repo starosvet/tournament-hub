@@ -1,16 +1,25 @@
-<h1>Admin Panel</h1>
+const ADMIN_KEY = "admin-v5-key";
 
-<button onclick="
-  localStorage.clear();
-  location.reload();
-">
-Reset All
-</button>
+function login() {
+  const val = document.getElementById("adminkey").value;
 
-<button onclick="
-  state.matches = generatePairs(players);
+  if (val === ADMIN_KEY) {
+    localStorage.setItem("admin", "1");
+    location.reload();
+  } else {
+    alert("Wrong key");
+  }
+}
+
+function isAdmin() {
+  return localStorage.getItem("admin") === "1";
+}
+
+function importPlayers() {
+  const raw = document.getElementById("importBox").value;
+
+  state.players = parseImport(raw);
+
   saveState(state);
-  location.reload();
-">
-Regenerate Round
-</button>
+  alert("Imported " + state.players.length);
+}
