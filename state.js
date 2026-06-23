@@ -1,18 +1,16 @@
-const STATE_KEY = "th_v5_state";
-const HISTORY_KEY = "th_v5_history";
+const STATE_KEY = "th_v6";
 
-function loadState() {
-  return JSON.parse(localStorage.getItem(STATE_KEY));
+export function loadState() {
+  return JSON.parse(localStorage.getItem(STATE_KEY)) || {
+    season: 1,
+    round: 1,
+    players: [],
+    rounds: [],
+    log: [],
+    users: []
+  };
 }
 
-function saveState(state) {
+export function saveState(state) {
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
-}
-
-function loadHistory() {
-  return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
-}
-
-function saveHistory(history) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
 }
