@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>Admin</title>
+
+<link rel="stylesheet" href="style.css">
+
+</head>
+
+
+<body>
+
+
+<h1>⚙ Admin Panel</h1>
+
+
+<div id="login">
+
+
+<input id="password"
+placeholder="Admin password">
+
+
+<button onclick="enter()">
+Войти
+</button>
+
+
+</div>
+
+
+
+<div id="panel"
+style="display:none">
+
+
+<h2>Импорт статей</h2>
+
+
+<p>
+Формат:
+<br>
+Название | ссылка
+</p>
+
+
+<textarea id="importBox"></textarea>
+
+
+<button onclick="importPlayers()">
+Импортировать
+</button>
+
+
+
+<hr>
+
+
+<button onclick="newTournament()">
+
+Новый турнир
+
+</button>
+
+
+<button onclick="newRound()">
+
+Следующий круг
+
+</button>
+
+
+<button onclick="clearDB()">
+
+Очистить
+
+</button>
+
+
+
+<h2>Статистика</h2>
+
+
+<div id="stats"></div>
+
+
+</div>
+
+
+<script src="js/db.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/admin.js"></script>
+
+
+</body>
+</html>
