@@ -981,3 +981,294 @@ footer {
 
 /* ===== HIDDEN ===== */
 .hidden { display: none !important; }
+
+/* ===== v3 UPDATES: Shikimori-style bracket + Admin panel ===== */
+
+/* --- Bracket visual bars --- */
+.bm-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.bm-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.bm-bar {
+  height: 4px;
+  background: var(--bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bm-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--blue), #60a5fa);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.bm-fill-b {
+  background: linear-gradient(90deg, #ec4899, #f472b6);
+}
+
+.bm-score small {
+  color: var(--text-3);
+  font-weight: 400;
+  font-size: 11px;
+}
+
+/* --- Vote buttons Shikimori-style --- */
+.vote-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--border-2);
+  background: var(--bg);
+  color: var(--text-2);
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vote-btn:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  transform: scale(1.1);
+}
+
+.vote-btn.vote-a:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.vote-btn.vote-b:hover {
+  border-color: #ec4899;
+  color: #ec4899;
+}
+
+.vs-divider {
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.vs-locked, .vs-voted {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.bracket-match.need-login {
+  opacity: 0.8;
+}
+
+.bracket-match.need-login .bm-player {
+  filter: grayscale(0.3);
+}
+
+/* --- Round info v3 --- */
+.round-info {
+  background: linear-gradient(135deg, var(--bg-3) 0%, #1a1f2e 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+
+.round-info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+
+.round-info-header b {
+  color: var(--accent);
+}
+
+.round-progress {
+  background: var(--bg);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.round-timer-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.timer-icon {
+  font-size: 20px;
+}
+
+.timer-label {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* --- Champion glow --- */
+.champion {
+  position: relative;
+  overflow: hidden;
+}
+
+.champion-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(251,191,36,0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.champion-avatar {
+  position: relative;
+  display: inline-block;
+}
+
+.champion-avatar::before {
+  content: '👑';
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  font-size: 2.5em;
+  z-index: 2;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.champion-avatar img {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 4px solid var(--accent);
+  object-fit: cover;
+  box-shadow: 0 0 40px rgba(251,191,36,0.3);
+}
+
+/* --- Admin float panel (hidden by default) --- */
+.admin-panel-float {
+  position: fixed;
+  bottom: 30px;
+  left: 30px;
+  background: var(--bg-3);
+  border: 2px solid var(--accent);
+  border-radius: 20px;
+  padding: 20px;
+  max-width: 320px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  z-index: 999;
+}
+
+.admin-panel-title {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-panel-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-panel-btns button {
+  width: 100%;
+  font-size: 13px;
+  padding: 10px 16px;
+}
+
+.admin-panel-hint {
+  color: var(--text-3);
+  font-size: 11px;
+  margin-top: 10px;
+  text-align: center;
+}
+
+/* --- Bracket match hover effects --- */
+.bracket-match {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.bracket-match.canvote:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(59,130,246,0.15);
+}
+
+.bracket-match.done {
+  opacity: 0.85;
+}
+
+.bracket-match.done .winner {
+  opacity: 1;
+}
+
+/* --- Connection lines between rounds (visual) --- */
+.bracket-grid {
+  position: relative;
+}
+
+.round-col {
+  position: relative;
+}
+
+.round-col::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -24px;
+  width: 24px;
+  height: 2px;
+  background: var(--border);
+  opacity: 0.5;
+}
+
+.round-col:last-child::after {
+  display: none;
+}
+
+/* --- Responsive bracket --- */
+@media (max-width: 768px) {
+  .bracket-grid {
+    gap: 16px;
+  }
+  
+  .round-col {
+    min-width: 240px;
+  }
+  
+  .admin-panel-float {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    max-width: none;
+  }
+  
+  .champion-avatar img {
+    width: 100px;
+    height: 100px;
+  }
+}
