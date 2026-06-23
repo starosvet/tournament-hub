@@ -1,50 +1,47 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tournament Hub v3</title>
+  <meta charset="UTF-8">
+  <title>Tournament Hub v4</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div class="container">
 
-  <h1>🏆 Tournament Hub v3</h1>
-  <h3 id="round"></h3>
+  <h1>🏆 Tournament Hub v4</h1>
 
+  <div id="info"></div>
   <div id="match"></div>
 
 </div>
 
-<script src="data.js"></script>
-<script src="engine.js"></script>
 <script src="state.js"></script>
-<script src="core.js"></script>
+<script src="engine.js"></script>
+<script src="time.js"></script>
+<script src="app.js"></script>
 
 <script>
 function render() {
-  document.getElementById("round").innerText =
-    "Round " + state.round;
+  const match = state.matches[state.currentMatch];
 
-  let match = state.matches[state.currentMatch];
+  document.getElementById("info").innerHTML =
+    `Round: ${state.round} | Match ${state.currentMatch + 1}`;
 
-  let box = document.getElementById("match");
-
-  if (!match) return;
-
-  box.innerHTML = `
+  document.getElementById("match").innerHTML = `
     <div class="card">
-      <h2>${match.type.toUpperCase()}</h2>
+      <a href="${match.a.url}" target="_blank">${match.a.name}</a>
+      <button onclick="handleVote('A')">Vote</button>
+    </div>
 
-      ${match.players.map(p =>
-        `<button onclick="vote('${p.name}', '${match.players.find(x=>x.name!==p.name)?.name || ''}')">
-          ${p.name}
-        </button>`
-      ).join("")}
+    <div class="card">
+      <a href="${match.b.url}" target="_blank">${match.b.name}</a>
+      <button onclick="handleVote('B')">Vote</button>
     </div>
   `;
 }
 
-render();
+init();
 </script>
 
 </body>
