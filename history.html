@@ -1,35 +1,33 @@
 <!DOCTYPE html>
-
-<html>
-
+<html lang="ru">
 <head>
-
-<link rel="stylesheet"
-href="style.css">
-
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>История | Tournament Hub</title>
+<link rel="stylesheet" href="style.css">
 </head>
-
-
 <body>
 
+<header>
+  <h1>🏆 Tournament Hub</h1>
+  <nav>
+    <a href="index.html">Главная</a>
+    <a href="bracket.html">Сетка</a>
+    <a href="history.html">История</a>
+    <a href="admin.html">Admin</a>
+  </nav>
+</header>
 
-<h1>История</h1>
-
-
+<h1>📜 История матчей</h1>
 <div id="history"></div>
 
-
 <script src="js/db.js"></script>
+<script src="js/bracket.js"></script>
 <script src="js/history.js"></script>
 
-
 <script>
-
 showHistory();
-
 </script>
 
-
 </body>
-
 </html>
