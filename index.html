@@ -1,22 +1,51 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>Tournament Hub</title>
-<link rel="stylesheet" href="style.css">
+  <title>Tournament Hub v3</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div class="container">
-    <h1>🏆 Tournament Hub</h1>
 
-    <div id="tournament"></div>
+  <h1>🏆 Tournament Hub v3</h1>
+  <h3 id="round"></h3>
 
-    <div id="battle" class="battle"></div>
+  <div id="match"></div>
 
-    <button id="reset">Reset Tournament</button>
 </div>
 
-<script src="app.js"></script>
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="state.js"></script>
+<script src="core.js"></script>
+
+<script>
+function render() {
+  document.getElementById("round").innerText =
+    "Round " + state.round;
+
+  let match = state.matches[state.currentMatch];
+
+  let box = document.getElementById("match");
+
+  if (!match) return;
+
+  box.innerHTML = `
+    <div class="card">
+      <h2>${match.type.toUpperCase()}</h2>
+
+      ${match.players.map(p =>
+        `<button onclick="vote('${p.name}', '${match.players.find(x=>x.name!==p.name)?.name || ''}')">
+          ${p.name}
+        </button>`
+      ).join("")}
+    </div>
+  `;
+}
+
+render();
+</script>
+
 </body>
 </html>
