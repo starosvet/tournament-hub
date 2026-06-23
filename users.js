@@ -1,4 +1,3 @@
-users.js
 export function register(state, name) {
   const user = {
     id: crypto.randomUUID(),
