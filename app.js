@@ -1,63 +1,49 @@
 let state;
-let players;
 
-async function init() {
-  players = await (await fetch("data.json")).json();
-
+function init() {
   state = loadState();
 
   if (!state) {
     state = {
+      season: 1,
       round: 1,
-      startTime: Date.now(),
-      matches: generatePairs(players),
-      currentMatch: 0,
-      finishedMatches: []
+      players: [],
+      rounds: [],
+      currentRoundIndex: 0
     };
   }
 
-  saveState(state);
-  render();
-}
-
-function nextMatch() {
-  state.currentMatch++;
-
-  if (state.currentMatch >= state.matches.length) {
-    endRound();
+  if (state.players.length > 0 && state.rounds.length === 0) {
+    generateRound();
   }
 
   saveState(state);
   render();
 }
 
-function endRound() {
-  const history = loadHistory();
+function generateRound() {
+  const groups = createGroups(state.players, 4);
 
-  const winner = state.matches
-    .map(m => m.winner)
-    .filter(Boolean);
-
-  history.push({
+  state.rounds.push({
     round: state.round,
-    matches: state.matches,
-    winners: winner,
-    date: new Date().toISOString()
+    groups
   });
 
-  saveHistory(history);
-
-  state.round++;
-  state.currentMatch = 0;
-  state.matches = generatePairs(players);
-  state.startTime = Date.now();
+  state.currentRoundIndex = state.rounds.length - 1;
 }
 
-function handleVote(choice) {
-  let match = state.matches[state.currentMatch];
-  vote(match, choice);
+function nextRound() {
+  state.round++;
+  generateRound();
+  saveState(state);
+  render();
+}
 
-  if (match.done) nextMatch();
+function registerVote(groupId, matchIndex, side) {
+  const round = state.rounds[state.currentRoundIndex];
+  const match = round.groups[groupId].matches[matchIndex];
+
+  vote(match, side);
 
   saveState(state);
   render();
