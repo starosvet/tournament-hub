@@ -1,20 +1,10 @@
-<h1>🏆 Tournament History</h1>
+export function saveSeason(state) {
+  const history = JSON.parse(localStorage.getItem("history")) || [];
 
-<div id="history"></div>
+  history.push({
+    season: state.season,
+    rounds: state.rounds
+  });
 
-<script src="state.js"></script>
-
-<script>
-const history = loadHistory();
-
-document.getElementById("history").innerHTML =
-  history.map(h => `
-    <div class="card">
-      <h3>Round ${h.round}</h3>
-      <p>Winners:</p>
-      <ul>
-        ${h.winners.map(w => `<li>${w.name}</li>`).join("")}
-      </ul>
-    </div>
-  `).join("");
-</script>
+  localStorage.setItem("history", JSON.stringify(history));
+}
