@@ -15,23 +15,37 @@
       <a href="index.html">Главная</a>
       <a href="bracket.html" class="active">Сетка</a>
       <a href="history.html">История</a>
-      <a href="admin.html">Admin</a>
+      <a href="rules.html">Правила</a>
+      <a href="admin.html" id="navAdmin" class="hidden">Управление</a>
     </nav>
     <div id="navUser" class="nav-user"></div>
   </div>
 </header>
 
 <main class="container">
-  <div id="bracket"></div>
+  <div class="bracket-header">
+    <h1>🏆 Турнирная сетка</h1>
+    <span id="bracketStatus" class="badge"></span>
+  </div>
+  <p class="bracket-sub" id="bracketSub"></p>
+  
+  <div class="round-info" id="roundInfo"></div>
+  
+  <div id="bracket" class="bracket-grid"></div>
+  <div id="champion"></div>
 </main>
+
+<footer>
+  <span id="footerText">Tournament Hub</span>
+</footer>
 
 <script src="js/db.js"></script>
 <script src="js/engine.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/bracket.js"></script>
 <script src="js/render-bracket.js"></script>
-<script src="js/auth.js"></script>
 
-<script>renderBracketPage();</script>
+<script>loadBracketPage();</script>
 
 </body>
 </html>
