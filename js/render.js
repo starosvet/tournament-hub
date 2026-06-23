@@ -75,7 +75,7 @@ function renderCurrentRound(db) {
               <span class="vs">:</span>
               <span class="${m.winner?.id === m.b.id ? 'winner-text' : ''}">${m.votesB}</span>
             </div>
-            <div class="match-winner">🏆 ${m.winner?.name}</div>
+            <div class="match-winner">🏆 ${m.winner?.name || '?'}</div>
           `}
         </div>
         
