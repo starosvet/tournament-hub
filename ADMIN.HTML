@@ -1,0 +1,12 @@
+<h1>Admin Panel</h1>
+
+<button onclick="resetState()">Reset Tournament</button>
+
+<button onclick="
+  state.matches = generateRound(state.players);
+  state.currentMatch = 0;
+  saveState(state);
+  location.reload();
+">
+  Regenerate Round
+</button>
