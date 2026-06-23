@@ -1,7 +1,7 @@
 // js/bracket.js — логика сетки и голосования
 
 function voteInMatch(tournament, roundIdx, matchIdx, side) {
-  let voteKey = `vote_${tournament.id}_${roundIdx}_${matchIdx}`;
+  let voteKey = "vote_" + tournament.id + "_" + roundIdx + "_" + matchIdx;
   if (localStorage.getItem(voteKey)) {
     return { ok: false, err: "Вы уже голосовали" };
   }
@@ -42,14 +42,16 @@ function finalizeRound(tournament, allPlayers) {
     
     m.done = true;
     
-    // Обновляем wins в ОРИГИНАЛЬНЫХ объектах db.players
-    let origA = allPlayers.find(p => p.id === m.a.id);
-    let origB = allPlayers.find(p => p.id === m.b.id);
-    let origWinner = allPlayers.find(p => p.id === m.winner.id);
-    
-    if (origA) origA.wins = origA.wins || 0;
-    if (origB) origB.wins = origB.wins || 0;
-    if (origWinner) { origWinner.wins = (origWinner.wins || 0) + 1; }
+    // Обновляем wins в ОРИГИНАЛЬНЫХ объектах db.players через маппинг
+    let origWinnerId = tournament._playerMap ? tournament._playerMap[m.winner.id] : null;
+    if (origWinnerId) {
+      let orig = allPlayers.find(p => p.id === origWinnerId);
+      if (orig) orig.wins = (orig.wins || 0) + 1;
+    } else {
+      // Fallback: ищем по имени
+      let orig = allPlayers.find(p => p.name === m.winner.name);
+      if (orig) orig.wins = (orig.wins || 0) + 1;
+    }
     
     winners.push(m.winner);
   }
@@ -61,6 +63,18 @@ function finalizeRound(tournament, allPlayers) {
     next.isActive = true;
     next.startedAt = new Date().toISOString();
     tournament.currentRound++;
+    
+    // Обновляем маппинг для нового раунда
+    next.matches.forEach(m => {
+      if (m.a.name !== "—" && m.a.name !== "TBD") {
+        let orig = allPlayers.find(op => op.name === m.a.name);
+        if (orig) tournament._playerMap[m.a.id] = orig.id;
+      }
+      if (m.b.name !== "—" && m.b.name !== "TBD") {
+        let orig = allPlayers.find(op => op.name === m.b.name);
+        if (orig) tournament._playerMap[m.b.id] = orig.id;
+      }
+    });
   } else {
     tournament.status = "completed";
     tournament.winner = winners[0] || null;
