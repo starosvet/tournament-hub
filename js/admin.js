@@ -49,6 +49,11 @@ function newTournament() {
     if (!confirm("Уже есть активный турнир. Создать новый? Старый будет перезаписан.")) return;
   }
   
+  // Очищаем голоса предыдущего турнира
+  for (let key in localStorage) {
+    if (key.startsWith('vote_')) localStorage.removeItem(key);
+  }
+  
   db.active = createBracket(db.players);
   db.active.rounds[0].startedAt = new Date();
   
@@ -59,6 +64,7 @@ function newTournament() {
 
 function nextRound() {
   const db = getDB();
+  
   if (!db.active || db.active.status !== 'active') {
     alert("❌ Нет активного турнира");
     return;
@@ -70,7 +76,21 @@ function nextRound() {
     return;
   }
   
+  // Финализируем и СРАЗУ сохраняем результат
   db.active = finalizeRound(db.active);
+  
+  // Обновляем wins в db.players (по имени, т.к. id могли скопироваться)
+  if (db.active && db.active.logs) {
+    const lastLog = db.active.logs[db.active.logs.length - 1];
+    if (lastLog && lastLog.match && lastLog.match.winner) {
+      const winnerName = lastLog.match.winner.name;
+      const p = db.players.find(x => x.name === winnerName);
+      if (p) {
+        p.wins = (p.wins || 0) + 1;
+      }
+    }
+  }
+  
   saveDB(db);
   
   if (db.active.status === 'completed') {
@@ -93,7 +113,6 @@ function showStats() {
   const db = getDB();
   let html = `
     <div class="stat-card">👥 Участников: <b>${db.players.length}</b></div>
-    <div class="stat-card">🏆 Завершённых турниров: <b>${(db.pastTournaments || []).length}</b></div>
   `;
   
   if (db.active) {
