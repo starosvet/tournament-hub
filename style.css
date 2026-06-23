@@ -5,18 +5,32 @@ body {
 }
 
 .container {
-  max-width: 800px;
+  max-width: 900px;
   margin: auto;
   padding: 20px;
 }
 
-.card {
-  background: #1c1f2a;
-  padding: 15px;
+.group {
+  background: #1a1d29;
+  padding: 10px;
   margin: 10px 0;
   border-radius: 10px;
 }
 
+.match {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  background: #22273a;
+  margin: 5px 0;
+  border-radius: 8px;
+}
+
+button {
+  padding: 5px 10px;
+  cursor: pointer;
+}
 button {
   padding: 8px 12px;
   margin-left: 10px;
