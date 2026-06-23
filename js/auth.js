@@ -1,96 +1,84 @@
-const ADMIN_PASSWORD = "change-password";
+// js/auth.js — авторизация
+
+const ADMIN_PASS = "change-password";
 
 function loginAdmin(pass) {
-  if (pass === ADMIN_PASSWORD) {
-    localStorage.setItem("admin", "true");
+  if (pass === ADMIN_PASS) {
+    localStorage.setItem("th_admin", "yes");
     return true;
   }
   return false;
 }
 
 function isAdmin() {
-  return localStorage.getItem("admin") === "true";
+  return localStorage.getItem("th_admin") === "yes";
 }
 
 function logoutAdmin() {
-  localStorage.removeItem("admin");
+  localStorage.removeItem("th_admin");
 }
 
-function generateVerifyCode() {
+function generateCode() {
   return "TH" + Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
 function startFandomVerify(fandomName) {
-  const code = generateVerifyCode();
-  const db = getDB();
+  let db = getDB();
+  let existing = db.users.find(u => u.fandomName.toLowerCase() === fandomName.toLowerCase());
+  if (existing) return { ok: false, err: "Этот ник уже зарегистрирован" };
   
-  const existing = db.users.find(u => u.fandomName.toLowerCase() === fandomName.toLowerCase());
-  if (existing) {
-    return { success: false, error: "Этот ник уже верифицирован" };
-  }
-  
-  const verifyData = {
+  let code = generateCode();
+  localStorage.setItem("th_pending", JSON.stringify({
     fandomName: fandomName,
     code: code,
-    createdAt: new Date(),
-    expiresAt: Date.now() + 3600000
-  };
+    expires: Date.now() + 3600000
+  }));
   
-  localStorage.setItem("pendingVerify", JSON.stringify(verifyData));
-  
-  return {
-    success: true,
-    code: code,
-    instruction: `Отредактируйте свою страницу участника на Fandom, добавив код: ${code}. Затем нажмите "Проверить".`
-  };
+  return { ok: true, code: code };
 }
 
 async function checkFandomVerify(fandomName, wikiDomain) {
-  const pending = JSON.parse(localStorage.getItem("pendingVerify") || "null");
-  if (!pending) return { success: false, error: "Нет активной верификации" };
+  let pending = JSON.parse(localStorage.getItem("th_pending") || "null");
+  if (!pending) return { ok: false, err: "Нет активной верификации" };
   if (pending.fandomName.toLowerCase() !== fandomName.toLowerCase()) {
-    return { success: false, error: "Ник не совпадает" };
+    return { ok: false, err: "Ник не совпадает" };
   }
-  if (Date.now() > pending.expiresAt) {
-    localStorage.removeItem("pendingVerify");
-    return { success: false, error: "Код истёк. Начните заново." };
+  if (Date.now() > pending.expires) {
+    localStorage.removeItem("th_pending");
+    return { ok: false, err: "Код истёк, начните заново" };
   }
   
   try {
-    const apiUrl = `https://${wikiDomain}/api.php?action=query&list=usercontribs&ucuser=${encodeURIComponent(fandomName)}&uclimit=10&format=json&origin=*`;
-    const response = await fetch(apiUrl);
-    const data = await response.json();
+    let url = `https://${wikiDomain}/api.php?action=query&list=usercontribs&ucuser=${encodeURIComponent(fandomName)}&uclimit=10&format=json&origin=*`;
+    let res = await fetch(url);
+    let data = await res.json();
     
-    if (!data.query || !data.query.usercontribs) {
-      return { success: false, error: "Не удалось получить данные с Fandom" };
+    if (!data.query?.usercontribs) {
+      return { ok: false, err: "Не удалось получить данные с Fandom" };
     }
     
-    const contribs = data.query.usercontribs;
-    const found = contribs.some(c => c.comment && c.comment.includes(pending.code));
-    
+    let found = data.query.usercontribs.some(c => c.comment && c.comment.includes(pending.code));
     if (!found) {
-      return { success: false, error: "Код не найден в последних правках. Убедитесь, что вы сделали правку с кодом в описании." };
+      return { ok: false, err: "Код не найден в последних правках" };
     }
     
-    const db = getDB();
-    const user = {
-      id: "fandom_" + fandomName.toLowerCase(),
+    let db = getDB();
+    let user = {
+      id: "u_" + fandomName.toLowerCase().replace(/[^a-z0-9]/g, "_"),
       fandomName: fandomName,
       status: "verified",
-      verifiedAt: new Date(),
-      votes: {},
-      createdAt: new Date()
+      verifiedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
     };
-    
     db.users.push(user);
     saveDB(db);
     setCurrentUser(user.id);
-    localStorage.removeItem("pendingVerify");
+    localStorage.removeItem("th_pending");
     
-    return { success: true, user: user };
+    return { ok: true, user: user };
     
   } catch (e) {
-    return { success: false, error: "Ошибка запроса к Fandom: " + e.message };
+    return { ok: false, err: "Ошибка сети: " + e.message };
   }
 }
 
