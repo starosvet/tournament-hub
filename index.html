@@ -9,36 +9,33 @@
 <body>
 
 <header>
-  <div class="header-top">
-    <h1>🏆 Tournament Hub</h1>
-    <div id="userBlock"></div>
+  <div class="header-inner">
+    <a href="index.html" class="logo">🏆 Tournament Hub</a>
+    <nav>
+      <a href="index.html" class="active">Главная</a>
+      <a href="bracket.html">Сетка</a>
+      <a href="history.html">История</a>
+      <a href="admin.html">Admin</a>
+    </nav>
+    <div id="navUser" class="nav-user"></div>
   </div>
-  <nav>
-    <a href="index.html" class="active">Главная</a>
-    <a href="bracket.html">Сетка</a>
-    <a href="history.html">История</a>
-    <a href="admin.html">Admin</a>
-  </nav>
 </header>
 
 <main class="container">
-  <section id="activeTournament"></section>
+  <section id="hero"></section>
   
-  <div class="two-columns">
-    <section id="topPlayers"></section>
-    <section id="recentMatches"></section>
+  <div class="grid-2">
+    <section id="leaderboard"></section>
+    <section id="recent"></section>
   </div>
 </main>
 
 <script src="js/db.js"></script>
 <script src="js/engine.js"></script>
-<script src="js/bracket.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/render.js"></script>
 
-<script>
-loadPage();
-</script>
+<script>loadPage();</script>
 
 </body>
 </html>
