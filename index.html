@@ -1,53 +1,40 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tournament Hub</title>
 <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
 <header>
-
-<h1>🏆 Tournament Hub</h1>
-
-<nav>
-<a href="index.html">Главная</a>
-<a href="bracket.html">Сетка</a>
-<a href="history.html">История</a>
-<a href="admin.html">Admin</a>
-</nav>
-
+  <h1>🏆 Tournament Hub</h1>
+  <nav>
+    <a href="index.html">Главная</a>
+    <a href="bracket.html">Сетка</a>
+    <a href="history.html">История</a>
+    <a href="admin.html">Admin</a>
+  </nav>
 </header>
 
-
 <section id="top">
-
-<h2>🔥 TOP участников</h2>
-
-<div id="leaderboard"></div>
-
+  <h2>🔥 Топ участников</h2>
+  <div id="leaderboard"></div>
 </section>
-
 
 <section>
-
-<h2>Текущий круг</h2>
-
-<div id="round"></div>
-
+  <h2>⚔️ Текущий раунд</h2>
+  <div id="round"></div>
 </section>
-
 
 <script src="js/db.js"></script>
 <script src="js/engine.js"></script>
+<script src="js/bracket.js"></script>
 <script src="js/render.js"></script>
 
 <script>
-
 loadPage();
-
 </script>
 
 </body>
