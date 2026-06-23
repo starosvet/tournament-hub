@@ -1,186 +1,161 @@
-// js/render-bracket.js — отрисовка страницы сетки
+// js/render-bracket.js — рендер сетки
 
 function renderBracketPage() {
-  const db = getDB();
-  const tournament = db.active;
+  let db = getDB();
+  let t = getActiveTournament(db);
+  let el = document.getElementById("bracket");
   
-  if (!tournament) {
-    bracket.innerHTML = '<div class="card">Нет активного турнира. Создайте в админке.</div>';
+  if (!el) return;
+  if (!t) {
+    el.innerHTML = '<div class="card" style="text-align:center;padding:60px"><h2>Нет активного турнира</h2><p>Создайте турнир в админке</p></div>';
     return;
   }
   
-  let html = `<div class="tournament-header">
-    <h2>${tournament.status === 'completed' ? '📁 Архив турнира' : '🔥 Текущий турнир'}</h2>
-    <div class="tournament-status">${tournament.status === 'completed' ? '✅ Завершён' : '🔥 Идёт голосование'}</div>
-  </div>`;
+  let status = t.status === "active" ? "🔥 Активен" : "✅ Завершён";
+  let html = `
+    <div class="bracket-header">
+      <h1>${t.name}</h1>
+      <span class="badge">${status}</span>
+    </div>
+    <div class="bracket-sub">${t.description || ''}</div>`;
   
-  html += '<div class="bracket-container">';
+  // Текущий раунд
+  let round = t.rounds[t.currentRound];
+  if (round && t.status === "active") {
+    html += renderRound(round, t);
+  }
   
-  tournament.rounds.forEach((round, rIdx) => {
-    const isCurrent = rIdx === tournament.currentRound && tournament.status === 'active';
-    const isPast = rIdx < tournament.currentRound || tournament.status === 'completed';
+  // Все раунды (сетка)
+  html += '<div class="bracket-grid">';
+  t.rounds.forEach((r, idx) => {
+    let cls = idx === t.currentRound && t.status === "active" ? "round-col active" : 
+              idx < t.currentRound || t.status === "completed" ? "round-col past" : "round-col future";
+    html += `<div class="${cls}">
+      <div class="round-title">${r.name}</div>`;
     
-    html += `<div class="bracket-round ${isCurrent ? 'active' : ''} ${isPast ? 'completed' : ''}">
-      <div class="round-title">${round.name}</div>`;
-    
-    round.matches.forEach((match, mIdx) => {
-      const winnerA = match.done && match.winner?.id === match.a.id;
-      const winnerB = match.done && match.winner?.id === match.b.id;
-      const canVote = isCurrent && !match.done && !match.a.isBye && !match.b.isBye && !localStorage.getItem(`vote_${tournament.id}_${rIdx}_${mIdx}`);
+    r.matches.forEach((m, mi) => {
+      let wa = m.done && m.winner?.id === m.a.id;
+      let wb = m.done && m.winner?.id === m.b.id;
+      let canVote = idx === t.currentRound && t.status === "active" && !m.done && !m.a.isBye && !m.b.isBye 
+        && !localStorage.getItem(`vote_${t.id}_${idx}_${mi}`);
       
-      html += `
-        <div class="bracket-match ${match.done ? 'finished' : ''} ${isCurrent && !match.done ? 'votable' : ''}">
-          <div class="match-player ${winnerA ? 'winner' : ''} ${match.a.isBye ? 'bye' : ''}">
-            <img src="${getWikiImage(match.a.url)}" alt="" onerror="this.style.display='none'">
-            <a href="${match.a.url}" target="_blank">${match.a.name}</a>
-            <span class="votes">${match.votesA}</span>
-          </div>
-          
-          <div class="match-vs">
-            ${isCurrent && !match.done && !match.a.isBye && !match.b.isBye ? `
-              <div class="vote-buttons">
-                <button onclick="handleVote(${rIdx}, ${mIdx}, 0)" ${!canVote ? 'disabled' : ''}>
-                  ${canVote ? '▲ ' + match.votesA : '✓ ' + match.votesA}
-                </button>
-                <span class="vs-text">VS</span>
-                <button onclick="handleVote(${rIdx}, ${mIdx}, 1)" ${!canVote ? 'disabled' : ''}>
-                  ${canVote ? '▲ ' + match.votesB : '✓ ' + match.votesB}
-                </button>
-              </div>
-              ${round.startedAt ? `<div class="timer">${formatTime(getTimeLeft(round.startedAt, 24))}</div>` : ''}
-            ` : `
-              <span class="vs-text">VS</span>
-              ${match.done ? `<div class="final-score">${match.votesA} : ${match.votesB}</div>` : ''}
-            `}
-          </div>
-          
-          <div class="match-player ${winnerB ? 'winner' : ''} ${match.b.isBye ? 'bye' : ''}">
-            <img src="${getWikiImage(match.b.url)}" alt="" onerror="this.style.display='none'">
-            <a href="${match.b.url}" target="_blank">${match.b.name}</a>
-            <span class="votes">${match.votesB}</span>
-          </div>
+      html += `<div class="bracket-match ${m.done ? 'done' : ''} ${canVote ? 'canvote' : ''}">
+        <div class="bm-player ${wa ? 'winner' : ''} ${m.a.isBye ? 'bye' : ''}">
+          <img src="${wikiImg(m.a.url)}" onerror="this.style.display='none'">
+          <span>${m.a.name}</span>
+          <b>${m.votesA}</b>
         </div>
-      `;
+        <div class="bm-vs">`;
+      
+      if (canVote) {
+        html += `<button onclick="doVote(${idx},${mi},0)">▲ ${m.votesA}</button>
+          <span>VS</span>
+          <button onclick="doVote(${idx},${mi},1)">▲ ${m.votesB}</button>`;
+      } else if (m.done) {
+        html += `<span class="final-sc">${m.votesA} : ${m.votesB}</span>`;
+      } else {
+        html += `<span>VS</span>`;
+      }
+      
+      html += `</div>
+        <div class="bm-player ${wb ? 'winner' : ''} ${m.b.isBye ? 'bye' : ''}">
+          <img src="${wikiImg(m.b.url)}" onerror="this.style.display='none'">
+          <span>${m.b.name}</span>
+          <b>${m.votesB}</b>
+        </div>
+      </div>`;
     });
     
     html += '</div>';
   });
-  
   html += '</div>';
   
-  if (tournament.status === 'active') {
-    html += `<div class="admin-controls">
-      <button onclick="adminFinalizeRound()" class="admin-btn">⏭️ Завершить текущий раунд</button>
-      <p style="color:#64748b; font-size:13px; margin-top:10px;">Или дождитесь окончания таймера (24 часа с начала раунда)</p>
-    </div>`;
-  }
-  
-  if (tournament.winner) {
-    html += `<div class="champion-card">
+  // Победитель
+  if (t.winner) {
+    html += `<div class="champion">
       <h3>👑 Победитель турнира</h3>
-      <div class="champion">
-        <img src="${getWikiImage(tournament.winner.url)}" alt="" onerror="this.style.display='none'">
-        <a href="${tournament.winner.url}" target="_blank">${tournament.winner.name}</a>
-      </div>
-      <div style="margin-top:15px; color:#94a3b8; font-size:14px;">
-        🏆 Побед: ${tournament.winner.wins || 0}
-      </div>
+      <img src="${wikiImg(t.winner.url)}" onerror="this.style.display='none'">
+      <div class="champ-name">${t.winner.name}</div>
+      <div class="champ-wins">${t.winner.wins || 0} побед</div>
     </div>`;
   }
   
-  bracket.innerHTML = html;
-  startBracketTimers();
+  // Админ-кнопка
+  if (isAdmin() && t.status === "active") {
+    html += `<div style="text-align:center;margin-top:30px">
+      <button onclick="adminNextRound()" class="btn-admin">⏭️ Завершить раунд</button>
+    </div>`;
+  }
+  
+  el.innerHTML = html;
+  startTimers(t);
 }
 
-function getWikiImage(url) {
-  if (!url || url === "#") return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-  const name = url.split('/').pop() || '?';
-  return `https://via.placeholder.com/44x44/2a3142/fff?text=${encodeURIComponent(name[0].toUpperCase())}`;
+function renderRound(round, tournament) {
+  if (!round.startedAt) return '';
+  let left = getTimeLeft(round.startedAt, tournament.config.voteDurationHours);
+  return `<div class="round-info">⏱️ До конца раунда: <span class="timer" data-left="${left}">${formatDuration(left)}</span></div>`;
 }
 
-function formatTime(ms) {
-  if (ms <= 0) return "00:00:00";
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  const s = Math.floor((ms % 60000) / 1000);
-  return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-}
-
-function startBracketTimers() {
-  const timers = document.querySelectorAll('.timer');
-  timers.forEach(t => {
-    const update = () => {
-      const text = t.textContent;
-      if (!text || !text.includes(':')) return;
-      let [h, m, s] = text.split(':').map(Number);
-      let totalMs = h * 3600000 + m * 60000 + s * 1000 - 1000;
-      if (totalMs <= 0) {
-        t.textContent = "00:00:00";
-        t.style.color = "#22c55e";
-        return;
-      }
-      t.textContent = formatTime(totalMs);
-      setTimeout(update, 1000);
+function startTimers(tournament) {
+  document.querySelectorAll('.timer').forEach(el => {
+    let tick = () => {
+      let left = parseInt(el.dataset.left) - 1000;
+      if (left <= 0) { el.textContent = "00:00:00"; el.style.color = "#22c55e"; return; }
+      el.dataset.left = left;
+      el.textContent = formatDuration(left);
+      requestAnimationFrame(tick);
     };
-    setTimeout(update, 1000);
+    requestAnimationFrame(tick);
   });
 }
 
-function handleVote(rIdx, mIdx, side) {
-  const db = getDB();
-  const result = voteMatch(db.active, rIdx, mIdx, side);
+function doVote(rIdx, mIdx, side) {
+  let db = getDB();
+  let t = getActiveTournament(db);
+  if (!t) return;
   
-  if (result.success) {
+  let res = voteInMatch(t, rIdx, mIdx, side);
+  if (res.ok) {
     saveDB(db);
     renderBracketPage();
-    showToast("✅ Голос засчитан!");
+    toast("✅ Голос засчитан!");
   } else {
-    showToast("❌ " + result.error);
+    toast("❌ " + res.err);
   }
 }
 
-function adminFinalizeRound() {
-  if (!isAdmin()) {
-    showToast("❌ Только администратор");
-    return;
-  }
+function adminNextRound() {
+  if (!isAdmin()) { toast("❌ Только админ"); return; }
+  let db = getDB();
+  let t = getActiveTournament(db);
+  if (!t || t.status !== "active") { toast("Нет активного турнира"); return; }
   
-  const db = getDB();
-  if (!db.active || db.active.status !== 'active') {
-    showToast("Нет активного турнира");
-    return;
-  }
-  
-  const current = db.active.rounds[db.active.currentRound];
-  if (!current.startedAt) {
-    showToast("❌ Раунд ещё не начался");
-    return;
-  }
-  
-  db.active = finalizeRound(db.active);
+  let idx = db.tournaments.findIndex(x => x.id === t.id);
+  db.tournaments[idx] = finalizeRound(t, db.players);
   saveDB(db);
   
-  if (db.active.status === 'completed') {
-    showToast("🏆 Турнир завершён! Победитель: " + db.active.winner.name);
+  let updated = getActiveTournament(db);
+  if (updated.status === "completed") {
+    toast("🏆 Турнир завершён! Победитель: " + updated.winner.name);
   } else {
-    const nextName = db.active.rounds[db.active.currentRound]?.name || 'следующий раунд';
-    showToast("🔄 Раунд завершён! Следующий: " + nextName);
+    toast("🔄 Раунд завершён! Следующий: " + updated.rounds[updated.currentRound].name);
   }
-  
   renderBracketPage();
 }
 
-function showToast(msg) {
-  const existing = document.querySelector('.toast');
+function wikiImg(url) {
+  if (!url || url === "#") return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  let n = (url.split('/').pop() || '?')[0].toUpperCase();
+  return `https://via.placeholder.com/40x40/1e293b/94a3b8?text=${encodeURIComponent(n)}`;
+}
+
+function toast(msg) {
+  let existing = document.querySelector('.toast');
   if (existing) existing.remove();
-  
-  const t = document.createElement('div');
+  let t = document.createElement('div');
   t.className = 'toast';
   t.textContent = msg;
   document.body.appendChild(t);
-  setTimeout(() => {
-    t.style.opacity = '0';
-    t.style.transform = 'translateX(100%)';
-    setTimeout(() => t.remove(), 300);
-  }, 2500);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(100%)'; setTimeout(() => t.remove(), 300); }, 2500);
 }
