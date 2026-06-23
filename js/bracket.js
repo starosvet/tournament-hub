@@ -13,6 +13,7 @@ function getStageName(matchCount) {
   return STAGE_NAMES[matchCount] || `Раунд ${matchCount}`;
 }
 
+// Создание сетки. ВАЖНО: сохраняем оригинальные id участников
 function createBracket(players) {
   const shuffled = shuffle([...players]);
   const count = shuffled.length;
@@ -39,13 +40,17 @@ function createBracket(players) {
       isActive: rounds.length === 0
     });
     
-    currentPlayers = matches.map((m, idx) => ({
-      id: `winner_r${rounds.length}_${idx}`,
-      name: "TBD",
-      url: "#",
-      isPlaceholder: true,
-      wins: 0
-    }));
+    // Placeholder'ы для следующего раунда
+    currentPlayers = [];
+    for (let idx = 0; idx < matches.length / 2; idx++) {
+      currentPlayers.push({
+        id: `placeholder_r${rounds.length}_${idx}`,
+        name: "TBD",
+        url: "#",
+        isPlaceholder: true,
+        wins: 0
+      });
+    }
   }
   
   return {
@@ -64,17 +69,38 @@ function getTimeLeft(startedAt, durationHours) {
   return Math.max(0, deadline - Date.now());
 }
 
+// Финализировать текущий раунд tournament.
+// Возвращает ОБНОВЛЁННЫЙ tournament. НЕ вызывает getDB/saveDB!
 function finalizeRound(tournament) {
-  const round = tournament.rounds[tournament.currentRound];
+  const roundIdx = tournament.currentRound;
+  const round = tournament.rounds[roundIdx];
+  
   if (!round) return tournament;
+  if (!round.startedAt) {
+    console.error("Раунд не начат — startedAt отсутствует");
+    return tournament;
+  }
   
   round.endedAt = new Date();
   round.isActive = false;
   
   const winners = [];
-  round.matches.forEach(m => {
-    if (m.a.isBye) { m.winner = m.b; m.done = true; winners.push(m.b); return; }
-    if (m.b.isBye) { m.winner = m.a; m.done = true; winners.push(m.a); return; }
+  
+  for (let i = 0; i < round.matches.length; i++) {
+    const m = round.matches[i];
+    
+    if (m.a.isBye) {
+      m.winner = m.b;
+      m.done = true;
+      winners.push(m.b);
+      continue;
+    }
+    if (m.b.isBye) {
+      m.winner = m.a;
+      m.done = true;
+      winners.push(m.a);
+      continue;
+    }
     
     if (m.votesA > m.votesB) m.winner = m.a;
     else if (m.votesB > m.votesA) m.winner = m.b;
@@ -84,43 +110,26 @@ function finalizeRound(tournament) {
     if (!m.winner.wins) m.winner.wins = 0;
     m.winner.wins++;
     winners.push(m.winner);
-    
-    if (!tournament.logs) tournament.logs = [];
-    tournament.logs.push({
-      date: new Date(),
-      winner: m.winner.name,
-      match: m,
-      roundName: round.name
-    });
-  });
+  }
   
-  const db = getDB();
-  winners.forEach(w => {
-    const p = db.players.find(x => x.id === w.id || x.name === w.name);
-    if (p) { p.wins = (p.wins || 0) + 1; }
-  });
-  saveDB(db);
-  
-  if (tournament.currentRound + 1 < tournament.rounds.length) {
-    const nextRound = tournament.rounds[tournament.currentRound + 1];
+  // Есть ли следующий раунд?
+  if (roundIdx + 1 < tournament.rounds.length) {
+    const nextRound = tournament.rounds[roundIdx + 1];
     nextRound.matches = createMatches(winners);
     nextRound.isActive = true;
     nextRound.startedAt = new Date();
-    tournament.currentRound++;
+    tournament.currentRound = roundIdx + 1;
   } else {
+    // Финал — турнир завершён
     tournament.status = "completed";
     tournament.winner = winners[0] || null;
     tournament.completedAt = new Date();
-    
-    const db2 = getDB();
-    if (!db2.pastTournaments) db2.pastTournaments = [];
-    db2.pastTournaments.push({...tournament});
-    saveDB(db2);
   }
   
   return tournament;
 }
 
+// Голосование. Возвращает результат, НЕ сохраняет в localStorage!
 function voteMatch(tournament, roundIdx, matchIdx, side) {
   const voteKey = `vote_${tournament.id}_${roundIdx}_${matchIdx}`;
   if (localStorage.getItem(voteKey)) {
@@ -133,7 +142,7 @@ function voteMatch(tournament, roundIdx, matchIdx, side) {
   }
   
   const match = round.matches[matchIdx];
-  if (match.done || match.a.isBye || match.b.isBye) {
+  if (!match || match.done || match.a.isBye || match.b.isBye) {
     return { success: false, error: "Этот матч недоступен для голосования" };
   }
   
@@ -141,5 +150,5 @@ function voteMatch(tournament, roundIdx, matchIdx, side) {
   else match.votesB++;
   
   localStorage.setItem(voteKey, side === 0 ? "A" : "B");
-  return { success: true, match };
+  return { success: true, match: match };
 }
