@@ -1,3 +1,5 @@
+// js/bracket.js — движок турнирной сетки (Single Elimination)
+
 const STAGE_NAMES = {
   1: "Финал",
   2: "1/2 финала",
@@ -13,7 +15,6 @@ function getStageName(matchCount) {
   return STAGE_NAMES[matchCount] || `Раунд ${matchCount}`;
 }
 
-// Создание сетки. ВАЖНО: сохраняем оригинальные id участников
 function createBracket(players) {
   const shuffled = shuffle([...players]);
   const count = shuffled.length;
@@ -40,7 +41,6 @@ function createBracket(players) {
       isActive: rounds.length === 0
     });
     
-    // Placeholder'ы для следующего раунда
     currentPlayers = [];
     for (let idx = 0; idx < matches.length / 2; idx++) {
       currentPlayers.push({
@@ -69,8 +69,6 @@ function getTimeLeft(startedAt, durationHours) {
   return Math.max(0, deadline - Date.now());
 }
 
-// Финализировать текущий раунд tournament.
-// Возвращает ОБНОВЛЁННЫЙ tournament. НЕ вызывает getDB/saveDB!
 function finalizeRound(tournament) {
   const roundIdx = tournament.currentRound;
   const round = tournament.rounds[roundIdx];
@@ -112,7 +110,6 @@ function finalizeRound(tournament) {
     winners.push(m.winner);
   }
   
-  // Есть ли следующий раунд?
   if (roundIdx + 1 < tournament.rounds.length) {
     const nextRound = tournament.rounds[roundIdx + 1];
     nextRound.matches = createMatches(winners);
@@ -120,7 +117,6 @@ function finalizeRound(tournament) {
     nextRound.startedAt = new Date();
     tournament.currentRound = roundIdx + 1;
   } else {
-    // Финал — турнир завершён
     tournament.status = "completed";
     tournament.winner = winners[0] || null;
     tournament.completedAt = new Date();
@@ -129,7 +125,6 @@ function finalizeRound(tournament) {
   return tournament;
 }
 
-// Голосование. Возвращает результат, НЕ сохраняет в localStorage!
 function voteMatch(tournament, roundIdx, matchIdx, side) {
   const voteKey = `vote_${tournament.id}_${roundIdx}_${matchIdx}`;
   if (localStorage.getItem(voteKey)) {
