@@ -1,0 +1,16 @@
+<h1>Admin Panel</h1>
+
+<button onclick="
+  localStorage.clear();
+  location.reload();
+">
+Reset All
+</button>
+
+<button onclick="
+  state.matches = generatePairs(players);
+  saveState(state);
+  location.reload();
+">
+Regenerate Round
+</button>
