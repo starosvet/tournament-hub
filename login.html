@@ -15,31 +15,50 @@
       <a href="index.html">Главная</a>
       <a href="bracket.html">Сетка</a>
       <a href="history.html">История</a>
+      <a href="rules.html">Правила</a>
     </nav>
+    <div id="navUser" class="nav-user"></div>
   </div>
 </header>
 
 <main class="container">
-  <div class="login-box" style="max-width:480px;margin:40px auto">
-    <h2>🔐 Вход через Fandom Wiki</h2>
-    <p class="hint">Введите ник на Fandom и домен вики для верификации</p>
+  <div class="login-box">
+    <h2>🔐 Вход</h2>
+    <p>Выберите способ авторизации</p>
     
-    <div id="step1">
+    <div style="margin-bottom: 24px;">
+      <button class="btn-primary" style="width:100%; margin-bottom:10px;" onclick="showTab('fandom')">Войти через Fandom Wiki</button>
+      <button class="btn-secondary" style="width:100%;" onclick="showTab('local')">Войти как гость</button>
+    </div>
+    
+    <div id="tab-fandom" class="hidden">
       <label>Ник на Fandom</label>
-      <input type="text" id="fandomName" placeholder="Например: IvanPetrov">
+      <input type="text" id="fandomName" placeholder="Например: IvanIvanov">
       
-      <label>Домен вики</label>
-      <input type="text" id="wikiDomain" placeholder="your-wiki.fandom.com">
+      <label>Домен вики (без https://)</label>
+      <input type="text" id="wikiDomain" value="chickengun-fanon.fandom.com/ru" placeholder="chickengun-fanon.fandom.com/ru">
       
-      <button onclick="startVerify()" class="btn-primary" style="width:100%;margin-top:15px">Получить код</button>
+      <div id="verifyBox" class="hidden" style="margin: 16px 0;">
+        <p class="hint">Вставьте этот код в профиль на Fandom и нажмите «Проверить»:</p>
+        <div class="verify-code" id="verifyCode"></div>
+        <p class="hint">Код действует 1 час. Вставьте его в описание профиля или в любую правку.</p>
+      </div>
+      
+      <div class="btn-row">
+        <button class="btn-primary" id="btnStartVerify" onclick="startVerify()">Получить код</button>
+        <button class="btn-warn hidden" id="btnCheckVerify" onclick="checkVerify()">Проверить</button>
+      </div>
     </div>
     
-    <div id="step2" style="display:none;margin-top:20px">
-      <div class="verify-code" id="verifyCode"></div>
-      <p class="hint">Сделайте правку на Fandom с этим кодом в описании, затем нажмите "Проверить"</p>
-      <button onclick="checkVerify()" class="btn-primary" style="width:100%">✅ Проверить</button>
-      <div id="verifyStatus" style="margin-top:15px"></div>
+    <div id="tab-local" class="hidden">
+      <label>Ваш никнейм</label>
+      <input type="text" id="localName" placeholder="Введите имя">
+      <button class="btn-primary" style="width:100%; margin-top:10px;" onclick="loginLocal()">Войти</button>
     </div>
+    
+    <p class="hint" style="text-align:center; margin-top:20px;">
+      <a href="index.html">← На главную</a>
+    </p>
   </div>
 </main>
 
@@ -48,38 +67,61 @@
 <script src="js/auth.js"></script>
 
 <script>
-let currentName = "";
-let currentDomain = "";
+function showTab(tab) {
+  document.getElementById('tab-fandom').classList.add('hidden');
+  document.getElementById('tab-local').classList.add('hidden');
+  document.getElementById('tab-' + tab).classList.remove('hidden');
+}
 
 function startVerify() {
-  let name = document.getElementById("fandomName").value.trim();
-  let domain = document.getElementById("wikiDomain").value.trim();
-  
-  if (!name || !domain) { alert("Заполните все поля"); return; }
-  
-  currentName = name;
-  currentDomain = domain;
-  
+  let name = document.getElementById('fandomName').value.trim();
+  if (!name) return toast('Введите ник');
   let res = startFandomVerify(name);
-  if (!res.ok) { alert(res.err); return; }
-  
-  document.getElementById("verifyCode").textContent = res.code;
-  document.getElementById("step1").style.display = "none";
-  document.getElementById("step2").style.display = "block";
+  if (!res.ok) return toast(res.err);
+  document.getElementById('verifyCode').textContent = res.code;
+  document.getElementById('verifyBox').classList.remove('hidden');
+  document.getElementById('btnStartVerify').classList.add('hidden');
+  document.getElementById('btnCheckVerify').classList.remove('hidden');
+  toast('Код сгенерирован! Вставьте его на Fandom.');
 }
 
 async function checkVerify() {
-  let st = document.getElementById("verifyStatus");
-  st.innerHTML = '<span style="color:#3b82f6">⏳ Проверяем...</span>';
-  
-  let res = await checkFandomVerify(currentName, currentDomain);
-  
-  if (res.ok) {
-    st.innerHTML = '<span style="color:#22c55e">✅ Успешно! Перенаправляем...</span>';
-    setTimeout(() => location.href = "index.html", 1500);
-  } else {
-    st.innerHTML = `<span style="color:#ef4444">❌ ${res.err}</span>`;
+  let name = document.getElementById('fandomName').value.trim();
+  let domain = document.getElementById('wikiDomain').value.trim();
+  if (!domain) domain = 'chickengun-fanon.fandom.com/ru';
+  let res = await checkFandomVerify(name, domain);
+  if (!res.ok) return toast(res.err);
+  toast('✅ Успешно! Добро пожаловать, ' + res.user.fandomName);
+  setTimeout(() => location.href = 'index.html', 1000);
+}
+
+function loginLocal() {
+  let name = document.getElementById('localName').value.trim();
+  if (!name) return toast('Введите никнейм');
+  let db = getDB();
+  let id = 'local_' + name.toLowerCase().replace(/[^a-z0-9а-яё]/g, '_');
+  let user = db.users.find(u => u.id === id);
+  if (!user) {
+    user = {
+      id: id,
+      fandomName: name,
+      status: 'local',
+      createdAt: new Date().toISOString()
+    };
+    db.users.push(user);
+    saveDB(db);
   }
+  setCurrentUser(user.id);
+  toast('✅ Вошли как ' + name);
+  setTimeout(() => location.href = 'index.html', 500);
+}
+
+function toast(msg) {
+  let t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2500);
 }
 </script>
 
