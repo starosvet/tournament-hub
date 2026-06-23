@@ -39,12 +39,13 @@
     <div class="admin-card">
       <h3>👥 Участники</h3>
       <p class="hint">Формат: Имя | Ссылка (каждый с новой строки)</p>
-      <textarea id="importBox" rows="6" placeholder="Веспера | https://wiki/vespera&#10;Фрида | https://wiki/frida"></textarea>
+      <textarea id="importBox" rows="6" placeholder="Веспера | https://wiki/vespera&#10;Фрида | https://wiki/frida&#10;Эйрвен | https://wiki/eirwen"></textarea>
       <div class="btn-row">
         <button onclick="importPlayers()" class="btn-primary">📥 Импорт</button>
         <button onclick="clearPlayers()" class="btn-danger">🗑️ Очистить</button>
       </div>
       <div id="playersCount" style="margin-top:10px;color:#64748b"></div>
+      <div id="playersList" style="margin-top:15px;max-height:200px;overflow-y:auto"></div>
     </div>
 
     <!-- Турнир -->
@@ -93,14 +94,16 @@ function importPlayers() {
   
   let db = getDB();
   let added = 0;
+  let timestamp = Date.now();
   
-  lines.forEach(line => {
+  lines.forEach((line, idx) => {
     let parts = line.split("|").map(s => s.trim());
     let name = parts[0];
     let url = parts[1] || "#";
-    let id = "p_" + name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    // УНИКАЛЬНЫЙ ID: p_время_индекс
+    let id = "p_" + timestamp + "_" + idx;
     
-    if (!db.players.find(p => p.id === id)) {
+    if (!db.players.find(p => p.name === name)) {
       db.players.push({ id, name, url, wins: 0 });
       added++;
     }
@@ -109,7 +112,24 @@ function importPlayers() {
   saveDB(db);
   document.getElementById("importBox").value = "";
   updateStats();
-  alert(`✅ Добавлено ${added} участников`);
+  renderPlayersList();
+  alert("✅ Добавлено " + added + " участников");
+}
+
+function renderPlayersList() {
+  let db = getDB();
+  let el = document.getElementById("playersList");
+  if (!db.players.length) { el.innerHTML = ""; return; }
+  
+  let html = '<div style="display:flex;flex-direction:column;gap:6px">';
+  db.players.forEach(p => {
+    html += `<div style="display:flex;align-items:center;gap:8px;padding:6px;background:#0f1115;border-radius:8px">
+      <img src="https://via.placeholder.com/28x28/1e293b/94a3b8?text=${encodeURIComponent(p.name[0])}" style="border-radius:50%">
+      <span style="font-size:13px">${p.name}</span>
+    </div>`;
+  });
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 function clearPlayers() {
@@ -118,6 +138,7 @@ function clearPlayers() {
   db.players = [];
   saveDB(db);
   updateStats();
+  renderPlayersList();
 }
 
 function createTournament() {
@@ -130,10 +151,21 @@ function createTournament() {
   // Очищаем старые голоса
   if (db.activeTournamentId) resetVotes(db.activeTournamentId);
   
-  let tournament = createBracket(db.players);
+  // Создаём турнир с КОПИЯМИ участников (чтобы не менять оригиналы)
+  let playerCopies = db.players.map(p => ({...p}));
+  let tournament = createBracket(playerCopies);
   tournament.name = name;
   tournament.description = desc;
   tournament.rounds[0].startedAt = new Date().toISOString();
+  
+  // Сохраняем маппинг id копий → оригиналы для обновления wins
+  tournament._playerMap = {};
+  tournament.rounds[0].matches.forEach(m => {
+    let origA = db.players.find(op => op.name === m.a.name);
+    let origB = db.players.find(op => op.name === m.b.name);
+    if (origA) tournament._playerMap[m.a.id] = origA.id;
+    if (origB) tournament._playerMap[m.b.id] = origB.id;
+  });
   
   db.tournaments.push(tournament);
   db.activeTournamentId = tournament.id;
@@ -142,7 +174,7 @@ function createTournament() {
   document.getElementById("tourName").value = "";
   document.getElementById("tourDesc").value = "";
   updateStats();
-  alert(`✅ Турнир "${name}" создан!\nРаундов: ${tournament.rounds.length}`);
+  alert("✅ Турнир \"" + name + "\" создан!\nРаундов: " + tournament.rounds.length);
 }
 
 function nextRound() {
@@ -152,6 +184,20 @@ function nextRound() {
   if (t.status !== "active") { alert("Турнир завершён"); return; }
   
   let idx = db.tournaments.findIndex(x => x.id === t.id);
+  
+  // Обновляем маппинг для текущего раунда
+  let round = t.rounds[t.currentRound];
+  round.matches.forEach(m => {
+    if (m.a.name !== "—" && m.a.name !== "TBD") {
+      let orig = db.players.find(op => op.name === m.a.name);
+      if (orig) t._playerMap[m.a.id] = orig.id;
+    }
+    if (m.b.name !== "—" && m.b.name !== "TBD") {
+      let orig = db.players.find(op => op.name === m.b.name);
+      if (orig) t._playerMap[m.b.id] = orig.id;
+    }
+  });
+  
   db.tournaments[idx] = finalizeRound(t, db.players);
   saveDB(db);
   
@@ -172,12 +218,12 @@ function clearAll() {
 
 function updateStats() {
   let db = getDB();
-  document.getElementById("playersCount").textContent = `Участников: ${db.players.length}`;
+  document.getElementById("playersCount").textContent = "Участников: " + db.players.length;
   
   let t = getActiveTournament(db);
   if (t) {
-    let status = t.status === "active" ? `🔥 Раунд ${t.currentRound + 1} / ${t.rounds.length}` : "✅ Завершён";
-    document.getElementById("tourStatus").innerHTML = `<strong>${t.name}</strong><br>${status}`;
+    let status = t.status === "active" ? "🔥 Раунд " + (t.currentRound + 1) + " / " + t.rounds.length : "✅ Завершён";
+    document.getElementById("tourStatus").innerHTML = "<strong>" + t.name + "</strong><br>" + status;
   } else {
     document.getElementById("tourStatus").textContent = "Нет активного турнира";
   }
@@ -187,6 +233,7 @@ if (isAdmin()) {
   document.getElementById("loginPanel").style.display = "none";
   document.getElementById("adminPanel").style.display = "block";
   updateStats();
+  renderPlayersList();
 }
 </script>
 
