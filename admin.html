@@ -1,31 +1,15 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Admin Panel</title>
-</head>
-<body>
+<div id="login">
+  <input id="key" placeholder="admin key">
+  <button onclick="login()">Login</button>
+</div>
 
-<h1>Admin Panel</h1>
+<div id="panel" style="display:none;">
+  <h1>Admin Panel</h1>
 
-<input id="adminkey" placeholder="admin key">
-<button onclick="login()">Login</button>
+  <textarea id="import"></textarea>
+  <button onclick="importPlayers()">Import</button>
 
-<hr>
+  <button onclick="nextRound()">Next Round</button>
 
-<h2>Import Players</h2>
-<textarea id="importBox" rows="10" cols="50"></textarea>
-<button onclick="importPlayers()">Import</button>
-
-<hr>
-
-<button onclick="state.players=[];saveState(state);location.reload()">
-Reset All
-</button>
-
-<script src="state.js"></script>
-<script src="import.js"></script>
-<script src="admin.js"></script>
-
-</body>
-</html>
+  <div id="stats"></div>
+</div>
