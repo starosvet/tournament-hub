@@ -9,24 +9,93 @@
 <body>
 
 <header>
-  <h1>🏆 Tournament Hub</h1>
+  <div class="header-top">
+    <h1>🏆 Tournament Hub</h1>
+    <div id="userBlock"></div>
+  </div>
   <nav>
     <a href="index.html">Главная</a>
     <a href="bracket.html">Сетка</a>
-    <a href="history.html">История</a>
+    <a href="history.html" class="active">История</a>
     <a href="admin.html">Admin</a>
   </nav>
 </header>
 
-<h1>📜 История матчей</h1>
-<div id="history"></div>
+<main class="container">
+  <h1>📜 История матчей</h1>
+  <div id="history"></div>
+</main>
 
 <script src="js/db.js"></script>
+<script src="js/engine.js"></script>
 <script src="js/bracket.js"></script>
-<script src="js/history.js"></script>
+<script src="js/auth.js"></script>
 
 <script>
+function showHistory() {
+  const db = getDB();
+  const container = document.getElementById("history");
+  
+  if (!db.active || !db.active.rounds.length) {
+    container.innerHTML = '<div class="card">История пуста</div>';
+    return;
+  }
+  
+  let html = '';
+  const tournament = db.active;
+  
+  tournament.rounds.forEach((round, rIdx) => {
+    if (!round.matches.some(m => m.done)) return;
+    
+    html += `<h2 style="margin-top:30px; color:#fbbf24;">${round.name}</h2>`;
+    
+    round.matches.forEach(m => {
+      if (!m.done) return;
+      
+      const winnerA = m.winner?.id === m.a.id;
+      const winnerB = m.winner?.id === m.b.id;
+      
+      html += `
+        <div class="match" style="margin:10px 0;">
+          <div class="match-side ${winnerA ? 'winner' : ''}">
+            <img src="${getWikiImage(m.a.url)}" alt="" onerror="this.style.display='none'">
+            <a href="${m.a.url}" target="_blank">${m.a.name}</a>
+          </div>
+          
+          <div class="match-center">
+            <div class="final-result">
+              <span class="${winnerA ? 'winner-text' : ''}">${m.votesA}</span>
+              <span class="vs">:</span>
+              <span class="${winnerB ? 'winner-text' : ''}">${m.votesB}</span>
+            </div>
+            <div class="match-winner">🏆 ${m.winner?.name || '?'}</div>
+          </div>
+          
+          <div class="match-side ${winnerB ? 'winner' : ''}">
+            <img src="${getWikiImage(m.b.url)}" alt="" onerror="this.style.display='none'">
+            <a href="${m.b.url}" target="_blank">${m.b.name}</a>
+          </div>
+        </div>
+      `;
+    });
+  });
+  
+  if (!html) {
+    container.innerHTML = '<div class="card">Пока нет завершённых матчей</div>';
+    return;
+  }
+  
+  container.innerHTML = html;
+}
+
+function getWikiImage(url) {
+  if (!url || url === "#") return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const name = url.split('/').pop() || '?';
+  return `https://via.placeholder.com/50x50/2a3142/fff?text=${encodeURIComponent(name[0].toUpperCase())}`;
+}
+
 showHistory();
+renderHeader(getDB());
 </script>
 
 </body>
