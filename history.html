@@ -15,7 +15,8 @@
       <a href="index.html">Главная</a>
       <a href="bracket.html">Сетка</a>
       <a href="history.html" class="active">История</a>
-      <a href="admin.html">Admin</a>
+      <a href="rules.html">Правила</a>
+      <a href="admin.html" id="navAdmin" class="hidden">Управление</a>
     </nav>
     <div id="navUser" class="nav-user"></div>
   </div>
@@ -23,68 +24,67 @@
 
 <main class="container">
   <h1 class="page-title">📜 История матчей</h1>
-  <div id="history"></div>
+  <div id="historyList"></div>
 </main>
+
+<footer>
+  <span id="footerText">Tournament Hub</span>
+</footer>
 
 <script src="js/db.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/auth.js"></script>
+<script src="js/render.js"></script>
 
 <script>
-function renderHistory() {
+function loadHistoryPage() {
   let db = getDB();
-  let t = getActiveTournament(db);
-  let el = document.getElementById("history");
+  renderNavUser(db);
+  renderHistory(db);
+  renderAdminLink();
+}
+
+function renderHistory(db) {
+  let el = document.getElementById("historyList");
+  if (!el) return;
   
+  let t = getActiveTournament(db);
   if (!t || !t.rounds) {
-    el.innerHTML = '<div class="card" style="text-align:center;padding:40px"><h3>Пока нет матчей</h3></div>';
+    el.innerHTML = '<div class="hero-empty"><h2>Нет истории</h2><p>Пока не проведено ни одного матча.</p></div>';
     return;
   }
   
   let html = '';
-  t.rounds.forEach(r => {
-    if (!r.matches.some(m => m.done)) return;
+  t.rounds.forEach((r, idx) => {
+    let done = r.matches.filter(m => m.done);
+    if (!done.length) return;
     
-    html += `<div class="round-block"><h2>${r.name}</h2>`;
-    r.matches.forEach(m => {
-      if (!m.done) return;
-      let wa = m.winner?.id === m.a.id;
-      let wb = m.winner?.id === m.b.id;
-      html += `
-        <div class="match-row">
-          <div class="mr-side ${wa ? 'win' : ''}">
-            <img src="${wikiImg(m.a.url)}" onerror="this.style.display='none'">
-            <span>${m.a.name}</span>
-          </div>
-          <div class="mr-center">
-            <span class="mr-score">${m.votesA} : ${m.votesB}</span>
-            <span class="mr-winner">🏆 ${m.winner?.name || '?'}</span>
-          </div>
-          <div class="mr-side ${wb ? 'win' : ''}">
-            <img src="${wikiImg(m.b.url)}" onerror="this.style.display='none'">
-            <span>${m.b.name}</span>
-          </div>
-        </div>`;
+    html += '<div class="round-block"><h2>' + r.name + '</h2>';
+    done.forEach(m => {
+      let wa = m.winner && m.winner.id === m.a.id;
+      let wb = m.winner && m.winner.id === m.b.id;
+      html += '<div class="match-row">' +
+        '<div class="mr-side ' + (wa ? 'win' : '') + '">' +
+        '<img src="' + (m.a.img || '') + '" onerror="this.style.display=\'none\'">' +
+        '<span>' + m.a.name + '</span></div>' +
+        '<div class="mr-center"><span class="mr-score">' + m.votesA + ' : ' + m.votesB + '</span>' +
+        '<span class="mr-winner">🏆 ' + (m.winner ? m.winner.name : '—') + '</span></div>' +
+        '<div class="mr-side ' + (wb ? 'win' : '') + '">' +
+        '<img src="' + (m.b.img || '') + '" onerror="this.style.display=\'none\'">' +
+        '<span>' + m.b.name + '</span></div>' +
+        '</div>';
     });
     html += '</div>';
   });
   
   if (!html) {
-    el.innerHTML = '<div class="card" style="text-align:center;padding:40px"><h3>Матчи ещё не проведены</h3></div>';
-    return;
+    el.innerHTML = '<div class="hero-empty"><h2>Нет истории</h2><p>Пока не проведено ни одного матча.</p></div>';
+  } else {
+    el.innerHTML = html;
   }
-  
-  el.innerHTML = html;
 }
 
-function wikiImg(url) {
-  if (!url || url === "#") return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-  let n = (url.split('/').pop() || '?')[0].toUpperCase();
-  return `https://via.placeholder.com/36x36/1e293b/94a3b8?text=${encodeURIComponent(n)}`;
-}
-
-renderHistory();
-renderNavUser(getDB());
+loadHistoryPage();
 </script>
 
 </body>
