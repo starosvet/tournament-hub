@@ -2,54 +2,34 @@ function shuffle(arr) {
   return [...arr].sort(() => Math.random() - 0.5);
 }
 
-// 🎯 средний хаос режим
-function generateRound(players) {
-  let list = shuffle(players);
-
-  let matches = [];
+function generatePairs(players) {
+  const list = shuffle(players);
+  const pairs = [];
 
   for (let i = 0; i < list.length; i += 2) {
+    if (!list[i + 1]) break;
 
-    let roll = Math.random();
-
-    // 🔥 20% шанс 3-way
-    if (roll < 0.2 && i + 2 < list.length) {
-      matches.push({
-        type: "3way",
-        players: [list[i], list[i+1], list[i+2]]
-      });
-      i += 1;
-    }
-
-    // 🎲 60% норм 1v1
-    else if (roll < 0.8) {
-      matches.push({
-        type: "1v1",
-        players: [list[i], list[i+1]]
-      });
-    }
-
-    // ⚡ 20% “хаос матч” (разброс силы)
-    else {
-      let sorted = [...players].sort((a,b)=>a.elo-b.elo);
-      matches.push({
-        type: "chaos",
-        players: [
-          sorted[0],
-          sorted[sorted.length - 1]
-        ]
-      });
-    }
+    pairs.push({
+      a: list[i],
+      b: list[i + 1],
+      votesA: 0,
+      votesB: 0,
+      done: false,
+      winner: null
+    });
   }
 
-  return matches;
+  return pairs;
 }
 
-// 🧠 Elo система
-function updateElo(winner, loser) {
-  winner.elo += 20;
-  loser.elo -= 10;
+function vote(match, choice) {
+  if (choice === "A") match.votesA++;
+  if (choice === "B") match.votesB++;
 
-  winner.wins++;
-  loser.losses++;
+  if (match.votesA + match.votesB >= 10) {
+    match.done = true;
+    match.winner = match.votesA >= match.votesB ? match.a : match.b;
+  }
+
+  return match;
 }
