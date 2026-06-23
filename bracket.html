@@ -1,0 +1,14 @@
+export function renderBracket(round) {
+  return `
+    <div class="bracket">
+      ${round.matches.map(m => `
+        <div class="match">
+          <div>${m.a.name} (${m.votesA})</div>
+          <div>VS</div>
+          <div>${m.b.name} (${m.votesB})</div>
+          <div>${m.winner ? "🏆 " + m.winner.name : ""}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
