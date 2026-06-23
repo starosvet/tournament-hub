@@ -1,155 +1,176 @@
 // js/render.js — рендер главной страницы
 
 function loadPage() {
-  let db = getDB();
-  renderTop(db);
-  renderCurrentRound(db);
+  const db = getDB();
+  renderHeader(db);
+  renderActiveTournament(db);
+  renderTopPlayers(db);
+  renderRecentMatches(db);
 }
 
-function renderTop(db) {
-  let html = "";
-  let list = [...db.players].sort((a, b) => (b.wins || 0) - (a.wins || 0));
-  
-  if (list.length === 0) {
-    html = '<div class="card">Пока нет участников. Импортируйте в админке.</div>';
-  } else {
-    list.slice(0, 10).forEach(p => {
-      html += `
-        <div class="card">
-          <div class="player-row">
-            <img src="${getWikiImage(p.url)}" alt="" onerror="this.style.display='none'">
-            <div>
-              <a href="${p.url}" target="_blank">${p.name}</a>
-              <div class="wins">🏆 Побед: ${p.wins || 0}</div>
-            </div>
-          </div>
-        </div>
+function renderHeader(db) {
+  const user = getCurrentUser();
+  const userBlock = document.getElementById("userBlock");
+  if (userBlock) {
+    if (user) {
+      userBlock.innerHTML = `
+        <span style="color:#94a3b8">👤 ${user.fandomName}</span>
+        <span style="color:${user.status === 'autoconfirmed' ? '#22c55e' : '#3b82f6'}; font-size:12px; margin-left:8px;">
+          ${user.status === 'autoconfirmed' ? '✓ Автоподтверждён' : '✓ Верифицирован'}
+        </span>
+        <a href="#" onclick="logoutUser(); location.reload();" style="color:#ef4444; margin-left:15px; font-size:13px;">Выйти</a>
       `;
-    });
+    } else {
+      userBlock.innerHTML = `<a href="login.html" style="color:#3b82f6;">🔐 Войти через Fandom</a>`;
+    }
   }
-  
-  leaderboard.innerHTML = html;
 }
 
-function renderCurrentRound(db) {
-  if (!db.active || db.active.status !== 'active') {
-    round.innerHTML = '<div class="card">Нет активного турнира. Создайте в админке.</div>';
-    return;
-  }
+function renderActiveTournament(db) {
+  const container = document.getElementById("activeTournament");
+  if (!container) return;
   
   const tournament = db.active;
-  const currentRound = tournament.rounds[tournament.currentRound];
   
-  if (!currentRound) {
-    round.innerHTML = '<div class="card">Турнир завершён!</div>';
+  if (!tournament) {
+    container.innerHTML = `
+      <div class="card" style="text-align:center; padding:40px;">
+        <h3>📭 Нет активного турнира</h3>
+        <p style="color:#64748b">Создайте турнир в админке!</p>
+      </div>
+    `;
     return;
   }
   
-  let html = `<div class="round-header">
-    <h3>${currentRound.name}</h3>
-    ${currentRound.startedAt ? `<div class="timer-main" id="mainTimer">${formatTime(getTimeLeft(currentRound.startedAt, 24))}</div>` : ''}
-  </div>`;
+  const statusText = {
+    "active": "🔥 Идёт голосование",
+    "completed": "✅ Завершён"
+  };
   
-  currentRound.matches.forEach((m, i) => {
-    const canVote = !m.done && !m.a.isBye && !m.b.isBye && !localStorage.getItem(`vote_${tournament.id}_${tournament.currentRound}_${i}`);
+  let html = `
+    <div class="tournament-card" onclick="location.href='bracket.html'">
+      <div class="tournament-card-header">
+        <h3>🏆 ${tournament.name}</h3>
+        <span class="tournament-badge ${tournament.status}">${statusText[tournament.status] || tournament.status}</span>
+      </div>
+      <p style="color:#94a3b8; margin:10px 0;">${tournament.description || ''}</p>
+      <div class="tournament-meta">
+        <span>📅 Раунд ${tournament.currentRound + 1} из ${tournament.config?.totalRounds || '?'}</span>
+        <span>👥 ${tournament.rounds[0]?.matches?.length * 2 || '?'} участников</span>
+      </div>
+  `;
+  
+  if (tournament.status === "active") {
+    const round = tournament.rounds[tournament.currentRound];
+    if (round && round.startedAt) {
+      html += `<div class="timer-large">⏱️ До конца раунда: ${formatTime(getTimeLeft(round.startedAt, tournament.config?.voteDurationHours || 24))}</div>`;
+    }
+  }
+  
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function renderTopPlayers(db) {
+  const container = document.getElementById("topPlayers");
+  if (!container) return;
+  
+  const tournament = db.active;
+  if (!tournament || !tournament.rounds.length) {
+    container.innerHTML = '<div class="card">Топ будет доступен после начала турнира</div>';
+    return;
+  }
+  
+  // Считаем победы из завершённых матчей
+  const wins = {};
+  tournament.rounds.forEach(r => {
+    r.matches.forEach(m => {
+      if (m.done && m.winner) {
+        wins[m.winner.id] = (wins[m.winner.id] || 0) + 1;
+      }
+    });
+  });
+  
+  let list = db.players.map(p => ({
+    ...p,
+    winCount: wins[p.id] || 0
+  })).sort((a, b) => b.winCount - a.winCount);
+  
+  let html = '<h2>🔥 Топ участников</h2>';
+  
+  list.slice(0, 10).forEach((p, idx) => {
+    const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `<span style="color:#64748b">${idx + 1}</span>`;
     
     html += `
-      <div class="match">
-        <div class="match-side ${m.done && m.winner?.id === m.a.id ? 'winner' : ''}">
-          <img src="${getWikiImage(m.a.url)}" alt="" onerror="this.style.display='none'">
-          <a href="${m.a.url}" target="_blank">${m.a.name}</a>
-        </div>
-        
-        <div class="match-center">
-          ${!m.done ? `
-            <button onclick="voteCurrent(${i}, 0)" ${!canVote ? 'disabled class="voted"' : ''}>
-              ${canVote ? 'Голосовать' : '✓'} ${m.votesA}
-            </button>
-            <span class="vs">VS</span>
-            <button onclick="voteCurrent(${i}, 1)" ${!canVote ? 'disabled class="voted"' : ''}>
-              ${canVote ? 'Голосовать' : '✓'} ${m.votesB}
-            </button>
-          ` : `
-            <div class="final-result">
-              <span class="${m.winner?.id === m.a.id ? 'winner-text' : ''}">${m.votesA}</span>
-              <span class="vs">:</span>
-              <span class="${m.winner?.id === m.b.id ? 'winner-text' : ''}">${m.votesB}</span>
-            </div>
-            <div class="match-winner">🏆 ${m.winner?.name || '?'}</div>
-          `}
-        </div>
-        
-        <div class="match-side ${m.done && m.winner?.id === m.b.id ? 'winner' : ''}">
-          <img src="${getWikiImage(m.b.url)}" alt="" onerror="this.style.display='none'">
-          <a href="${m.b.url}" target="_blank">${m.b.name}</a>
+      <div class="leaderboard-row">
+        <div class="lb-rank">${medal}</div>
+        <img src="${getWikiImage(p.url)}" alt="" onerror="this.style.display='none'">
+        <div class="lb-info">
+          <a href="${p.url}" target="_blank">${p.name}</a>
+          <div class="lb-stats">🏆 Побед: ${p.winCount}</div>
         </div>
       </div>
     `;
   });
   
-  round.innerHTML = html;
-  
-  if (currentRound.startedAt) {
-    startMainTimer();
-  }
+  container.innerHTML = html;
 }
 
-function startMainTimer() {
-  const timerEl = document.getElementById('mainTimer');
-  if (!timerEl) return;
+function renderRecentMatches(db) {
+  const container = document.getElementById("recentMatches");
+  if (!container) return;
   
-  const update = () => {
-    const db = getDB();
-    if (!db.active || db.active.status !== 'active') return;
-    const currentRound = db.active.rounds[db.active.currentRound];
-    if (!currentRound || !currentRound.startedAt) return;
-    
-    const left = getTimeLeft(currentRound.startedAt, 24);
-    timerEl.textContent = formatTime(left);
-    
-    if (left > 0) {
-      requestAnimationFrame(update);
-    } else {
-      timerEl.textContent = "00:00:00";
-      timerEl.style.color = "#22c55e";
-    }
-  };
-  update();
-}
-
-function voteCurrent(matchIdx, side) {
-  let db = getDB();
-  if (!db.active || db.active.status !== 'active') return;
-  
-  const result = voteMatch(db.active, db.active.currentRound, matchIdx, side);
-  
-  if (result.success) {
-    saveDB(db);
-    loadPage();
-    showToast("✅ Голос засчитан!");
-  } else {
-    showToast("❌ " + result.error);
+  const tournament = db.active;
+  if (!tournament || !tournament.rounds.length) {
+    container.innerHTML = '';
+    return;
   }
+  
+  let allMatches = [];
+  tournament.rounds.forEach(r => {
+    r.matches.forEach(m => {
+      if (m.done) allMatches.push({...m, roundName: r.name});
+    });
+  });
+  
+  const recent = allMatches.slice(-6).reverse();
+  
+  if (!recent.length) {
+    container.innerHTML = '';
+    return;
+  }
+  
+  let html = '<h2>⚔️ Последние матчи</h2>';
+  
+  recent.forEach(m => {
+    html += `
+      <div class="match-mini">
+        <div class="match-mini-side ${m.winner?.id === m.a.id ? 'winner' : ''}">
+          <span>${m.a.name}</span>
+          <span class="mini-votes">${m.votesA}</span>
+        </div>
+        <span class="mini-vs">VS</span>
+        <div class="match-mini-side ${m.winner?.id === m.b.id ? 'winner' : ''}">
+          <span>${m.b.name}</span>
+          <span class="mini-votes">${m.votesB}</span>
+        </div>
+        <div class="mini-round">${m.roundName}</div>
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
 }
 
 function getWikiImage(url) {
   if (!url || url === "#") return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
   const name = url.split('/').pop() || '?';
-  return `https://via.placeholder.com/50x50/2a3142/fff?text=${encodeURIComponent(name[0].toUpperCase())}`;
-}
-
-function formatTime(ms) {
-  if (ms <= 0) return "00:00:00";
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  const s = Math.floor((ms % 60000) / 1000);
-  return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+  return `https://via.placeholder.com/44x44/2a3142/fff?text=${encodeURIComponent(name[0].toUpperCase())}`;
 }
 
 function showToast(msg) {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
-  
   const t = document.createElement('div');
   t.className = 'toast';
   t.textContent = msg;
