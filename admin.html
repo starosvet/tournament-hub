@@ -1,25 +1,31 @@
-const ADMIN_KEY = "admin-v5-key";
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Panel</title>
+</head>
+<body>
 
-function login() {
-  const val = document.getElementById("adminkey").value;
+<h1>Admin Panel</h1>
 
-  if (val === ADMIN_KEY) {
-    localStorage.setItem("admin", "1");
-    location.reload();
-  } else {
-    alert("Wrong key");
-  }
-}
+<input id="adminkey" placeholder="admin key">
+<button onclick="login()">Login</button>
 
-function isAdmin() {
-  return localStorage.getItem("admin") === "1";
-}
+<hr>
 
-function importPlayers() {
-  const raw = document.getElementById("importBox").value;
+<h2>Import Players</h2>
+<textarea id="importBox" rows="10" cols="50"></textarea>
+<button onclick="importPlayers()">Import</button>
 
-  state.players = parseImport(raw);
+<hr>
 
-  saveState(state);
-  alert("Imported " + state.players.length);
-}
+<button onclick="state.players=[];saveState(state);location.reload()">
+Reset All
+</button>
+
+<script src="state.js"></script>
+<script src="import.js"></script>
+<script src="admin.js"></script>
+
+</body>
+</html>
