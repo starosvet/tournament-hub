@@ -9,28 +9,31 @@
 <body>
 
 <header>
-  <h1>🏆 Tournament Hub</h1>
+  <div class="header-top">
+    <h1>🏆 Tournament Hub</h1>
+    <div id="userBlock"></div>
+  </div>
   <nav>
-    <a href="index.html">Главная</a>
+    <a href="index.html" class="active">Главная</a>
     <a href="bracket.html">Сетка</a>
     <a href="history.html">История</a>
     <a href="admin.html">Admin</a>
   </nav>
 </header>
 
-<section id="top">
-  <h2>🔥 Топ участников</h2>
-  <div id="leaderboard"></div>
-</section>
-
-<section>
-  <h2>⚔️ Текущий раунд</h2>
-  <div id="round"></div>
-</section>
+<main class="container">
+  <section id="activeTournament"></section>
+  
+  <div class="two-columns">
+    <section id="topPlayers"></section>
+    <section id="recentMatches"></section>
+  </div>
+</main>
 
 <script src="js/db.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/bracket.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/render.js"></script>
 
 <script>
