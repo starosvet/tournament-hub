@@ -26,9 +26,9 @@ function getActiveTournament(db) {
 }
 
 function getCurrentUser() {
-  const uid = localStorage.getItem("th_user_id");
+  let uid = localStorage.getItem("th_user_id");
   if (!uid) return null;
-  const db = getDB();
+  let db = getDB();
   return db.users.find(u => u.id === uid) || null;
 }
 
@@ -39,7 +39,7 @@ function setCurrentUser(userId) {
 
 function resetVotes(tournamentId) {
   for (let key in localStorage) {
-    if (key.startsWith(`vote_${tournamentId}_`)) {
+    if (key.startsWith("vote_" + tournamentId + "_")) {
       localStorage.removeItem(key);
     }
   }
