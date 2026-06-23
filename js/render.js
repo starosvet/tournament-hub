@@ -1,183 +1,127 @@
 // js/render.js — рендер главной страницы
 
 function loadPage() {
-  const db = getDB();
-  renderHeader(db);
-  renderActiveTournament(db);
-  renderTopPlayers(db);
-  renderRecentMatches(db);
+  let db = getDB();
+  renderNavUser(db);
+  renderHero(db);
+  renderLeaderboard(db);
+  renderRecent(db);
 }
 
-function renderHeader(db) {
-  const user = getCurrentUser();
-  const userBlock = document.getElementById("userBlock");
-  if (userBlock) {
-    if (user) {
-      userBlock.innerHTML = `
-        <span style="color:#94a3b8">👤 ${user.fandomName}</span>
-        <span style="color:${user.status === 'autoconfirmed' ? '#22c55e' : '#3b82f6'}; font-size:12px; margin-left:8px;">
-          ${user.status === 'autoconfirmed' ? '✓ Автоподтверждён' : '✓ Верифицирован'}
-        </span>
-        <a href="#" onclick="logoutUser(); location.reload();" style="color:#ef4444; margin-left:15px; font-size:13px;">Выйти</a>
-      `;
-    } else {
-      userBlock.innerHTML = `<a href="login.html" style="color:#3b82f6;">🔐 Войти через Fandom</a>`;
-    }
+function renderNavUser(db) {
+  let el = document.getElementById("navUser");
+  if (!el) return;
+  let user = getCurrentUser();
+  if (user) {
+    el.innerHTML = `<span style="color:#94a3b8">👤 ${user.fandomName}</span>
+      <a href="#" onclick="logoutUser();location.reload()" style="color:#ef4444;margin-left:12px;font-size:13px">Выйти</a>`;
+  } else {
+    el.innerHTML = `<a href="login.html" style="color:#3b82f6">🔐 Войти</a>`;
   }
 }
 
-function renderActiveTournament(db) {
-  const container = document.getElementById("activeTournament");
-  if (!container) return;
+function renderHero(db) {
+  let el = document.getElementById("hero");
+  if (!el) return;
   
-  const tournament = db.active;
-  
-  if (!tournament) {
-    container.innerHTML = `
-      <div class="card" style="text-align:center; padding:40px;">
-        <h3>📭 Нет активного турнира</h3>
-        <p style="color:#64748b">Создайте турнир в админке!</p>
-      </div>
-    `;
+  let t = getActiveTournament(db);
+  if (!t) {
+    el.innerHTML = `
+      <div class="hero-empty">
+        <h2>🏆 Добро пожаловать в Tournament Hub</h2>
+        <p>Создайте турнир в админ-панели, чтобы начать голосование!</p>
+        <a href="admin.html" class="btn-primary">⚙️ Открыть админку</a>
+      </div>`;
     return;
   }
   
-  const statusText = {
-    "active": "🔥 Идёт голосование",
-    "completed": "✅ Завершён"
-  };
-  
-  let html = `
-    <div class="tournament-card" onclick="location.href='bracket.html'">
-      <div class="tournament-card-header">
-        <h3>🏆 ${tournament.name}</h3>
-        <span class="tournament-badge ${tournament.status}">${statusText[tournament.status] || tournament.status}</span>
-      </div>
-      <p style="color:#94a3b8; margin:10px 0;">${tournament.description || ''}</p>
-      <div class="tournament-meta">
-        <span>📅 Раунд ${tournament.currentRound + 1} из ${tournament.config?.totalRounds || '?'}</span>
-        <span>👥 ${tournament.rounds[0]?.matches?.length * 2 || '?'} участников</span>
-      </div>
-  `;
-  
-  if (tournament.status === "active") {
-    const round = tournament.rounds[tournament.currentRound];
-    if (round && round.startedAt) {
-      html += `<div class="timer-large">⏱️ До конца раунда: ${formatTime(getTimeLeft(round.startedAt, tournament.config?.voteDurationHours || 24))}</div>`;
-    }
+  let status = t.status === "active" ? "🔥 Активен" : "✅ Завершён";
+  let round = t.rounds[t.currentRound];
+  let timer = "";
+  if (round && round.startedAt && t.status === "active") {
+    let left = getTimeLeft(round.startedAt, t.config.voteDurationHours);
+    timer = `<div class="hero-timer">⏱️ ${formatDuration(left)}</div>`;
   }
   
-  html += `</div>`;
-  container.innerHTML = html;
+  el.innerHTML = `
+    <div class="hero-tournament" onclick="location.href='bracket.html'">
+      <div class="hero-status">${status}</div>
+      <h2>${t.name}</h2>
+      <p>${t.description || ''}</p>
+      <div class="hero-meta">
+        <span>🎯 Раунд ${t.currentRound + 1} / ${t.rounds.length}</span>
+        <span>⚔️ ${t.rounds[0].matches.length} матчей</span>
+      </div>
+      ${timer}
+    </div>`;
 }
 
-function renderTopPlayers(db) {
-  const container = document.getElementById("topPlayers");
-  if (!container) return;
+function renderLeaderboard(db) {
+  let el = document.getElementById("leaderboard");
+  if (!el) return;
   
-  const tournament = db.active;
-  if (!tournament || !tournament.rounds.length) {
-    container.innerHTML = '<div class="card">Топ будет доступен после начала турнира</div>';
+  if (!db.players.length) {
+    el.innerHTML = '<div class="card">Нет участников</div>';
     return;
   }
   
-  // Считаем победы из завершённых матчей
-  const wins = {};
-  tournament.rounds.forEach(r => {
-    r.matches.forEach(m => {
-      if (m.done && m.winner) {
-        wins[m.winner.id] = (wins[m.winner.id] || 0) + 1;
-      }
-    });
-  });
+  let sorted = [...db.players].sort((a, b) => (b.wins || 0) - (a.wins || 0)).slice(0, 10);
   
-  let list = db.players.map(p => ({
-    ...p,
-    winCount: wins[p.id] || 0
-  })).sort((a, b) => b.winCount - a.winCount);
-  
-  let html = '<h2>🔥 Топ участников</h2>';
-  
-  list.slice(0, 10).forEach((p, idx) => {
-    const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `<span style="color:#64748b">${idx + 1}</span>`;
-    
+  let html = '<h2 class="section-title">🏆 Топ участников</h2>';
+  sorted.forEach((p, i) => {
+    let medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
     html += `
-      <div class="leaderboard-row">
-        <div class="lb-rank">${medal}</div>
-        <img src="${getWikiImage(p.url)}" alt="" onerror="this.style.display='none'">
-        <div class="lb-info">
+      <div class="lb-row">
+        <span class="lb-medal">${medal}</span>
+        <img src="${wikiImg(p.url)}" onerror="this.style.display='none'">
+        <div class="lb-name">
           <a href="${p.url}" target="_blank">${p.name}</a>
-          <div class="lb-stats">🏆 Побед: ${p.winCount}</div>
+          <span class="lb-wins">${p.wins || 0} побед</span>
         </div>
-      </div>
-    `;
+      </div>`;
   });
-  
-  container.innerHTML = html;
+  el.innerHTML = html;
 }
 
-function renderRecentMatches(db) {
-  const container = document.getElementById("recentMatches");
-  if (!container) return;
+function renderRecent(db) {
+  let el = document.getElementById("recent");
+  if (!el) return;
   
-  const tournament = db.active;
-  if (!tournament || !tournament.rounds.length) {
-    container.innerHTML = '';
-    return;
-  }
+  let t = getActiveTournament(db);
+  if (!t || !t.rounds) { el.innerHTML = ''; return; }
   
-  let allMatches = [];
-  tournament.rounds.forEach(r => {
-    r.matches.forEach(m => {
-      if (m.done) allMatches.push({...m, roundName: r.name});
-    });
+  let done = [];
+  t.rounds.forEach(r => {
+    r.matches.forEach(m => { if (m.done) done.push({...m, roundName: r.name}); });
   });
   
-  const recent = allMatches.slice(-6).reverse();
+  if (!done.length) { el.innerHTML = ''; return; }
   
-  if (!recent.length) {
-    container.innerHTML = '';
-    return;
-  }
-  
-  let html = '<h2>⚔️ Последние матчи</h2>';
-  
-  recent.forEach(m => {
+  let html = '<h2 class="section-title">⚔️ Последние матчи</h2>';
+  done.slice(-5).reverse().forEach(m => {
+    let wa = m.winner?.id === m.a.id;
+    let wb = m.winner?.id === m.b.id;
     html += `
-      <div class="match-mini">
-        <div class="match-mini-side ${m.winner?.id === m.a.id ? 'winner' : ''}">
-          <span>${m.a.name}</span>
-          <span class="mini-votes">${m.votesA}</span>
-        </div>
-        <span class="mini-vs">VS</span>
-        <div class="match-mini-side ${m.winner?.id === m.b.id ? 'winner' : ''}">
-          <span>${m.b.name}</span>
-          <span class="mini-votes">${m.votesB}</span>
-        </div>
-        <div class="mini-round">${m.roundName}</div>
-      </div>
-    `;
+      <div class="recent-match">
+        <span class="${wa ? 'win' : ''}">${m.a.name}</span>
+        <span class="recent-score">${m.votesA} : ${m.votesB}</span>
+        <span class="${wb ? 'win' : ''}">${m.b.name}</span>
+        <span class="recent-round">${m.roundName}</span>
+      </div>`;
   });
-  
-  container.innerHTML = html;
+  el.innerHTML = html;
 }
 
-function getWikiImage(url) {
+function wikiImg(url) {
   if (!url || url === "#") return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-  const name = url.split('/').pop() || '?';
-  return `https://via.placeholder.com/44x44/2a3142/fff?text=${encodeURIComponent(name[0].toUpperCase())}`;
+  let n = (url.split('/').pop() || '?')[0].toUpperCase();
+  return `https://via.placeholder.com/40x40/1e293b/94a3b8?text=${encodeURIComponent(n)}`;
 }
 
-function showToast(msg) {
-  const existing = document.querySelector('.toast');
-  if (existing) existing.remove();
-  const t = document.createElement('div');
+function toast(msg) {
+  let t = document.createElement('div');
   t.className = 'toast';
   t.textContent = msg;
   document.body.appendChild(t);
-  setTimeout(() => {
-    t.style.opacity = '0';
-    t.style.transform = 'translateX(100%)';
-    setTimeout(() => t.remove(), 300);
-  }, 2500);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2500);
 }
