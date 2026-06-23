@@ -1,36 +1,35 @@
 <!DOCTYPE html>
-
-<html>
-
+<html lang="ru">
 <head>
-
-<title>Bracket</title>
-
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Сетка турнира | Tournament Hub</title>
 <link rel="stylesheet" href="style.css">
-
 </head>
-
-
 <body>
 
+<header>
+  <h1>🏆 Tournament Hub</h1>
+  <nav>
+    <a href="index.html">Главная</a>
+    <a href="bracket.html">Сетка</a>
+    <a href="history.html">История</a>
+    <a href="admin.html">Admin</a>
+  </nav>
+</header>
 
-<h1>Сетка турнира</h1>
-
-
+<h1>📋 Сетка турнира</h1>
 <div id="bracket"></div>
 
-
 <script src="js/db.js"></script>
-<script src="js/render.js"></script>
-
+<script src="js/engine.js"></script>
+<script src="js/bracket.js"></script>
+<script src="js/render-bracket.js"></script>
+<script src="js/auth.js"></script>
 
 <script>
-
-renderBracket();
-
+renderBracketPage();
 </script>
 
-
 </body>
-
 </html>
