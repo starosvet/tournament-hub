@@ -6,84 +6,251 @@
   <title>Admin | Tournament Hub</title>
   <link rel="stylesheet" href="style.css"/>
   <style>
-    body { background: #0f1115; color: #eaeaea; font-family: Arial, sans-serif; }
-    .wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
-    .panel { background: #171a21; border: 1px solid #2a2f3a; border-radius: 12px; padding: 15px; margin-bottom: 15px; }
-    button { background: #2d6cdf; color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; margin: 3px; }
-    button:hover { background: #1f5ed0; }
-    input, textarea { width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #333; background: #0f1115; color: #fff; }
-    .row { display: flex; gap: 10px; flex-wrap: wrap; }
-    .row > * { flex: 1; min-width: 200px; }
-    .log { font-size: 12px; opacity: 0.8; white-space: pre-wrap; }
+    /* Админ-специфичные стили (можно вынести в admin.css) */
+    .admin-wrap { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
+    .admin-panel { background: var(--bg-3); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+    .admin-panel h3 { color: var(--accent); margin-bottom: 16px; font-size: 1.1em; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .admin-panel input, .admin-panel textarea, .admin-panel select { width: 100%; padding: 10px 14px; margin-bottom: 12px; border-radius: 10px; border: 1px solid var(--border-2); background: var(--bg); color: var(--text); font-family: inherit; }
+    .admin-panel input:focus, .admin-panel textarea:focus, .admin-panel select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-glow); }
+    .admin-panel textarea { resize: vertical; min-height: 120px; }
+    .admin-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .admin-row > * { flex: 1; min-width: 200px; }
+    .admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .admin-table th { text-align: left; padding: 10px; color: var(--text-3); font-weight: 600; border-bottom: 1px solid var(--border); }
+    .admin-table td { padding: 10px; border-bottom: 1px solid var(--border); }
+    .admin-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .log-entry { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-2); }
+    .log-entry .time { color: var(--text-3); font-family: monospace; margin-right: 10px; }
+    .log-entry .action { color: var(--accent); }
+    .log-entry .target { color: var(--blue); }
+    .participant-editor { max-height: 300px; overflow-y: auto; margin-bottom: 12px; }
+    .participant-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .participant-row input { flex: 1; margin-bottom: 0; }
+    .participant-row button { background: var(--red); color: white; border: none; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 16px; }
+    .match-admin { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--bg); border-radius: 10px; margin-bottom: 8px; }
+    .match-admin .score { font-family: monospace; color: var(--accent); font-weight: 700; }
     .hidden { display: none !important; }
-    .danger { background: #ef4444 !important; }
-    .danger:hover { background: #dc2626 !important; }
+    .danger { background: var(--red) !important; }
+    .danger:hover { background: var(--red-2) !important; }
+    .warning { background: var(--accent) !important; color: #000 !important; }
+    .warning:hover { background: var(--accent-2) !important; }
+    .success { color: var(--green); }
+    .error { color: var(--red); }
+    .admin-tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
+    .admin-tab { padding: 10px 20px; border-radius: 10px; background: var(--bg-3); border: 1px solid var(--border); color: var(--text-2); cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+    .admin-tab:hover { color: var(--text); }
+    .admin-tab.active { background: var(--accent-glow); color: var(--accent); border-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .settings-group { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+    .settings-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .settings-group label { display: block; color: var(--text-2); font-size: 13px; margin-bottom: 6px; font-weight: 500; }
+    .checkbox-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .checkbox-row input[type="checkbox"] { width: auto; margin-bottom: 0; }
+    .fandom-admin-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: var(--accent-glow); color: var(--accent); border-radius: 6px; font-size: 12px; }
+    .fandom-admin-tag button { background: none; border: none; color: var(--red); cursor: pointer; font-size: 14px; padding: 0; margin-left: 4px; }
+    @media (max-width: 768px) { .admin-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
-<div class="wrap">
+<div class="admin-wrap">
 
-  <h1>⚙️ Tournament Hub Admin</h1>
+  <h1 style="margin-bottom:24px;">⚙️ Tournament Hub Admin</h1>
 
   <!-- AUTH -->
-  <div class="panel" id="authPanel">
-    <h3>Авторизация</h3>
+  <div class="admin-panel" id="authPanel">
+    <h3>🔐 Авторизация</h3>
     <input id="adminPass" type="password" placeholder="Пароль админа"/>
-    <button onclick="doLoginAdmin()">Войти</button>
-    <div id="authStatus" class="log"></div>
+    <button class="btn-primary" onclick="Admin.doLogin()">Войти</button>
+    <div id="authStatus" style="margin-top:12px;font-size:14px;"></div>
   </div>
 
-  <!-- ADMIN CONTROLS (скрыты до входа) -->
+  <!-- ADMIN CONTROLS -->
   <div id="adminControls" class="hidden">
 
-    <!-- TOURNAMENT CREATE -->
-    <div class="panel">
-      <h3>Создать турнир</h3>
-      <input id="tName" placeholder="Название турнира"/>
-      <textarea id="tDesc" placeholder="Описание турнира (необязательно)" rows="2"></textarea>
-      <textarea id="tData" placeholder="Список участников (каждый с новой строки, формат: Имя | https://wiki/ссылка)" rows="8"></textarea>
-      <button onclick="doCreateTournament()">Создать турнир</button>
-      <div id="tCreateStatus" class="log"></div>
+    <!-- Tabs -->
+    <div class="admin-tabs">
+      <div class="admin-tab active" onclick="Admin.switchTab('tournament')" data-tab="tournament">🏆 Турниры</div>
+      <div class="admin-tab" onclick="Admin.switchTab('users')" data-tab="users">👥 Пользователи</div>
+      <div class="admin-tab" onclick="Admin.switchTab('moderation')" data-tab="moderation">🛡 Модерация</div>
+      <div class="admin-tab" onclick="Admin.switchTab('settings')" data-tab="settings">⚙️ Настройки</div>
+      <div class="admin-tab" onclick="Admin.switchTab('system')" data-tab="system">🔧 Система</div>
     </div>
 
-    <!-- TOURNAMENT MANAGE -->
-    <div class="panel">
-      <h3>Управление турниром</h3>
-      <div id="activeTournamentInfo" class="log" style="margin-bottom:10px;">Нет активного турнира</div>
-      <div class="row">
-        <button onclick="doStartTournament()">🚀 Запустить турнир</button>
-        <button onclick="doAdvanceRound()">⏭ Завершить раунд</button>
-        <button onclick="doResetVotes()">🔄 Сбросить голоса</button>
-        <button class="danger" onclick="doDeleteActiveTournament()">🗑 Удалить турнир</button>
+    <!-- TAB: TOURNAMENTS -->
+    <div class="tab-content active" id="tab-tournament">
+      <div class="admin-grid">
+        
+        <!-- Create -->
+        <div class="admin-panel">
+          <h3>➕ Создать турнир</h3>
+          <input id="tName" placeholder="Название турнира"/>
+          <textarea id="tDesc" placeholder="Описание турнира (необязательно)" rows="2"></textarea>
+          <textarea id="tData" placeholder="Список участников (каждый с новой строки, формат: Имя | https://wiki/ссылка)" rows="6"></textarea>
+          <button class="btn-primary" onclick="Admin.doCreateTournament()">Создать турнир</button>
+          <div id="tCreateStatus" style="margin-top:10px;font-size:13px;"></div>
+        </div>
+
+        <!-- Manage Active -->
+        <div class="admin-panel">
+          <h3>▶️ Управление активным</h3>
+          <div id="activeTournamentInfo" style="margin-bottom:16px;padding:12px;background:var(--bg);border-radius:10px;font-size:14px;">
+            Нет активного турнира
+          </div>
+          <div class="admin-row">
+            <button class="btn-primary" onclick="Admin.doStartTournament()">🚀 Запустить</button>
+            <button class="btn-warn" onclick="Admin.doAdvanceRound()">⏭ Завершить раунд</button>
+            <button class="btn-warn warning" onclick="Admin.doAdvanceRound(true)">⚡ Принудительно</button>
+          </div>
+          <div class="admin-row" style="margin-top:10px;">
+            <button class="btn-secondary" onclick="Admin.doResetVotes()">🔄 Сбросить голоса</button>
+            <button class="btn-secondary" onclick="Admin.doUndoRound()">↩️ Откатить раунд</button>
+          </div>
+          <div class="admin-row" style="margin-top:10px;">
+            <button class="btn-secondary" onclick="Admin.doDuplicateTournament()">📋 Дублировать</button>
+            <button class="btn-secondary" onclick="Admin.doArchiveTournament()">📦 Архивировать</button>
+          </div>
+          <div class="admin-row" style="margin-top:10px;">
+            <button class="btn-danger danger" onclick="Admin.doDeleteActiveTournament()">🗑 Удалить</button>
+          </div>
+          <div id="tStatus" style="margin-top:12px;font-size:13px;"></div>
+        </div>
+
+        <!-- Edit Participants -->
+        <div class="admin-panel" id="editParticipantsPanel">
+          <h3>✏️ Редактор участников</h3>
+          <div id="participantEditor" class="participant-editor">
+            <p style="color:var(--text-3);font-size:13px;">Создайте или выберите черновик турнира</p>
+          </div>
+          <button class="btn-secondary" onclick="Admin.addParticipantRow()" style="width:100%;margin-bottom:12px;">➕ Добавить участника</button>
+          <button class="btn-primary" onclick="Admin.saveParticipants()">💾 Сохранить изменения</button>
+          <div id="participantSaveStatus" style="margin-top:10px;font-size:13px;"></div>
+        </div>
+
+        <!-- Force Win -->
+        <div class="admin-panel" id="forceWinPanel">
+          <h3>🏁 Force Win</h3>
+          <div id="forceWinList">
+            <p style="color:var(--text-3);font-size:13px;">Нет активных матчей</p>
+          </div>
+        </div>
+
       </div>
-      <div id="tStatus" class="log"></div>
+
+      <!-- Tournament List -->
+      <div class="admin-panel" style="margin-top:20px;">
+        <h3>📋 Все турниры</h3>
+        <div id="tournamentList" style="font-size:13px;"></div>
+      </div>
     </div>
 
-    <!-- TOURNAMENT LIST -->
-    <div class="panel">
-      <h3>Все турниры</h3>
-      <div id="tournamentList" class="log"></div>
+    <!-- TAB: USERS -->
+    <div class="tab-content" id="tab-users">
+      <div class="admin-grid">
+        <div class="admin-panel">
+          <h3>👥 Пользователи</h3>
+          <div style="overflow-x:auto;">
+            <table class="admin-table" id="usersTable">
+              <thead>
+                <tr><th>Ник</th><th>Имя</th><th>Тип</th><th>Роль</th><th>Голосов</th><th>Fandom</th><th>Действия</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- IMPORT / EXPORT -->
-    <div class="panel">
-      <h3>Импорт / Экспорт</h3>
-      <button onclick="doExportData()">📥 Экспорт JSON</button>
-      <input type="file" onchange="doImportData(event)" style="margin-top:10px;"/>
+    <!-- TAB: MODERATION -->
+    <div class="tab-content" id="tab-moderation">
+      <div class="admin-grid">
+        <div class="admin-panel">
+          <h3>💬 Комментарии</h3>
+          <div id="modCommentsList" style="max-height:400px;overflow-y:auto;font-size:13px;">
+            <p style="color:var(--text-3);">Нет комментариев</p>
+          </div>
+        </div>
+        <div class="admin-panel">
+          <h3>💬 Чат</h3>
+          <div id="modChatPreview" style="max-height:200px;overflow-y:auto;font-size:13px;margin-bottom:12px;background:var(--bg);padding:10px;border-radius:10px;">
+            <p style="color:var(--text-3);">Нет сообщений</p>
+          </div>
+          <button class="btn-danger danger" onclick="Admin.doClearChat()">🗑 Очистить чат</button>
+        </div>
+      </div>
     </div>
 
-    <!-- USERS -->
-    <div class="panel">
-      <h3>Пользователи</h3>
-      <div id="userList" class="log"></div>
+    <!-- TAB: SETTINGS -->
+    <div class="tab-content" id="tab-settings">
+      <div class="admin-grid">
+        <div class="admin-panel">
+          <h3>🌐 Настройки сайта</h3>
+          <div class="settings-group">
+            <label>Название сайта</label>
+            <input type="text" id="settingSiteName" placeholder="Tournament Hub"/>
+          </div>
+          <div class="settings-group">
+            <label>Описание</label>
+            <input type="text" id="settingDesc" placeholder="Турниры для вашей вики"/>
+          </div>
+          <div class="settings-group">
+            <label>Логотип (emoji или URL)</label>
+            <input type="text" id="settingLogo" placeholder="🏆"/>
+          </div>
+          <div class="settings-group">
+            <label>Тема акцента</label>
+            <select id="settingTheme">
+              <option value="amber">Amber (оранжевый)</option>
+              <option value="blue">Blue (синий)</option>
+              <option value="purple">Purple (фиолетовый)</option>
+              <option value="green">Green (зелёный)</option>
+            </select>
+          </div>
+          <button class="btn-primary" onclick="Admin.saveSiteSettings()">💾 Сохранить настройки</button>
+          <div id="settingsStatus" style="margin-top:10px;font-size:13px;"></div>
+        </div>
+
+        <div class="admin-panel">
+          <h3>👑 Админы Fandom</h3>
+          <div class="settings-group">
+            <label>Добавить админа Fandom</label>
+            <div class="admin-row">
+              <input type="text" id="newFandomAdmin" placeholder="Имя пользователя Fandom"/>
+              <button class="btn-primary" onclick="Admin.addFandomAdmin()">Добавить</button>
+            </div>
+          </div>
+          <div id="fandomAdminsList" style="display:flex;flex-wrap:wrap;gap:8px;">
+            <!-- tags here -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: SYSTEM -->
+    <div class="tab-content" id="tab-system">
+      <div class="admin-grid">
+        <div class="admin-panel">
+          <h3>📥 Импорт / Экспорт</h3>
+          <button class="btn-primary" onclick="Admin.doExport()" style="margin-bottom:12px;">📥 Экспорт JSON</button>
+          <input type="file" id="importFile" onchange="Admin.doImport(event)" style="margin-top:10px;"/>
+          <div id="importStatus" style="margin-top:10px;font-size:13px;"></div>
+        </div>
+        <div class="admin-panel">
+          <h3>🗑 Опасная зона</h3>
+          <button class="btn-danger danger" onclick="Admin.doResetAll()">💥 Сбросить всё (localStorage)</button>
+          <p style="color:var(--red);font-size:12px;margin-top:10px;">⚠️ Удалит ВСЕ данные: турниры, пользователей, настройки. Безвозвратно.</p>
+        </div>
+      </div>
     </div>
 
   </div>
 
   <!-- LOG -->
-  <div class="panel">
-    <h3>Лог</h3>
-    <div id="log" class="log"></div>
+  <div class="admin-panel" style="margin-top:20px;">
+    <h3>📜 Лог действий</h3>
+    <div id="adminLog" style="max-height:300px;overflow-y:auto;font-family:monospace;font-size:12px;"></div>
+    <button class="btn-secondary" onclick="Admin.clearLog()" style="margin-top:10px;font-size:12px;padding:6px 12px;">Очистить лог</button>
   </div>
 
 </div>
@@ -91,253 +258,11 @@
 <script src="js/db.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/tournament.js"></script>
+<script src="js/bracket.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/export.js"></script>
+<script src="js/comments.js"></script>
+<script src="js/admin.js"></script>
 
-<script>
-/* =========================
-   UTILS
-========================= */
-function toast(msg) { log(msg); }
-function log(msg) {
-  const el = document.getElementById("log");
-  if (el) el.textContent += "\n" + msg;
-}
-
-function escapeHTML(str) {
-  return String(str || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-/* =========================
-   AUTH
-========================= */
-function doLoginAdmin() {
-  const pass = document.getElementById("adminPass").value;
-  if (!pass) {
-    document.getElementById("authStatus").innerText = "Введите пароль";
-    return;
-  }
-  if (Auth.adminLogin(pass)) {
-    localStorage.setItem("th_admin", "yes");
-    document.getElementById("authStatus").innerText = "✔ Вход выполнен";
-    document.getElementById("authPanel").classList.add("hidden");
-    document.getElementById("adminControls").classList.remove("hidden");
-    refreshAll();
-  } else {
-    document.getElementById("authStatus").innerText = "❌ Неверный пароль";
-  }
-}
-
-function checkAuth() {
-  if (Auth.isAdmin()) {
-    document.getElementById("authPanel").classList.add("hidden");
-    document.getElementById("adminControls").classList.remove("hidden");
-    refreshAll();
-  }
-}
-
-/* =========================
-   TOURNAMENT CREATE
-========================= */
-function doCreateTournament() {
-  const name = document.getElementById("tName").value.trim();
-  const desc = document.getElementById("tDesc").value.trim();
-  const raw = document.getElementById("tData").value;
-
-  if (!name) { toast("Введите название турнира"); return; }
-  if (!raw.trim()) { toast("Введите список участников"); return; }
-
-  const players = raw.split("\n").map(line => {
-    line = line.trim();
-    if (!line) return null;
-    const parts = line.split("|").map(s => s.trim());
-    return {
-      id: parts[0] || line,
-      name: parts[0] || line,
-      image: parts[1] || "",
-      type: "character",
-      description: ""
-    };
-  }).filter(Boolean);
-
-  if (players.length < 2) { toast("Минимум 2 участника"); return; }
-
-  const result = Tournament.createTournament(name, desc, players);
-  if (result.success) {
-    toast("✅ Турнир создан: " + escapeHTML(name));
-    document.getElementById("tName").value = "";
-    document.getElementById("tDesc").value = "";
-    document.getElementById("tData").value = "";
-    refreshAll();
-  } else {
-    toast("❌ " + (result.error || "Ошибка"));
-  }
-}
-
-/* =========================
-   TOURNAMENT MANAGE
-========================= */
-function doStartTournament() {
-  const db = DB.getDB();
-  const t = db.activeTournamentId ? Tournament.getTournament(db.activeTournamentId) : null;
-  if (!t) { toast("Нет активного турнира. Создайте сначала."); return; }
-
-  const result = Tournament.startTournament(t.id);
-  if (result.success) {
-    toast("🚀 Турнир запущен!");
-    refreshAll();
-  } else {
-    toast("❌ " + (result.error || "Ошибка"));
-  }
-}
-
-function doAdvanceRound() {
-  const db = DB.getDB();
-  const t = db.activeTournamentId ? Tournament.getTournament(db.activeTournamentId) : null;
-  if (!t) { toast("Нет активного турнира"); return; }
-
-  const result = Tournament.advanceRound(t.id);
-  if (result.success) {
-    if (result.finished) {
-      toast("🏆 Турнир завершён! Победитель: " + escapeHTML(result.tournament.winner?.name || "?"));
-    } else {
-      toast("⏭ Раунд завершён, следующий начался");
-    }
-    refreshAll();
-  } else {
-    toast("❌ " + (result.error || "Ошибка"));
-  }
-}
-
-function doResetVotes() {
-  const db = DB.getDB();
-  const t = db.activeTournamentId ? Tournament.getTournament(db.activeTournamentId) : null;
-  if (!t) { toast("Нет активного турнира"); return; }
-
-  // Используем глобальную функцию resetVotes из engine.js (без new!)
-  resetVotes(t.id);
-  toast("🔄 Голоса сброшены");
-  refreshAll();
-}
-
-function doDeleteActiveTournament() {
-  const db = DB.getDB();
-  const t = db.activeTournamentId ? Tournament.getTournament(db.activeTournamentId) : null;
-  if (!t) { toast("Нет активного турнира"); return; }
-  if (!confirm("Точно удалить турнир \"" + t.title + "\"?")) return;
-
-  Tournament.deleteTournament(t.id);
-  toast("🗑 Турнир удалён");
-  refreshAll();
-}
-
-/* =========================
-   REFRESH UI
-========================= */
-function refreshAll() {
-  refreshActiveTournament();
-  refreshTournamentList();
-  refreshUserList();
-}
-
-function refreshActiveTournament() {
-  const db = DB.getDB();
-  const t = db.activeTournamentId ? Tournament.getTournament(db.activeTournamentId) : null;
-  const el = document.getElementById("activeTournamentInfo");
-  if (!t) {
-    el.innerHTML = "Нет активного турнира. Создайте новый выше.";
-    return;
-  }
-  el.innerHTML = `<b>${escapeHTML(t.title)}</b> (${t.status}) — ${(t.players || []).length} участников, ${(t.rounds || []).length} раундов`;
-}
-
-function refreshTournamentList() {
-  const list = Tournament.listTournaments();
-  const el = document.getElementById("tournamentList");
-  if (!list.length) {
-    el.innerHTML = "Нет турниров";
-    return;
-  }
-  el.innerHTML = list.map(t =>
-    `<div style="margin-bottom:6px;">• <b>${escapeHTML(t.title)}</b> — ${t.status} — ${(t.players || []).length} участников — <a href="bracket.html?id=${encodeURIComponent(t.id)}" target="_blank">Сетка</a></div>`
-  ).join("");
-}
-
-function refreshUserList() {
-  const db = DB.getDB();
-  const users = db.users || [];
-  const el = document.getElementById("userList");
-  if (!users.length) {
-    el.innerHTML = "Нет пользователей";
-    return;
-  }
-  el.innerHTML = users.map(u =>
-    `<div style="margin-bottom:4px;">• ${escapeHTML(u.displayName || u.username)} (${u.authType || "guest"}) — голосов: ${u.votes || 0}</div>`
-  ).join("");
-}
-
-/* =========================
-   IMPORT / EXPORT
-========================= */
-function doExportData() {
-  // Используем Export модуль
-  if (typeof Export !== "undefined" && Export.downloadBackup) {
-    Export.downloadBackup();
-    toast("📥 Экспортировано");
-  } else {
-    // Fallback
-    const db = DB.getDB();
-    const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "tournament-hub-backup-" + new Date().toISOString().slice(0, 10) + ".json";
-    a.click();
-    URL.revokeObjectURL(url);
-    toast("📥 Экспортировано (fallback)");
-  }
-}
-
-function doImportData(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  // Используем Export модуль
-  if (typeof Export !== "undefined" && Export.importBackup) {
-    Export.importBackup(file).then(ok => {
-      if (ok) {
-        toast("📤 Импорт завершён");
-        refreshAll();
-      } else {
-        toast("❌ Ошибка импорта");
-      }
-    });
-  } else {
-    // Fallback
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        const data = JSON.parse(e.target.result);
-        DB.saveDB(data);
-        toast("📤 Импорт завершён (fallback)");
-        refreshAll();
-      } catch (err) {
-        toast("❌ Ошибка импорта: " + err.message);
-      }
-    };
-    reader.readAsText(file);
-  }
-}
-
-/* =========================
-   INIT
-========================= */
-document.addEventListener("DOMContentLoaded", checkAuth);
-</script>
 </body>
 </html>
