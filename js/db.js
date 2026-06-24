@@ -35,7 +35,6 @@
     const input = data || {};
     const merged = safeClone(defaultDB);
 
-    // Копируем все известные поля из input, сохраняя кастомные
     Object.keys(input).forEach(key => {
       if (key === "settings") {
         merged.settings = { ...merged.settings, ...input.settings };
@@ -48,7 +47,6 @@
       }
     });
 
-    // Гарантируем, что массивы — массивы
     merged.users = Array.isArray(merged.users) ? merged.users : [];
     merged.tournaments = Array.isArray(merged.tournaments) ? merged.tournaments : [];
     merged.matches = Array.isArray(merged.matches) ? merged.matches : [];
@@ -93,6 +91,8 @@
     const db = loadDB();
     callback(db);
     saveDB(db);
+    // 🔧 FIX: синхронизация внутри текущей вкладки
+    window.dispatchEvent(new CustomEvent("th-db-changed", { detail: { source: "updateDB" } }));
     return db;
   }
 
@@ -143,7 +143,6 @@
   window.DB_KEY = STORAGE_KEY;
   window.DB = { loadDB, getDB, saveDB, updateDB, getCurrentUser, setCurrentUser };
 
-  // Legacy globals for old admin code
   window.getDB = getDB;
   window.saveDB = saveDB;
   window.updateDB = updateDB;
@@ -151,7 +150,6 @@
   window.setCurrentUser = setCurrentUser;
   window.toast = window.toast || toast;
 
-  /* ---------- Синхронизация между вкладками ---------- */
   (function initStorageSync() {
     if (typeof window === "undefined") return;
 
