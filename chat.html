@@ -13,14 +13,14 @@
         <div class="header-inner">
             <a href="index.html" class="logo" id="siteLogoLink">🏆 Tournament Hub</a>
             <nav>
-    <a href="index.html">Главная</a>
-    <a href="bracket.html">Сетка</a>
-    <a href="history.html">История</a>
-    <a href="chat.html">💬 Чат</a>
-    <a href="rules.html">Правила</a>
-    <a href="profile.html">👤 Профиль</a>
-    <a href="admin.html" id="navAdmin" class="hidden">⚙️ Управление</a>
-</nav>
+                <a href="index.html">Главная</a>
+                <a href="bracket.html">Сетка</a>
+                <a href="history.html">История</a>
+                <a href="chat.html">💬 Чат</a>
+                <a href="rules.html">Правила</a>
+                <a href="profile.html">👤 Профиль</a>
+                <a href="admin.html" id="navAdmin" class="hidden">⚙️ Управление</a>
+            </nav>
             <div class="nav-user" id="navUser"></div>
         </div>
     </header>
@@ -29,7 +29,6 @@
         <h1 class="page-title">💬 Общий чат</h1>
 
         <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;">
-            <!-- Чат -->
             <div>
                 <div id="chatBox" style="background:var(--bg-3);border:1px solid var(--border);border-radius:20px;padding:20px;height:500px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;">
                     <p style="color:var(--text-3);text-align:center;padding:40px;">Загрузка сообщений...</p>
@@ -51,192 +50,127 @@
                 </div>
             </div>
 
-            <!-- Сайдбар -->
             <div>
                 <div class="card" style="margin-bottom:16px;">
                     <h3 style="color:var(--accent);margin-bottom:12px;font-size:1em;">👥 Онлайн</h3>
                     <div id="onlineUsers" style="color:var(--text-3);font-size:13px;">
-                        <!-- Список пользователей -->
+                        <p>Локальный чат — онлайн статус недоступен</p>
                     </div>
                 </div>
-
+                
                 <div class="card">
                     <h3 style="color:var(--accent);margin-bottom:12px;font-size:1em;">📊 Статистика чата</h3>
-                    <div id="chatStats" style="color:var(--text-2);font-size:13px;">
-                        Сообщений: 0
+                    <div id="chatStats" style="color:var(--text-3);font-size:13px;">
+                        <p>Загрузка...</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <footer>
+    <footer style="text-align:center;padding:40px 20px;color:var(--text-3);font-size:13px;">
         <p id="footerText">© 2026 Tournament Hub</p>
     </footer>
 
     <script>
-        const CHAT_KEY = "th_chat_messages";
+        const CHAT_KEY = "tournament_hub_chat";
 
         function loadChat() {
-            let db = getDB();
-            updateSiteBranding();
-            renderNavUser(db);
-            renderAdminLink();
-
-            let user = getCurrentUser();
-            if (user) {
-                document.getElementById('chatInputBox').style.display = 'block';
-                document.getElementById('chatLoginBox').style.display = 'none';
-            } else {
-                document.getElementById('chatInputBox').style.display = 'none';
-                document.getElementById('chatLoginBox').style.display = 'block';
-            }
-
-            renderMessages();
-            renderOnlineUsers(db);
-            updateChatStats();
-        }
-
-        function getChatMessages() {
-            let raw = localStorage.getItem(CHAT_KEY);
+            const raw = localStorage.getItem(CHAT_KEY);
             return raw ? JSON.parse(raw) : [];
         }
 
-        function saveChatMessages(msgs) {
-            localStorage.setItem(CHAT_KEY, JSON.stringify(msgs));
+        function saveChat(messages) {
+            localStorage.setItem(CHAT_KEY, JSON.stringify(messages.slice(-200))); // Храним последние 200
+        }
+
+        function escapeHTML(text) {
+            if (text === null || text === undefined) return "";
+            return String(text)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        function renderChat() {
+            const box = document.getElementById("chatBox");
+            const messages = loadChat();
+            
+            if (!messages.length) {
+                box.innerHTML = '<p style="color:var(--text-3);text-align:center;padding:40px;">Сообщений пока нет. Будьте первым!</p>';
+                return;
+            }
+
+            box.innerHTML = messages.map(m => `
+                <div style="padding:10px 14px;background:var(--bg);border-radius:12px;border:1px solid var(--border);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                        <b style="color:var(--accent);font-size:13px;">${escapeHTML(m.username)}</b>
+                        <time style="color:var(--text-3);font-size:11px;">${new Date(m.time).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}</time>
+                    </div>
+                    <p style="color:var(--text-2);font-size:14px;line-height:1.5;margin:0;">${escapeHTML(m.text)}</p>
+                </div>
+            `).join("");
+
+            box.scrollTop = box.scrollHeight;
         }
 
         function sendChat() {
-            let input = document.getElementById('chatInput');
-            let text = input.value.trim();
+            const input = document.getElementById("chatInput");
+            const text = input.value.trim();
             if (!text) return;
 
-            let user = getCurrentUser();
-            if (!user) { toast('Войдите, чтобы писать'); return; }
+            const user = DB.getCurrentUser();
+            const username = user ? (user.displayName || user.username) : "Гость";
 
-            let msgs = getChatMessages();
-            
-            // Анти-спам: не более 1 сообщения в 3 секунды
-            let lastMsg = msgs.filter(m => m.userId === user.id).pop();
-            if (lastMsg && Date.now() - new Date(lastMsg.time).getTime() < 3000) {
-                toast('Слишком быстро! Подождите 3 секунды.');
-                return;
-            }
-
-            // Лимит сообщений: храним последние 200
-            if (msgs.length >= 200) msgs = msgs.slice(-199);
-
-            msgs.push({
-                id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                userId: user.id,
-                userName: user.displayName || user.fandomName || "Аноним",
-                userType: user.authType,
-                text: text,
-                time: new Date().toISOString()
+            const messages = loadChat();
+            messages.push({
+                id: Date.now().toString(),
+                username,
+                text,
+                time: Date.now()
             });
 
-            saveChatMessages(msgs);
-            input.value = '';
-            renderMessages();
-            updateChatStats();
-            
-            // Автоскролл вниз
-            let box = document.getElementById('chatBox');
-            box.scrollTop = box.scrollHeight;
-        }
-
-        function renderMessages() {
-            let msgs = getChatMessages();
-            let box = document.getElementById('chatBox');
-            let user = getCurrentUser();
-
-            if (!msgs.length) {
-                box.innerHTML = '<p style="color:var(--text-3);text-align:center;padding:40px;">Пока нет сообщений. Будьте первым!</p>';
-                return;
-            }
-
-            box.innerHTML = msgs.map(m => {
-                let isMe = user && user.id === m.userId;
-                let isFandom = m.userType === 'fandom';
-                let badge = isFandom ? '<span style="color:var(--green);font-size:11px;">✓</span>' : '';
-                let time = new Date(m.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-                
-                return `
-                    <div style="display:flex;gap:12px;${isMe ? 'flex-direction:row-reverse;' : ''}">
-                        <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--bg-4),var(--border-2));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:var(--accent);flex-shrink:0;">
-                            ${m.userName.charAt(0).toUpperCase()}
-                        </div>
-                        <div style="flex:1;max-width:80%;">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;${isMe ? 'justify-content:flex-end;' : ''}">
-                                <span style="font-weight:600;font-size:13px;color:var(--text);">${escapeHtml(m.userName)} ${badge}</span>
-                                <span style="color:var(--text-3);font-size:11px;">${time}</span>
-                            </div>
-                            <div style="background:${isMe ? 'var(--blue-glow)' : 'var(--bg)'};border:1px solid ${isMe ? 'var(--blue)' : 'var(--border)'};border-radius:14px;padding:12px 16px;color:var(--text);font-size:14px;line-height:1.5;word-break:break-word;">
-                                ${escapeHtml(m.text)}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            // Скролл вниз при первой загрузке
-            box.scrollTop = box.scrollHeight;
-        }
-
-        function renderOnlineUsers(db) {
-            // "Онлайн" = пользователи, которые писали в чат за последние 30 минут
-            let msgs = getChatMessages();
-            let cutoff = Date.now() - 30 * 60 * 1000;
-            let recentUsers = [...new Set(msgs.filter(m => new Date(m.time).getTime() > cutoff).map(m => m.userName))];
-            
-            let el = document.getElementById('onlineUsers');
-            if (!recentUsers.length) {
-                el.innerHTML = '<p>Никого нет</p>';
-                return;
-            }
-            
-            el.innerHTML = recentUsers.map(u => `
-                <div style="display:flex;align-items:center;gap:8px;padding:6px 0;">
-                    <div style="width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);"></div>
-                    <span>${escapeHtml(u)}</span>
-                </div>
-            `).join('');
+            saveChat(messages);
+            input.value = "";
+            renderChat();
         }
 
         function updateChatStats() {
-            let msgs = getChatMessages();
-            document.getElementById('chatStats').innerHTML = `
-                <div style="margin-bottom:8px;">💬 Сообщений: <b>${msgs.length}</b></div>
-                <div style="margin-bottom:8px;">👥 Участников: <b>${new Set(msgs.map(m => m.userId)).size}</b></div>
-                <div>🕐 Последнее: ${msgs.length ? formatDate(msgs[msgs.length-1].time) : '—'}</div>
+            const messages = loadChat();
+            document.getElementById("chatStats").innerHTML = `
+                <p>Всего сообщений: <strong>${messages.length}</strong></p>
             `;
         }
 
-        function updateSiteBranding() {
-            let db = getDB();
-            let name = db.settings?.siteName || 'Tournament Hub';
-            let logo = db.settings?.siteLogo || '🏆';
-            document.title = name + ' — Чат';
-            let logoLink = document.getElementById('siteLogoLink');
-            if (logoLink) logoLink.textContent = logo + ' ' + name;
-            let ft = document.getElementById('footerText');
-            if (ft) ft.textContent = '© ' + new Date().getFullYear() + ' ' + name;
-        }
+        document.addEventListener("DOMContentLoaded", function() {
+            const db = DB.getDB();
+            const name = db.settings?.siteName || "Tournament Hub";
+            const logo = db.settings?.siteLogo || "🏆";
+            document.title = name + " — Чат";
+            document.getElementById("siteLogoLink").textContent = logo + " " + name;
+            document.getElementById("footerText").textContent = "© " + new Date().getFullYear() + " " + name;
 
-        function escapeHtml(text) {
-            let div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+            Auth.renderNavUser();
+            const adminLink = document.getElementById("navAdmin");
+            if (adminLink && Auth.isAdmin()) adminLink.classList.remove("hidden");
 
-        // Автообновление каждые 5 секунд (для других вкладок)
-        setInterval(() => {
-            renderMessages();
+            const user = DB.getCurrentUser();
+            if (user) {
+                document.getElementById("chatInputBox").style.display = "block";
+                document.getElementById("chatLoginBox").style.display = "none";
+            }
+
+            renderChat();
             updateChatStats();
-        }, 5000);
 
-        loadChat();
-        initAuth();
+            // Обновление каждые 3 секунды (для синхронизации между вкладками)
+            setInterval(() => {
+                renderChat();
+                updateChatStats();
+            }, 3000);
+        });
     </script>
 </body>
 </html>
