@@ -1,203 +1,245 @@
-/* Tournament Hub Authentication */
-(function () {
-  const ADMIN_PASSWORD = "admin123";
+/* Tournament Hub — Auth via Supabase */
+import { supabase, getUser, isAdminSync, toast } from './supabase.js'
 
-  // ИСПРАВЛЕНО: более стойкий hash (djb2 вместо простой суммы)
-  function hash(str) {
-    let out = 5381;
-    for (let i = 0; i < str.length; i++) {
-      out = ((out << 5) + out) + str.charCodeAt(i); // out * 33 + c
-      out |= 0;
+// ═══════════════════════════════════════
+// EMAIL/PASS AUTH
+// ═══════════════════════════════════════
+
+export async function register(email, password, username) {
+  if (!email?.trim() || !password || password.length < 6) {
+    return { success: false, error: 'Email и пароль (мин. 6 символов) обязательны' }
+  }
+
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password,
+    options: {
+      data: { username: username?.trim() || email.split('@')[0] }
     }
-    return String(out);
+  })
+
+  if (error) return { success: false, error: error.message }
+
+  return { success: true, user: data.user }
+}
+
+export async function login(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password
+  })
+
+  if (error) return { success: false, error: error.message }
+
+  return { success: true, user: data.user }
+}
+
+export async function logout() {
+  await supabase.auth.signOut()
+  localStorage.removeItem('th_admin')
+  localStorage.removeItem('th_fp') // Очищаем fingerprint гостя
+}
+
+// ═══════════════════════════════════════
+// FANDOM AUTH (упрощённый — через Edge Function)
+// =======================================
+// Пока Edge Function не настроена, делаем через обычный вход
+// с фиктивным email. Позже заменим на нормальную интеграцию.
+// ═══════════════════════════════════════
+
+const FANDOM_CODE_KEY = 'th_fandom_pending'
+
+export function startFandomAuth(fandomName) {
+  if (!fandomName?.trim()) {
+    return { ok: false, error: 'Введите имя пользователя Fandom' }
   }
 
-  function escapeHTML(text) {
-    if (text === null || text === undefined) return "";
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
+  const code = 'TH-' + Array.from({ length: 6 }, () =>
+    'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]
+  ).join('')
+
+  const pending = {
+    code,
+    fandomName: fandomName.trim(),
+    createdAt: Date.now()
   }
 
-  // ИСПРАВЛЕНО: валидация пароля
-  function validatePassword(password) {
-    if (!password || password.length < 3) {
-      return { ok: false, error: "Пароль должен быть минимум 3 символа" };
+  localStorage.setItem(FANDOM_CODE_KEY, JSON.stringify(pending))
+  return { ok: true, code, fandomName: pending.fandomName }
+}
+
+export function getPendingFandomAuth() {
+  const raw = localStorage.getItem(FANDOM_CODE_KEY)
+  if (!raw) return null
+  try {
+    const p = JSON.parse(raw)
+    if (Date.now() - p.createdAt > 10 * 60 * 1000) { // 10 минут
+      localStorage.removeItem(FANDOM_CODE_KEY)
+      return null
     }
-    return { ok: true };
+    return p
+  } catch {
+    localStorage.removeItem(FANDOM_CODE_KEY)
+    return null
   }
+}
 
-  function register(username, password) {
-    if (!username || !username.trim()) {
-      return { success: false, error: "Введите никнейм" };
-    }
-    const passCheck = validatePassword(password);
-    if (!passCheck.ok) {
-      return { success: false, error: passCheck.error };
-    }
+export function clearPendingFandomAuth() {
+  localStorage.removeItem(FANDOM_CODE_KEY)
+}
 
-    const db = DB.getDB();
-    if (db.users.some(u => u.username === username)) {
-      return { success: false, error: "Пользователь существует" };
-    }
+// Проверка кода через Fandom API (как раньше, но упрощённо)
+export async function verifyFandomCode(fandomName, code) {
+  const url = `https://chickengun-fanon.fandom.com/ru/api.php?action=query&list=recentchanges&rcuser=${encodeURIComponent(fandomName)}&rclimit=20&rcprop=comment|timestamp|user&format=json&origin=*`
 
-    const user = {
-      id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
-      username,
-      password: hash(password),
-      created: Date.now(),
-      votes: 0,
-      role: "user",
-      authType: "guest",
-      displayName: username
-    };
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return { ok: false, error: 'Ошибка связи с Fandom' }
+    const data = await res.json()
+    const changes = data.query?.recentchanges || []
 
-    db.users.push(user);
-    DB.saveDB(db);
-    DB.setCurrentUser(user);
-    return { success: true, user };
-  }
+    const regex = new RegExp(`(^|\\s)${code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`)
 
-  function login(username, password) {
-    const db = DB.getDB();
-    const user = db.users.find(u => u.username === username && u.password === hash(password));
-    if (!user) {
-      return { success: false, error: "Неверный логин или пароль" };
-    }
-    DB.setCurrentUser(user);
-    return { success: true, user };
-  }
-
-  function logout() {
-    DB.setCurrentUser(null);
-    localStorage.removeItem("th_admin");
-  }
-
-  function isAdmin() {
-    return localStorage.getItem("th_admin") === "yes";
-  }
-
-  function adminLogin(password) {
-    if (password !== ADMIN_PASSWORD) return false;
-    localStorage.setItem("th_admin", "yes");
-    return true;
-  }
-
-  function loginAdmin(password) {
-    const ok = adminLogin(password);
-    return ok ? { ok: true, err: "" } : { ok: false, err: "Неверный пароль администратора" };
-  }
-
-  /* ---------- ГОЛОСОВАНИЕ С ПРИВЯЗКОЙ К ТУРНИРУ ---------- */
-
-  function getTournamentIdByMatch(matchId) {
-    const db = DB.getDB();
-    for (const t of (db.tournaments || [])) {
-      if (!Array.isArray(t.rounds)) continue;
-      for (const round of t.rounds) {
-        const found = (round.matches || []).find(m => m.id === matchId);
-        if (found) return t.id;
+    for (const rc of changes) {
+      if (regex.test(rc.comment || '')) {
+        return { ok: true, fandomName: rc.user }
       }
     }
-    return null;
-  }
 
-  function buildVoteKey(matchId) {
-    const tournamentId = getTournamentIdByMatch(matchId);
-    const base = tournamentId ? ("vote_" + tournamentId + "_" + matchId) : ("vote_" + matchId);
-    return base;
+    return { ok: false, error: 'Код не найден в правках' }
+  } catch (e) {
+    return { ok: false, error: 'Ошибка сети' }
   }
+}
 
-  function canUserVote(matchId) {
-    const user = DB.getCurrentUser();
-    const key = buildVoteKey(matchId);
-    return user ? !localStorage.getItem(key + "_" + user.id) : !localStorage.getItem(key);
-  }
+// Завершение Fandom-авторизации — создаём пользователя в Supabase
+export async function completeFandomAuth(fandomName) {
+  const email = `fandom_${fandomName.replace(/\s+/g, '_').toLowerCase()}@tournament.local`
+  const password = crypto.randomUUID()
 
-  function markVote(matchId) {
-    const user = DB.getCurrentUser();
-    const key = buildVoteKey(matchId);
-    localStorage.setItem(user ? key + "_" + user.id : key, "true");
-    if (user) {
-      user.votes = (user.votes || 0) + 1;
-      DB.updateDB(db => {
-        const u = db.users.find(x => x.id === user.id);
-        if (u) u.votes = user.votes;
-      });
-    }
-  }
-
-  // Миграция старых ключей голосования
-  function migrateOldVotes() {
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith("vote_") && !k.includes("_")) {
-        keys.push(k);
+  // Регистрируем (если уже есть — signUp вернёт ошибку, тогда логинимся)
+  let { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        username: fandomName,
+        fandom_name: fandomName,
+        auth_type: 'fandom'
       }
     }
-    keys.forEach(k => localStorage.removeItem(k));
-  }
+  })
 
-  // ИСПРАВЛЕНО: админы из DB.settings.fandomAdmins
-  function checkFandomAutoAdmin() {
-    const user = DB.getCurrentUser();
-    if (!user || !user.fandomName) return;
-
-    const db = DB.getDB();
-    const admins = db.settings?.fandomAdmins || [];
-    if (admins.includes(user.fandomName)) {
-      localStorage.setItem("th_admin", "yes");
-      user.role = "admin";
-      DB.updateDB(db => {
-        const u = db.users.find(x => x.id === user.id);
-        if (u) u.role = "admin";
-      });
-    }
-  }
-
-  function renderNavUser() {
-    const box = document.getElementById("navUser") || document.getElementById("user-area");
-    if (!box) return;
-
-    const user = DB.getCurrentUser();
-    if (user) {
-      box.innerHTML = `
-        <span style="color:var(--text-3);font-size:13px;">${escapeHTML(user.displayName || user.username)}</span>
-        <button type="button" class="btn-secondary" style="margin-left:10px;padding:8px 12px;" onclick="Auth.logout(); location.reload();">Выйти</button>
-      `;
+  // Если пользователь уже существует — логинимся
+  if (error?.message?.includes('already registered') || error?.code === 'user_already_exists') {
+    // Пробуем получить сохранённый пароль
+    const savedPass = localStorage.getItem('th_fandom_pass_' + fandomName)
+    if (savedPass) {
+      const loginRes = await supabase.auth.signInWithPassword({ email, password: savedPass })
+      data = loginRes.data
+      error = loginRes.error
     } else {
-      box.innerHTML = `<a href="login.html" style="color:var(--text-3);font-size:13px;">Войти</a>`;
+      // Нет сохранённого пароля — нельзя войти
+      return { ok: false, error: 'Аккаунт существует, но пароль утерян. Обратитесь к админу.' }
     }
   }
 
-  function initAuth() {
-    migrateOldVotes();
-    checkFandomAutoAdmin();
-    renderNavUser();
+  if (error) return { ok: false, error: error.message }
+
+  // Сохраняем пароль для будущих входов
+  localStorage.setItem('th_fandom_pass_' + fandomName, password)
+
+  // Проверяем админство (из настроек)
+  const { data: settings } = await supabase.from('settings').select('fandom_admins').single()
+  const isAdmin = settings?.fandom_admins?.includes(fandomName)
+
+  if (isAdmin) {
+    // Обновляем метаданные (нужно через admin API, пока вручную в Dashboard)
+    // Либо делаем RPC-вызов, если настроили
+    localStorage.setItem('th_admin', 'yes')
   }
 
-  window.Auth = {
-    register,
-    login,
-    logout,
-    isAdmin,
-    adminLogin,
-    canUserVote,
-    markVote,
-    renderNavUser,
-    checkFandomAutoAdmin,
-    initAuth,
-    getTournamentIdByMatch,
-    buildVoteKey,
-    migrateOldVotes
-  };
+  clearPendingFandomAuth()
+  return { ok: true, user: data.user, isAdmin }
+}
 
-  window.escapeHTML = escapeHTML;
-  window.escapeHtml = escapeHTML;
-  window.loginAdmin = loginAdmin;
-  window.initAuth = initAuth;
-})();
+// ═══════════════════════════════════════
+// NAV UI
+// ═══════════════════════════════════════
+
+export async function renderNavUser() {
+  const box = document.getElementById('navUser') || document.getElementById('user-area')
+  if (!box) return
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (user) {
+    const name = user.user_metadata?.username || user.email?.split('@')[0] || 'Пользователь'
+    const adminBadge = isAdminSync() ? ' <span style="color:var(--accent);font-size:11px;">👑</span>' : ''
+
+    box.innerHTML = `
+      <span style="color:var(--text-3);font-size:13px;">${escapeHTML(name)}${adminBadge}</span>
+      <button type="button" class="btn-secondary" style="margin-left:10px;padding:8px 12px;font-size:12px;" onclick="Auth.logout().then(()=>location.reload())">Выйти</button>
+    `
+  } else {
+    box.innerHTML = `<a href="login.html" style="color:var(--text-3);font-size:13px;">Войти</a>`
+  }
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+
+export function initAuth() {
+  renderNavUser()
+
+  // Слушаем изменения сессии
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN') {
+      renderNavUser()
+      // Показываем админ-ссылку если нужно
+      const navAdmin = document.getElementById('navAdmin')
+      if (navAdmin && isAdminSync()) navAdmin.classList.remove('hidden')
+    }
+    if (event === 'SIGNED_OUT') {
+      renderNavUser()
+      const navAdmin = document.getElementById('navAdmin')
+      if (navAdmin) navAdmin.classList.add('hidden')
+    }
+  })
+}
+
+// ═══════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════
+
+function escapeHTML(text) {
+  if (!text) return ''
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+// ═══════════════════════════════════════
+// LEGACY COMPAT (чтобы старый код не ломался)
+// ═══════════════════════════════════════
+
+export const Auth = {
+  register,
+  login,
+  logout,
+  isAdmin: isAdminSync,
+  renderNavUser,
+  initAuth,
+  // Fandom
+  startFandomAuth,
+  getPendingFandomAuth,
+  clearPendingFandomAuth,
+  verifyFandomCode,
+  completeFandomAuth
+}
+
+// Глобальная доступность для onclick в HTML
+window.Auth = Auth
