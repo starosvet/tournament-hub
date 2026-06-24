@@ -153,16 +153,17 @@
       `;
     }).join("");
 
-    let footer = "";
+ let footer = "";
     if (tournament.status === "finished" && tournament.winner) {
       const w = tournament.winner;
       footer = `
         <section class="champion-card">
           <h2>🏆 Чемпион</h2>
+          <span class="champion-crown">👑</span>
           <div class="champion-avatar">
             <img src="${escapeHTML(w.image || '')}" alt="${escapeHTML(w.name || '')}" onerror="this.style.display='none'">
           </div>
-          <p style="font-size:1.5em;font-weight:700;color:var(--accent);">${escapeHTML(w.name || w.title || "Победитель")}</p>
+          <p class="champ-name">${escapeHTML(w.name || w.title || "Победитель")}</p>
         </section>
       `;
     }
