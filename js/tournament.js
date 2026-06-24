@@ -1,19 +1,2 @@
-function start(){
-
-let db=getDB();
-
-
-db.active={
-
-round:1,
-
-rounds:[
-createRound(db.players)
-]
-
-};
-
-
-saveDB(db);
-
-}
+// js/tournament.js — устаревший файл, оставлен для совместимости
+// Вся логика теперь в engine.js и bracket.js
