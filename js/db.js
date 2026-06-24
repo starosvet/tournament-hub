@@ -32,14 +32,23 @@
   }
 
   function normalizeDB(data) {
-    const merged = {
-      ...safeClone(defaultDB),
-      ...(data || {})
-    };
-    merged.settings = {
-      ...safeClone(defaultDB.settings),
-      ...((data && data.settings) || {})
-    };
+    const input = data || {};
+    const merged = safeClone(defaultDB);
+
+    // Копируем все известные поля из input, сохраняя кастомные
+    Object.keys(input).forEach(key => {
+      if (key === "settings") {
+        merged.settings = { ...merged.settings, ...input.settings };
+      } else if (key === "subjectTypes") {
+        merged.subjectTypes = Array.isArray(input.subjectTypes) && input.subjectTypes.length
+          ? input.subjectTypes
+          : merged.subjectTypes;
+      } else {
+        merged[key] = input[key];
+      }
+    });
+
+    // Гарантируем, что массивы — массивы
     merged.users = Array.isArray(merged.users) ? merged.users : [];
     merged.tournaments = Array.isArray(merged.tournaments) ? merged.tournaments : [];
     merged.matches = Array.isArray(merged.matches) ? merged.matches : [];
@@ -48,6 +57,7 @@
     merged.subjectTypes = Array.isArray(merged.subjectTypes) && merged.subjectTypes.length
       ? merged.subjectTypes
       : safeClone(defaultDB.subjectTypes);
+
     return merged;
   }
 
@@ -140,4 +150,27 @@
   window.getCurrentUser = getCurrentUser;
   window.setCurrentUser = setCurrentUser;
   window.toast = window.toast || toast;
+
+  /* ---------- Синхронизация между вкладками ---------- */
+  (function initStorageSync() {
+    if (typeof window === "undefined") return;
+
+    window.addEventListener("storage", function(e) {
+      if (e.key === STORAGE_KEY) {
+        window.dispatchEvent(new CustomEvent("th-db-changed", { detail: e.newValue }));
+      }
+      if (e.key === "th_user") {
+        window.dispatchEvent(new CustomEvent("th-user-changed", { detail: e.newValue }));
+      }
+      if (e.key === "th_admin") {
+        window.dispatchEvent(new CustomEvent("th-admin-changed", { detail: e.newValue }));
+      }
+    });
+  })();
+
+  window.addEventListener("th-db-changed", function() {
+    if (typeof Render !== "undefined" && Render.initRender) Render.initRender();
+    if (typeof RenderBracket !== "undefined" && RenderBracket.renderBracket) RenderBracket.renderBracket();
+    if (typeof Auth !== "undefined" && Auth.renderNavUser) Auth.renderNavUser();
+  });
 })();

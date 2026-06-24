@@ -9,7 +9,7 @@
     return result;
   }
 
-  function roundName(totalSubjects) {
+  function roundTitle(totalSubjects) {
     if (totalSubjects <= 2) return "Финал";
     if (totalSubjects <= 4) return "1/2 финала";
     if (totalSubjects <= 8) return "1/4 финала";
@@ -68,7 +68,7 @@
     if (players.length < 2) {
       return {
         id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
-        name: "Новый турнир",
+        title: "Новый турнир",           // ← было name, стало title
         description: "",
         subjectType: players[0]?.type || "character",
         createdAt: new Date().toISOString(),
@@ -85,7 +85,7 @@
     const initialMatches = createMatches(players);
     const rounds = [{
       id: 0,
-      name: roundName(players.length),
+      name: roundTitle(players.length),
       matches: initialMatches,
       isActive: true,
       startedAt: new Date().toISOString(),
@@ -97,7 +97,7 @@
       remaining = Math.ceil(remaining / 2);
       rounds.push({
         id: rounds.length,
-        name: roundName(remaining * 2),
+        name: roundTitle(remaining * 2),
         matches: [],
         isActive: false,
         startedAt: null,
@@ -107,7 +107,7 @@
 
     const tournament = {
       id: crypto.randomUUID ? crypto.randomUUID() : ("t_" + Date.now()),
-      name: "",
+      title: "",                         // ← было name, стало title
       description: "",
       subjectType: players[0]?.type || "character",
       createdAt: new Date().toISOString(),
@@ -172,7 +172,7 @@
     const nextRoundIndex = tournament.currentRound + 1;
     tournament.rounds[nextRoundIndex] = tournament.rounds[nextRoundIndex] || {
       id: nextRoundIndex,
-      name: roundName(winners.length),
+      name: roundTitle(winners.length),
       matches: [],
       isActive: false,
       startedAt: null,
@@ -190,20 +190,20 @@
   }
 
   function resetVotes(tournamentId) {
-    const db = DB.getDB();
-    const t = (db.tournaments || []).find(x => x.id === tournamentId);
-    if (t && Array.isArray(t.rounds)) {
-      t.rounds.forEach(round => {
-        (round.matches || []).forEach(match => {
-          match.votes1 = 0;
-          match.votes2 = 0;
-          match.winner = null;
-          match.finished = false;
-          match.status = "pending";
+    DB.updateDB(db => {
+      const t = (db.tournaments || []).find(x => x.id === tournamentId);
+      if (t && Array.isArray(t.rounds)) {
+        t.rounds.forEach(round => {
+          (round.matches || []).forEach(match => {
+            match.votes1 = 0;
+            match.votes2 = 0;
+            match.winner = null;
+            match.finished = false;
+            match.status = "pending";
+          });
         });
-      });
-    }
-    DB.saveDB(db);
+      }
+    });
     return true;
   }
 
@@ -229,7 +229,7 @@
     return true;
   }
 
-  window.TournamentEngine = { shuffle, createMatches, getWinner, roundName };
+  window.TournamentEngine = { shuffle, createMatches, getWinner, roundTitle };
   window.createBracket = createBracket;
   window.getActiveTournament = getActiveTournament;
   window.finalizeRound = finalizeRound;
