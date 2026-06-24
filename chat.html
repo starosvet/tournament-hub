@@ -16,7 +16,7 @@
                 <a href="index.html">Главная</a>
                 <a href="bracket.html">Сетка</a>
                 <a href="history.html">История</a>
-                <a href="chat.html">💬 Чат</a>
+                <a href="chat.html" class="active">💬 Чат</a>
                 <a href="rules.html">Правила</a>
                 <a href="profile.html">👤 Профиль</a>
                 <a href="admin.html" id="navAdmin" class="hidden">⚙️ Управление</a>
@@ -25,151 +25,133 @@
         </div>
     </header>
 
-    <div class="container page-enter">
-        <h1 class="page-title">💬 Общий чат</h1>
-
-        <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;">
+    <div class="container">
+        <div class="grid-2">
             <div>
-                <div id="chatBox" style="background:var(--bg-3);border:1px solid var(--border);border-radius:20px;padding:20px;height:500px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;">
-                    <p style="color:var(--text-3);text-align:center;padding:40px;">Загрузка сообщений...</p>
+                <h2 class="section-title">💬 Общий чат</h2>
+                <div id="chat-messages" style="background:var(--bg-3);border:1px solid var(--border);border-radius:16px;height:500px;overflow-y:auto;padding:16px;">
+                    <div style="text-align:center;color:var(--text-3);padding:40px;">Загрузка сообщений...</div>
                 </div>
-
-                <div id="chatInputBox" style="margin-top:16px;display:none;">
-                    <div style="display:flex;gap:12px;">
-                        <input type="text" id="chatInput" placeholder="Напишите сообщение..." maxlength="500" 
-                            style="flex:1;padding:14px 18px;background:var(--bg);border:1px solid var(--border-2);border-radius:12px;color:var(--text);font-size:15px;font-family:inherit;"
-                            onkeydown="if(event.key==='Enter')sendChat()">
-                        <button class="btn-primary" onclick="sendChat()" style="padding:14px 24px;">Отправить</button>
-                    </div>
-                    <p style="color:var(--text-3);font-size:12px;margin-top:8px;">Enter — отправить | Макс. 500 символов</p>
+                <div style="display:flex;gap:10px;margin-top:12px;">
+                    <input type="text" id="chat-input" placeholder="Написать сообщение..." style="flex:1;padding:12px 16px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);">
+                    <button class="btn-primary" onclick="sendChat()">Отправить</button>
                 </div>
-
-                <div id="chatLoginBox" style="margin-top:16px;text-align:center;padding:20px;background:var(--bg-3);border-radius:16px;border:1px solid var(--border);">
-                    <p style="color:var(--text-2);margin-bottom:12px;">Войдите, чтобы писать в чат</p>
-                    <a href="login.html" class="btn-primary" style="text-decoration:none;display:inline-block;">🔐 Войти</a>
-                </div>
+                <p id="chat-login-msg" style="color:var(--text-3);font-size:13px;margin-top:8px;">
+                    <a href="login.html">🔐 Войдите</a>, чтобы писать в чат
+                </p>
             </div>
 
             <div>
-                <div class="card" style="margin-bottom:16px;">
-                    <h3 style="color:var(--accent);margin-bottom:12px;font-size:1em;">👥 Онлайн</h3>
-                    <div id="onlineUsers" style="color:var(--text-3);font-size:13px;">
-                        <p>Локальный чат — онлайн статус недоступен</p>
-                    </div>
+                <h2 class="section-title">👥 Онлайн</h2>
+                <div class="card" style="padding:20px;">
+                    <p style="color:var(--text-3);font-size:14px;">Локальный чат — онлайн статус недоступен</p>
                 </div>
-                
-                <div class="card">
-                    <h3 style="color:var(--accent);margin-bottom:12px;font-size:1em;">📊 Статистика чата</h3>
-                    <div id="chatStats" style="color:var(--text-3);font-size:13px;">
-                        <p>Загрузка...</p>
-                    </div>
+
+                <h2 class="section-title" style="margin-top:24px;">📊 Статистика чата</h2>
+                <div class="card" style="padding:20px;" id="chat-stats">
+                    <p style="color:var(--text-3);">Загрузка...</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <footer style="text-align:center;padding:40px 20px;color:var(--text-3);font-size:13px;">
-        <p id="footerText">© 2026 Tournament Hub</p>
+    <footer>
+        <p>Tournament Hub</p>
     </footer>
 
     <script>
         const CHAT_KEY = "tournament_hub_chat";
 
-        function loadChat() {
-            const raw = localStorage.getItem(CHAT_KEY);
-            return raw ? JSON.parse(raw) : [];
+        function getChatMessages() {
+            try {
+                const raw = localStorage.getItem(CHAT_KEY);
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) {
+                return [];
+            }
         }
 
-        function saveChat(messages) {
-            localStorage.setItem(CHAT_KEY, JSON.stringify(messages.slice(-200))); // Храним последние 200
+        function saveChatMessages(msgs) {
+            localStorage.setItem(CHAT_KEY, JSON.stringify(msgs.slice(-200))); // храним последние 200
+        }
+
+        function sendChat() {
+            const user = DB.getCurrentUser();
+            if (!user) {
+                alert("Войдите, чтобы писать в чат");
+                return;
+            }
+
+            const input = document.getElementById("chat-input");
+            const text = input.value.trim();
+            if (!text) return;
+
+            const msgs = getChatMessages();
+            msgs.push({
+                id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+                userId: user.id,
+                username: user.displayName || user.username,
+                text: text,
+                createdAt: Date.now()
+            });
+
+            saveChatMessages(msgs);
+            input.value = "";
+            renderChat();
+        }
+
+        function renderChat() {
+            const container = document.getElementById("chat-messages");
+            const msgs = getChatMessages();
+
+            if (!msgs.length) {
+                container.innerHTML = `<div style="text-align:center;color:var(--text-3);padding:40px;">Нет сообщений. Напишите первое!</div>`;
+            } else {
+                container.innerHTML = msgs.map(m => `
+                    <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                            <strong style="color:var(--accent);font-size:13px;">${escapeHTML(m.username)}</strong>
+                            <span style="color:var(--text-3);font-size:11px;">${new Date(m.createdAt).toLocaleTimeString("ru-RU")}</span>
+                        </div>
+                        <div style="color:var(--text-2);font-size:14px;">${escapeHTML(m.text)}</div>
+                    </div>
+                `).join("");
+            }
+
+            // Скролл вниз
+            container.scrollTop = container.scrollHeight;
+
+            // Статистика
+            const stats = document.getElementById("chat-stats");
+            const uniqueUsers = [...new Set(msgs.map(m => m.userId))];
+            stats.innerHTML = `
+                <div class="stat-badge">💬 Сообщений: ${msgs.length}</div>
+                <div class="stat-badge" style="margin-top:8px;">👥 Пользователей: ${uniqueUsers.length}</div>
+            `;
         }
 
         function escapeHTML(text) {
-            if (text === null || text === undefined) return "";
+            if (!text) return "";
             return String(text)
                 .replaceAll("&", "&amp;")
                 .replaceAll("<", "&lt;")
                 .replaceAll(">", "&gt;")
                 .replaceAll('"', "&quot;")
-                .replaceAll("'", "&#039;");
-        }
-
-        function renderChat() {
-            const box = document.getElementById("chatBox");
-            const messages = loadChat();
-            
-            if (!messages.length) {
-                box.innerHTML = '<p style="color:var(--text-3);text-align:center;padding:40px;">Сообщений пока нет. Будьте первым!</p>';
-                return;
-            }
-
-            box.innerHTML = messages.map(m => `
-                <div style="padding:10px 14px;background:var(--bg);border-radius:12px;border:1px solid var(--border);">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                        <b style="color:var(--accent);font-size:13px;">${escapeHTML(m.username)}</b>
-                        <time style="color:var(--text-3);font-size:11px;">${new Date(m.time).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}</time>
-                    </div>
-                    <p style="color:var(--text-2);font-size:14px;line-height:1.5;margin:0;">${escapeHTML(m.text)}</p>
-                </div>
-            `).join("");
-
-            box.scrollTop = box.scrollHeight;
-        }
-
-        function sendChat() {
-            const input = document.getElementById("chatInput");
-            const text = input.value.trim();
-            if (!text) return;
-
-            const user = DB.getCurrentUser();
-            const username = user ? (user.displayName || user.username) : "Гость";
-
-            const messages = loadChat();
-            messages.push({
-                id: Date.now().toString(),
-                username,
-                text,
-                time: Date.now()
-            });
-
-            saveChat(messages);
-            input.value = "";
-            renderChat();
-        }
-
-        function updateChatStats() {
-            const messages = loadChat();
-            document.getElementById("chatStats").innerHTML = `
-                <p>Всего сообщений: <strong>${messages.length}</strong></p>
-            `;
+                .replaceAll("'", "&#39;");
         }
 
         document.addEventListener("DOMContentLoaded", function() {
-            const db = DB.getDB();
-            const name = db.settings?.siteName || "Tournament Hub";
-            const logo = db.settings?.siteLogo || "🏆";
-            document.title = name + " — Чат";
-            document.getElementById("siteLogoLink").textContent = logo + " " + name;
-            document.getElementById("footerText").textContent = "© " + new Date().getFullYear() + " " + name;
-
             Auth.renderNavUser();
-            const adminLink = document.getElementById("navAdmin");
-            if (adminLink && Auth.isAdmin()) adminLink.classList.remove("hidden");
-
-            const user = DB.getCurrentUser();
-            if (user) {
-                document.getElementById("chatInputBox").style.display = "block";
-                document.getElementById("chatLoginBox").style.display = "none";
-            }
+            Auth.checkFandomAutoAdmin();
+            const navAdmin = document.getElementById("navAdmin");
+            if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
 
             renderChat();
-            updateChatStats();
 
-            // Обновление каждые 3 секунды (для синхронизации между вкладками)
-            setInterval(() => {
-                renderChat();
-                updateChatStats();
-            }, 3000);
+            // Enter для отправки
+            document.getElementById("chat-input").addEventListener("keydown", function(e) {
+                if (e.key === "Enter") sendChat();
+            });
         });
     </script>
 </body>
