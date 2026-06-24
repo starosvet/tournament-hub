@@ -844,7 +844,7 @@ nav a.active::before {
 /* ===== CHAMPION ===== */
 .champion {
   text-align: center;
-  padding: 60px;
+  padding: 60px 40px 40px;
   background: linear-gradient(135deg, var(--bg-3) 0%, var(--bg-4) 100%);
   border: 2px solid var(--accent);
   border-radius: 28px;
@@ -866,27 +866,24 @@ nav a.active::before {
 
 .champion h3 {
   color: var(--accent);
-  margin-bottom: 28px;
+  margin-bottom: 20px;
   font-size: 1.5em;
   font-weight: 700;
+}
+
+.champion-crown {
+  font-size: 3em;
+  line-height: 1;
+  margin-bottom: 4px;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+  animation: float 3s ease-in-out infinite;
+  display: block;
 }
 
 .champion-avatar {
   position: relative;
   display: inline-block;
-  margin-bottom: 24px; /* ← добавили отступ снизу */
-}
-
-.champion-avatar::before {
-  content: '👑';
-  position: absolute;
-  top: -12px;        /* ← было -16px, подняли */
-  right: -12px;      /* ← было -16px, сдвинули */
-  font-size: 2.5em;  /* ← было 3em, уменьшили */
-  z-index: 2;
-  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
-  animation: float 3s ease-in-out infinite;
-  pointer-events: none;
+  margin-bottom: 16px;
 }
 
 .champion-avatar img {
@@ -903,18 +900,14 @@ nav a.active::before {
   font-size: 2.2em;
   font-weight: 800;
   color: var(--accent);
-  margin-top: 0;      /* ← было 20px, убрали */
+  margin-top: 0;
   letter-spacing: -0.5px;
-  position: relative;
-  z-index: 3;       /* ← выше короны */
 }
 
 .champ-wins {
   color: var(--text-2);
   margin-top: 10px;
   font-size: 1.1em;
-  position: relative;
-  z-index: 3;       /* ← выше короны */
 }
 
 /* ===== HISTORY ===== */
@@ -1775,7 +1768,7 @@ footer {
 /* ----- Champion Card (render-bracket.js) ----- */
 .champion-card {
   text-align: center;
-  padding: 60px;
+  padding: 60px 40px 40px;
   background: linear-gradient(135deg, var(--bg-3) 0%, var(--bg-4) 100%);
   border: 2px solid var(--accent);
   border-radius: 28px;
@@ -1797,19 +1790,26 @@ footer {
 
 .champion-card h2 {
   color: var(--accent);
-  margin-bottom: 28px;
+  margin-bottom: 20px;
   font-size: 1.5em;
   font-weight: 700;
 }
 
+.champion-card .champion-crown {
+  font-size: 3em;
+  line-height: 1;
+  margin-bottom: 4px;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+  animation: float 3s ease-in-out infinite;
+  display: block;
+}
+
 .champion-card .champion-avatar {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .champion-card .champ-name {
   margin-top: 0;
-  position: relative;
-  z-index: 3;
 }
 
 /* ----- Comments (comments.js) ----- */
