@@ -874,17 +874,19 @@ nav a.active::before {
 .champion-avatar {
   position: relative;
   display: inline-block;
+  margin-bottom: 24px; /* ← добавили отступ снизу */
 }
 
 .champion-avatar::before {
   content: '👑';
   position: absolute;
-  top: -16px;
-  right: -16px;
-  font-size: 3em;
+  top: -12px;        /* ← было -16px, подняли */
+  right: -12px;      /* ← было -16px, сдвинули */
+  font-size: 2.5em;  /* ← было 3em, уменьшили */
   z-index: 2;
   filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
   animation: float 3s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .champion-avatar img {
@@ -901,14 +903,18 @@ nav a.active::before {
   font-size: 2.2em;
   font-weight: 800;
   color: var(--accent);
-  margin-top: 20px;
+  margin-top: 0;      /* ← было 20px, убрали */
   letter-spacing: -0.5px;
+  position: relative;
+  z-index: 3;       /* ← выше короны */
 }
 
 .champ-wins {
   color: var(--text-2);
   margin-top: 10px;
   font-size: 1.1em;
+  position: relative;
+  z-index: 3;       /* ← выше короны */
 }
 
 /* ===== HISTORY ===== */
@@ -1794,6 +1800,16 @@ footer {
   margin-bottom: 28px;
   font-size: 1.5em;
   font-weight: 700;
+}
+
+.champion-card .champion-avatar {
+  margin-bottom: 24px;
+}
+
+.champion-card .champ-name {
+  margin-top: 0;
+  position: relative;
+  z-index: 3;
 }
 
 /* ----- Comments (comments.js) ----- */
