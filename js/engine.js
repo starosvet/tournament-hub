@@ -68,7 +68,7 @@
     if (players.length < 2) {
       return {
         id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
-        title: "Новый турнир",           // ← было name, стало title
+        title: "Новый турнир",
         description: "",
         subjectType: players[0]?.type || "character",
         createdAt: new Date().toISOString(),
@@ -107,7 +107,7 @@
 
     const tournament = {
       id: crypto.randomUUID ? crypto.randomUUID() : ("t_" + Date.now()),
-      title: "",                         // ← было name, стало title
+      title: "",
       description: "",
       subjectType: players[0]?.type || "character",
       createdAt: new Date().toISOString(),
@@ -137,11 +137,21 @@
     return (db.tournaments || []).find(t => t.status === "active") || null;
   }
 
-  function finalizeRound(tournament, subjects) {
+  // 🔧 FIX: добавлен параметр force и защита от завершения неготового раунда
+  function finalizeRound(tournament, force = false) {
     if (!tournament) return { ok: false, err: "Нет турнира" };
 
     const currentRound = tournament.rounds?.[tournament.currentRound];
     if (!currentRound) return { ok: false, err: "Нет текущего раунда" };
+
+    // Проверяем, есть ли матчи без победителя и без голосов
+    const unfinished = currentRound.matches.filter(m => !m.finished && !getWinner(m));
+    if (unfinished.length > 0 && !force) {
+      return {
+        ok: false,
+        err: "Не все матчи завершены (" + unfinished.length + " без голосов). Нажмите 'Завершить принудительно' или дождитесь голосов."
+      };
+    }
 
     const winners = [];
     currentRound.matches.forEach(match => {
@@ -155,6 +165,12 @@
         match.finished = true;
         match.status = "done";
         winners.push(winner);
+      } else if (force) {
+        // При force проходит player1 (верхний в сетке)
+        match.winner = match.player1;
+        match.finished = true;
+        match.status = "done";
+        winners.push(match.player1);
       }
     });
 
