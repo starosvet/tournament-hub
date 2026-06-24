@@ -118,7 +118,7 @@
                 container.innerHTML = `<div style="text-align:center;color:var(--text-3);padding:40px;">Нет сообщений. Напишите первое!</div>`;
             } else {
                 container.innerHTML = msgs.map(m => `
-                    <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+                    <div class="chat-message" style="padding:10px 0;border-bottom:1px solid var(--border);">
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
                             <strong style="color:var(--accent);font-size:13px;">${escapeHTML(m.username)}</strong>
                             <span style="color:var(--text-3);font-size:11px;">${new Date(m.createdAt).toLocaleTimeString("ru-RU")}</span>
