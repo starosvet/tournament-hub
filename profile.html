@@ -47,7 +47,6 @@
                 .replace(/'/g, "&#039;");
         }
 
-        // Безопасное значение для input value (двойное экранирование кавычек)
         function attrValue(str) {
             return String(str || "").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
@@ -103,7 +102,12 @@
                 }
             });
 
-            alert("Сохранено!");
+            // ИСПРАВЛЕНО: toast вместо alert()
+            if (typeof toast === "function") {
+                toast("Сохранено!");
+            } else {
+                console.log("Сохранено!");
+            }
             Auth.renderNavUser();
         }
 

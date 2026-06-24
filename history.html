@@ -62,15 +62,33 @@
         function loadHistory() {
             const db = DB.getDB();
 
-            // Статистика
+            // ИСПРАВЛЕНО: считаем матчи и голоса из tournament.rounds[].matches
+            let totalMatches = 0;
+            let totalVotes = 0;
+            const allMatches = [];
+
+            (db.tournaments || []).forEach(t => {
+                (t.rounds || []).forEach((r, ri) => {
+                    (r.matches || []).forEach(m => {
+                        totalMatches++;
+                        totalVotes += (m.votes1 || 0) + (m.votes2 || 0);
+                        if (m.finished) {
+                            allMatches.push({
+                                ...m,
+                                tournamentName: t.title || "Без названия",
+                                roundName: r.name || "Раунд " + (ri + 1)
+                            });
+                        }
+                    });
+                });
+            });
+
             const finished = (db.tournaments || []).filter(t => t.status === "finished");
-            const totalMatches = (db.matches || []).filter(m => m.finished).length;
-            const totalVotes = (db.matches || []).reduce((sum, m) => sum + (m.votes1 || 0) + (m.votes2 || 0), 0);
 
             document.getElementById("history-stats").innerHTML = `
                 <div style="display:flex;gap:20px;flex-wrap:wrap;">
                     <div class="stat-badge">🏆 Завершено турниров: ${finished.length}</div>
-                    <div class="stat-badge">⚔️ Матчей сыграно: ${totalMatches}</div>
+                    <div class="stat-badge">⚔️ Матчей сыграно: ${allMatches.length}</div>
                     <div class="stat-badge">🗳️ Всего голосов: ${totalVotes}</div>
                 </div>
             `;
@@ -84,7 +102,7 @@
                     <div class="tournament-item" onclick="location.href='bracket.html?id=${encodeURIComponent(t.id)}'" style="cursor:pointer;">
                         <span class="ti-status completed"></span>
                         <div class="ti-info">
-                            <h4>${escapeHTML(t.title || t.name || "Без названия")}</h4>
+                            <h4>${escapeHTML(t.title || "Без названия")}</h4>
                             <span>${new Date(t.createdAt).toLocaleDateString("ru-RU")} — Победитель: ${escapeHTML(t.winner?.name || "?")}</span>
                         </div>
                     </div>
@@ -93,17 +111,6 @@
 
             // История матчей
             const mhContainer = document.getElementById("match-history");
-            const allMatches = [];
-            (db.tournaments || []).forEach(t => {
-                (t.rounds || []).forEach((r, ri) => {
-                    (r.matches || []).forEach(m => {
-                        if (m.finished) {
-                            allMatches.push({ ...m, tournamentName: t.title || t.name, roundName: r.name || "Раунд " + (ri + 1) });
-                        }
-                    });
-                });
-            });
-
             if (!allMatches.length) {
                 mhContainer.innerHTML = `<p style="color:var(--text-3);">Пока нет завершённых матчей</p>`;
             } else {

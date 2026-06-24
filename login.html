@@ -92,6 +92,7 @@
             const username = document.getElementById("loginUsername").value.trim();
             const password = document.getElementById("loginPassword").value;
             const err = document.getElementById("loginError");
+            err.textContent = ""; // ИСПРАВЛЕНО: очищаем старую ошибку
 
             const result = Auth.login(username, password);
             if (result.success) {
@@ -105,6 +106,7 @@
             const username = document.getElementById("loginUsername").value.trim();
             const password = document.getElementById("loginPassword").value;
             const err = document.getElementById("loginError");
+            err.textContent = ""; // ИСПРАВЛЕНО: очищаем старую ошибку
 
             const result = Auth.register(username, password);
             if (result.success) {
@@ -157,16 +159,14 @@
                     status.textContent = "✅ Код подтверждён!";
                     progress.textContent = "";
 
-                    // Проверяем, является ли пользователь админом
-                    const isAdmin = result.fandomName === "Melanthe Weber";
-
-                    const complete = FandomAuth.completeFandomAuth(result.fandomName, isAdmin);
+                    // ИСПРАВЛЕНО: isAdmin определяется внутри completeFandomAuth через DB.settings
+                    const complete = FandomAuth.completeFandomAuth(result.fandomName);
                     if (complete.ok) {
                         setTimeout(() => {
                             location.href = "index.html";
                         }, 800);
                     } else {
-                        err.textContent = "Ошибка создания пользователя";
+                        err.textContent = complete.error || "Ошибка создания пользователя";
                     }
                 },
                 // onError
