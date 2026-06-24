@@ -1,549 +1,301 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Управление | Tournament Hub</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="js/db.js"></script>
-    <script src="js/engine.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/export.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin | Tournament Hub</title>
+
+  <link rel="stylesheet" href="style.css"/>
+
+  <style>
+    body {
+      background: #0f1115;
+      color: #eaeaea;
+      font-family: Arial, sans-serif;
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .panel {
+      background: #171a21;
+      border: 1px solid #2a2f3a;
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+
+    button {
+      background: #2d6cdf;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 3px;
+    }
+
+    button:hover {
+      background: #1f5ed0;
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: #0f1115;
+      color: #fff;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .row > * {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .log {
+      font-size: 12px;
+      opacity: 0.8;
+      white-space: pre-wrap;
+    }
+  </style>
 </head>
+
 <body>
-    <header>
-        <div class="header-inner">
-            <a href="index.html" class="logo" id="siteLogoLink">🏆 Tournament Hub</a>
-            <nav>
-    <a href="index.html">Главная</a>
-    <a href="bracket.html">Сетка</a>
-    <a href="history.html">История</a>
-    <a href="chat.html">💬 Чат</a>
-    <a href="rules.html">Правила</a>
-    <a href="profile.html">👤 Профиль</a>
-    <a href="admin.html" id="navAdmin" class="hidden">⚙️ Управление</a>
-</nav>
-            <div class="nav-user" id="navUser"></div>
-        </div>
-    </header>
+<div class="wrap">
 
-    <div class="container" id="adminContainer">
-        <!-- Логин админа -->
-        <div id="adminLogin" class="admin-login-box">
-            <h2 style="margin-bottom:8px;">🔒 Панель управления</h2>
-            <p style="color:var(--text-3);margin-bottom:24px;">Введите пароль администратора</p>
-            <input type="password" id="adminPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkAdmin()">
-            <button class="btn-admin" style="width:100%;" onclick="checkAdmin()">Войти</button>
-            <div class="error" id="adminError"></div>
-            <p style="margin-top:20px;color:var(--text-3);font-size:13px;">
-                💡 Если вы вошли через Fandom как <b>Melanthe Weber</b>,<br>
-                админка откроется автоматически.
-            </p>
-            <p style="margin-top:12px;"><a href="index.html" style="color:var(--text-3);">← На главную</a></p>
-        </div>
+  <h1>⚙️ Tournament Hub Admin</h1>
 
-        <!-- Панель управления -->
-        <div id="adminPanel" class="hidden">
-            <h1 class="page-title">⚙️ Панель управления</h1>
-            
-            <div class="admin-grid">
-                <!-- Брендинг -->
-                <div class="admin-card">
-                    <h3>🎨 Брендинг</h3>
-                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Название сайта</label>
-                    <input type="text" id="siteName" placeholder="Tournament Hub">
-                    
-                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Описание под заголовком</label>
-                    <input type="text" id="siteDesc" placeholder="Описание...">
-                    
-                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Логотип (emoji или текст)</label>
-                    <input type="text" id="siteLogo" placeholder="🏆">
-                    
-                    <button class="btn-primary" onclick="saveBranding()">💾 Сохранить брендинг</button>
-                </div>
+  <!-- AUTH -->
+  <div class="panel">
+    <h3>Авторизация</h3>
+    <input id="adminPass" type="password" placeholder="Пароль админа"/>
+    <button onclick="loginAdmin()">Войти</button>
+    <div id="authStatus" class="log"></div>
+  </div>
 
-                <!-- Цветовая тема -->
-                <div class="admin-card">
-                    <h3>🌈 Цветовая тема</h3>
-                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:16px;">Выберите акцент</label>
-                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
-                        <button onclick="setTheme('amber')" style="width:40px;height:40px;border-radius:50%;background:#f59e0b;border:3px solid transparent;cursor:pointer;" id="theme-amber"></button>
-                        <button onclick="setTheme('blue')" style="width:40px;height:40px;border-radius:50%;background:#3b82f6;border:3px solid transparent;cursor:pointer;" id="theme-blue"></button>
-                        <button onclick="setTheme('purple')" style="width:40px;height:40px;border-radius:50%;background:#a855f7;border:3px solid transparent;cursor:pointer;" id="theme-purple"></button>
-                        <button onclick="setTheme('green')" style="width:40px;height:40px;border-radius:50%;background:#22c55e;border:3px solid transparent;cursor:pointer;" id="theme-green"></button>
-                        <button onclick="setTheme('pink')" style="width:40px;height:40px;border-radius:50%;background:#ec4899;border:3px solid transparent;cursor:pointer;" id="theme-pink"></button>
-                    </div>
-                    <button class="btn-primary" onclick="saveTheme()">💾 Сохранить тему</button>
-                </div>
+  <!-- TOURNAMENT -->
+  <div class="panel">
+    <h3>Турнир</h3>
 
-                <!-- Управление субъектами -->
-                <div class="admin-card" style="grid-column:1 / -1;">
-                    <h3>📦 Субъекты турнира</h3>
-                    <p class="hint">Добавляйте статьи, персонажей, картинки, оружие — любые объекты для голосования.</p>
-                    
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
-                        <div>
-                            <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Тип субъекта</label>
-                            <select id="subjectType" style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-size:14px;">
-                                <!-- Заполняется JS -->
-                            </select>
-                        </div>
-                        <div>
-                            <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Название</label>
-                            <input type="text" id="subjectName" placeholder="Название объекта" style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-size:14px;">
-                        </div>
-                        <div>
-                            <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">URL изображения</label>
-                            <input type="text" id="subjectUrl" placeholder="https://..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-size:14px;">
-                        </div>
-                    </div>
-                    
-                    <div style="margin-bottom:16px;">
-                        <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Описание (опционально)</label>
-                        <input type="text" id="subjectDesc" placeholder="Краткое описание..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-size:14px;">
-                    </div>
-                    
-                    <div class="btn-row">
-                        <button class="btn-primary" onclick="addSubject()">➕ Добавить субъект</button>
-                        <button class="btn-secondary" onclick="loadSubjectsFromFile()">📁 Загрузить из файла</button>
-                        <button class="btn-secondary" onclick="clearAllSubjects()">🧹 Очистить все</button>
-                    </div>
-                    
-                    <div id="subjectsList" style="margin-top:20px;">
-                        <!-- Список субъектов -->
-                    </div>
-                </div>
+    <input id="tName" placeholder="Название турнира"/>
+    <textarea id="tData" placeholder="Список участников (каждый с новой строки)"></textarea>
 
-                <!-- Управление турниром -->
-                <div class="admin-card">
-                    <h3>🏆 Турнир</h3>
-                    <div class="btn-row">
-                        <button class="btn-primary" onclick="createNewTournament()">➕ Создать турнир</button>
-                        <button class="btn-warn" onclick="nextRound()">⏭ Следующий раунд</button>
-                    </div>
-                    <div class="btn-row" style="margin-top:10px;">
-                        <button class="btn-secondary" onclick="resetTournament()">🔄 Сбросить</button>
-                        <button class="btn-danger" onclick="deleteTournament()">🗑 Удалить</button>
-                    </div>
-                    <p class="hint" id="tournamentStatus">Нет активного турнира</p>
-                </div>
-
-                <!-- Настройки голосования -->
-                <div class="admin-card">
-                    <h3>🗳️ Настройки голосования</h3>
-                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Длительность раунда (часов)</label>
-                    <input type="number" id="voteDuration" value="24" min="1" max="168">
-                    
-                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;margin-top:12px;">Минимум голосов для завершения</label>
-                    <input type="number" id="minVotes" value="1" min="1">
-                    
-                    <div class="settings-row" style="margin-top:12px;">
-                        <label>Разрешить гостям голосовать</label>
-                        <input type="checkbox" id="allowGuest" checked style="width:auto;">
-                    </div>
-                    
-                    <button class="btn-primary" style="margin-top:16px;" onclick="saveVoteSettings()">💾 Сохранить</button>
-                </div>
-
-                <!-- Модерация -->
-                <div class="admin-card danger-zone" style="grid-column:1 / -1;">
-                    <h3>🛡️ Модерация</h3>
-                    <div class="btn-row">
-                        <button class="btn-secondary" onclick="clearAllVotes()">🧹 Очистить все голоса</button>
-                        <button class="btn-danger" onclick="resetAllData()">☢️ Сбросить ВСЕ данные</button>
-                    </div>
-                    <div class="btn-row" style="margin-top:12px;">
-                        <button class="btn-secondary" onclick="exportAllData()">💾 Экспорт бэкапа</button>
-                        <button class="btn-secondary" onclick="importBackup()">📂 Импорт бэкапа</button>
-                    </div>
-                    <p class="hint">⚠️ Опасные операции! Действия необратимы.</p>
-                    
-                    <h4 style="margin-top:20px;margin-bottom:12px;color:var(--text-2);font-size:14px;">Пользователи</h4>
-                    <div id="usersList" style="max-height:300px;overflow-y:auto;font-size:13px;">
-                        <!-- Список пользователей -->
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="row">
+      <button onclick="createTournament()">Создать турнир</button>
+      <button onclick="generateBracket()">Сгенерировать сетку</button>
+      <button onclick="finalizeRound()">Завершить раунд</button>
     </div>
 
-    <script>
-        // Проверка админа
-        function checkAdmin() {
-            let pass = document.getElementById('adminPass').value;
-            let res = loginAdmin(pass);
-            if (res.ok) {
-                showAdminPanel();
-            } else {
-                document.getElementById('adminError').textContent = res.err;
-                document.getElementById('adminPass').value = '';
-                document.getElementById('adminPass').focus();
-            }
-        }
+    <div id="tStatus" class="log"></div>
+  </div>
 
-        function showAdminPanel() {
-            document.getElementById('adminLogin').classList.add('hidden');
-            document.getElementById('adminPanel').classList.remove('hidden');
-            document.getElementById('adminPanel').classList.add('page-enter');
-            loadAdminData();
-        }
+  <!-- IMPORT / EXPORT -->
+  <div class="panel">
+    <h3>Импорт / Экспорт</h3>
 
-        // Авто-проверка: если пользователь — Melanthe Weber (админ)
-        let currentUser = getCurrentUser();
-        if (currentUser && currentUser.fandomName === "Melanthe Weber") {
-            showAdminPanel();
-        } else if (isAdmin()) {
-            showAdminPanel();
-        }
+    <button onclick="exportData()">Экспорт JSON</button>
+    <input type="file" onchange="importData(event)"/>
+  </div>
 
-        function loadAdminData() {
-            let db = getDB();
-            
-            // Брендинг
-            document.getElementById('siteName').value = db.settings?.siteName || '';
-            document.getElementById('siteDesc').value = db.settings?.siteDesc || '';
-            document.getElementById('siteLogo').value = db.settings?.siteLogo || '';
-            
-            // Тема
-            let theme = db.settings?.theme || 'amber';
-            document.getElementById('theme-' + theme).style.borderColor = '#fff';
-            
-            // Типы субъектов
-            let typeSelect = document.getElementById('subjectType');
-            typeSelect.innerHTML = db.subjectTypes.map(t => 
-                `<option value="${t.id}">${t.icon} ${t.name}</option>`
-            ).join('');
-            
-            // Турнир
-            let t = getActiveTournament(db);
-            document.getElementById('tournamentStatus').textContent = t 
-                ? `Активен: ${t.name} (Раунд ${t.currentRound + 1}/${t.rounds.length})`
-                : 'Нет активного турнира';
-            
-            // Субъекты
-            renderSubjects(db);
-            
-            // Настройки голосования
-            if (t) {
-                document.getElementById('voteDuration').value = t.config?.voteDurationHours || 24;
-            }
-            
-            // Пользователи
-            renderUsers(db);
-            
-            initAuth();
-        }
+  <!-- LOG -->
+  <div class="panel">
+    <h3>Лог</h3>
+    <div id="log" class="log"></div>
+  </div>
 
-        function saveBranding() {
-            let db = getDB();
-            db.settings = db.settings || {};
-            db.settings.siteName = document.getElementById('siteName').value || 'Tournament Hub';
-            db.settings.siteDesc = document.getElementById('siteDesc').value || '';
-            db.settings.siteLogo = document.getElementById('siteLogo').value || '🏆';
-            saveDB(db);
-            toast('Брендинг сохранён!');
-            updateSiteBranding();
-        }
+</div>
 
-        function setTheme(color) {
-            let db = getDB();
-            db.settings = db.settings || {};
-            db.settings.theme = color;
-            saveDB(db);
-            
-            ['amber','blue','purple','green','pink'].forEach(c => {
-                document.getElementById('theme-' + c).style.borderColor = 'transparent';
-            });
-            document.getElementById('theme-' + color).style.borderColor = '#fff';
-        }
+<script src="js/db.js"></script>
+<script src="js/engine.js"></script>
 
-        function saveTheme() {
-            toast('Тема сохранена! Перезагрузите страницу.');
-        }
+<script>
+/* =========================
+   SAFE LAYER / FIX WRAPPER
+========================= */
 
-        function addSubject() {
-            let name = document.getElementById('subjectName').value.trim();
-            let url = document.getElementById('subjectUrl').value.trim() || '#';
-            let typeId = document.getElementById('subjectType').value;
-            let desc = document.getElementById('subjectDesc').value.trim();
-            
-            if (!name) { toast('Введите название'); return; }
-            
-            let db = getDB();
-            let typeInfo = db.subjectTypes.find(t => t.id === typeId);
-            
-            db.subjects.push({
-                id: 's_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                name: name,
-                url: url,
-                type: typeInfo?.name || 'Другое',
-                typeId: typeId,
-                wins: 0,
-                description: desc,
-                tags: []
-            });
-            
-            saveDB(db);
-            document.getElementById('subjectName').value = '';
-            document.getElementById('subjectUrl').value = '';
-            document.getElementById('subjectDesc').value = '';
-            renderSubjects(db);
-            toast('Субъект добавлен!');
-        }
+let CURRENT_TOURNAMENT = null;
 
-        function removeSubject(id) {
-            let db = getDB();
-            db.subjects = db.subjects.filter(s => s.id !== id);
-            saveDB(db);
-            renderSubjects(db);
-        }
+/* ---- fallback utils ---- */
+function toast(msg) {
+  log(msg);
+}
 
-        function renderSubjects(db) {
-            let el = document.getElementById('subjectsList');
-            if (!db.subjects.length) {
-                el.innerHTML = '<p style="color:var(--text-3);font-size:13px;">Нет субъектов</p>';
-                return;
-            }
-            
-            // Группируем по типам
-            let byType = {};
-            db.subjects.forEach(s => {
-                if (!byType[s.typeId]) byType[s.typeId] = [];
-                byType[s.typeId].push(s);
-            });
-            
-            let html = '';
-            Object.entries(byType).forEach(([typeId, subjects]) => {
-                let typeInfo = db.subjectTypes.find(t => t.id === typeId);
-                html += `<h4 style="color:var(--accent);font-size:14px;margin:16px 0 8px;">${typeInfo?.icon || '⭐'} ${typeInfo?.name || 'Другое'} (${subjects.length})</h4>`;
-                html += `<div style="display:flex;flex-direction:column;gap:8px;">`;
-                
-                subjects.forEach(s => {
-                    let img = s.url !== '#' && s.url ? 
-                        `<img src="${s.url}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--bg-4);" onerror="this.style.display='none'">` :
-                        `<div style="width:40px;height:40px;border-radius:8px;background:var(--bg-4);display:flex;align-items:center;justify-content:center;font-size:18px;">${typeInfo?.icon || '⭐'}</div>`;
-                    
-                    html += `
-                        <div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg);border-radius:12px;border:1px solid var(--border-2);">
-                            ${img}
-                            <div style="flex:1;min-width:0;">
-                                <div style="font-weight:600;font-size:14px;">${escapeHtml(s.name)}</div>
-                                ${s.description ? `<div style="color:var(--text-3);font-size:12px;">${escapeHtml(s.description)}</div>` : ''}
-                            </div>
-                            <button onclick="removeSubject('${s.id}')" style="background:var(--red);color:white;border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;">×</button>
-                        </div>
-                    `;
-                });
-                
-                html += `</div>`;
-            });
-            
-            el.innerHTML = html;
-        }
+function log(msg) {
+  const el = document.getElementById("log");
+  el.textContent += "\n" + msg;
+}
 
-        function loadSubjectsFromFile() {
-            fetch('data/players.txt')
-                .then(r => r.text())
-                .then(text => {
-                    let lines = text.split('\n').filter(l => l.trim());
-                    let db = getDB();
-                    let defaultType = document.getElementById('subjectType').value;
-                    let typeInfo = db.subjectTypes.find(t => t.id === defaultType);
-                    
-                    lines.forEach(line => {
-                        let parts = line.split('|');
-                        db.subjects.push({
-                            id: 's_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                            name: parts[0].trim(),
-                            url: parts[1]?.trim() || '#',
-                            type: typeInfo?.name || 'Персонаж',
-                            typeId: defaultType,
-                            wins: 0,
-                            description: '',
-                            tags: []
-                        });
-                    });
-                    
-                    saveDB(db);
-                    renderSubjects(db);
-                    toast('Загружено ' + lines.length + ' субъектов!');
-                })
-                .catch(() => toast('Ошибка загрузки файла'));
-        }
+/* безопасный escape */
+function escapeHTML(str = "") {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
-        function clearAllSubjects() {
-            if (!confirm('Удалить ВСЕ субъекты?')) return;
-            let db = getDB();
-            db.subjects = [];
-            saveDB(db);
-            renderSubjects(db);
-            toast('Все субъекты удалены');
-        }
+/* =========================
+   AUTH (stub + supabase-ready)
+========================= */
 
-        function createNewTournament() {
-            let db = getDB();
-            if (!db.subjects.length) {
-                toast('Сначала добавьте субъекты!');
-                return;
-            }
-            let t = createBracket(db.subjects);
-            t.name = "Турнир #" + (db.tournaments.length + 1);
-            t.description = "Тип: " + (db.subjects[0]?.type || 'Разное');
-            t.config = { voteDurationHours: 24, minVotes: 1, allowGuest: true };
-            db.tournaments.push(t);
-            db.activeTournamentId = t.id;
-            saveDB(db);
-            toast('Турнир создан!');
-            loadAdminData();
-        }
+function loginAdmin() {
+  const pass = document.getElementById("adminPass").value;
 
-        function nextRound() {
-            let db = getDB();
-            let t = getActiveTournament(db);
-            if (!t) { toast('Нет активного турнира'); return; }
-            
-            let res = finalizeRound(t, db.subjects);
-            if (!res.ok) {
-                toast(res.err);
-                return;
-            }
-            
-            let idx = db.tournaments.findIndex(x => x.id === t.id);
-            db.tournaments[idx] = res.tournament;
-            saveDB(db);
-            toast('Раунд завершён!');
-            loadAdminData();
-        }
+  if (!pass) {
+    document.getElementById("authStatus").innerText = "Введите пароль";
+    return;
+  }
 
-        function resetTournament() {
-            if (!confirm('Сбросить текущий турнир?')) return;
-            let db = getDB();
-            let t = getActiveTournament(db);
-            if (!t) return;
-            
-            resetVotes(t.id);
-            t.currentRound = 0;
-            t.status = 'active';
-            t.winner = null;
-            t.completedAt = null;
-            t.rounds.forEach(r => {
-                r.isActive = r.id === 0;
-                r.startedAt = r.id === 0 ? new Date().toISOString() : null;
-                r.endedAt = null;
-                r.matches.forEach(m => {
-                    m.votesA = 0; m.votesB = 0; m.winner = null; m.done = false;
-                });
-            });
-            
-            let idx = db.tournaments.findIndex(x => x.id === t.id);
-            db.tournaments[idx] = t;
-            saveDB(db);
-            toast('Турнир сброшен!');
-            loadAdminData();
-        }
+  // временная логика (можно заменить на Supabase later)
+  if (pass === "admin") {
+    localStorage.setItem("admin", "1");
+    document.getElementById("authStatus").innerText = "✔ Вход выполнен";
+  } else {
+    document.getElementById("authStatus").innerText = "❌ Неверный пароль";
+  }
+}
 
-        function deleteTournament() {
-            if (!confirm('УДАЛИТЬ турнир навсегда?')) return;
-            let db = getDB();
-            let t = getActiveTournament(db);
-            if (t) resetVotes(t.id);
-            db.tournaments = db.tournaments.filter(x => x.id !== db.activeTournamentId);
-            db.activeTournamentId = null;
-            saveDB(db);
-            toast('Турнир удалён!');
-            loadAdminData();
-        }
+/* =========================
+   TOURNAMENT CORE
+========================= */
 
-        function saveVoteSettings() {
-            let db = getDB();
-            let t = getActiveTournament(db);
-            if (!t) { toast('Нет активного турнира'); return; }
-            
-            t.config = t.config || {};
-            t.config.voteDurationHours = parseInt(document.getElementById('voteDuration').value) || 24;
-            t.config.minVotes = parseInt(document.getElementById('minVotes').value) || 1;
-            t.config.allowGuest = document.getElementById('allowGuest').checked;
-            
-            let idx = db.tournaments.findIndex(x => x.id === t.id);
-            db.tournaments[idx] = t;
-            saveDB(db);
-            toast('Настройки сохранены!');
-        }
+function createTournament() {
+  const name = document.getElementById("tName").value;
+  const raw = document.getElementById("tData").value;
 
-        function clearAllVotes() {
-            if (!confirm('Очистить ВСЕ голоса?')) return;
-            let db = getDB();
-            db.tournaments.forEach(t => resetVotes(t.id));
-            db.users.forEach(u => { u.votes = []; u.lastVote = null; });
-            saveDB(db);
-            toast('Все голоса очищены!');
-        }
+  if (!name || !raw) {
+    toast("Заполни название и участников");
+    return;
+  }
 
-        function resetAllData() {
-            if (!confirm('☢️ УДАЛИТЬ ВСЕ ДАННЫЕ?')) return;
-            if (prompt('Введите DELETE:') !== 'DELETE') return;
-            localStorage.removeItem(DB_KEY);
-            localStorage.clear();
-            location.reload();
-        }
+  const players = raw.split("\n").map(p => p.trim()).filter(Boolean);
 
-        function renderUsers(db) {
-            let el = document.getElementById('usersList');
-            if (!db.users.length) {
-                el.innerHTML = '<p style="color:var(--text-3);">Нет пользователей</p>';
-                return;
-            }
-            
-            el.innerHTML = db.users.map(u => {
-                let roleBadge = u.role === 'admin' ? '👑' : u.role === 'moderator' ? '🛡️' : (u.authType === 'fandom' ? '✓' : '👤');
-                let roleColor = u.role === 'admin' ? 'var(--accent)' : u.role === 'moderator' ? 'var(--blue)' : 'var(--text-3)';
-                
-                return `
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
-                        <span>
-                            <span style="color:${roleColor};">${roleBadge}</span>
-                            <a href="profile.html?id=${u.id}" style="color:var(--text);text-decoration:none;font-weight:600;">${escapeHtml(u.displayName || u.fandomName)}</a>
-                            <span style="color:var(--text-3);font-size:11px;">${u.authType}</span>
-                        </span>
-                        <span style="color:var(--text-3);font-size:12px;">${u.votes?.length || 0} голосов</span>
-                    </div>
-                `;
-            }).join('');
-        }
+  CURRENT_TOURNAMENT = {
+    name,
+    players,
+    round: 0,
+    bracket: []
+  };
 
-        function importBackup() {
-            let input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.json';
-            input.onchange = function(e) {
-                let file = e.target.files[0];
-                let reader = new FileReader();
-                reader.onload = function(e) {
-                    let res = importAllData(e.target.result);
-                    if (res.ok) {
-                        toast('Данные импортированы! Перезагрузка...');
-                        setTimeout(() => location.reload(), 1000);
-                    } else {
-                        toast(res.err);
-                    }
-                };
-                reader.readAsText(file);
-            };
-            input.click();
-        }
+  saveDB();
+  toast("Турнир создан: " + name);
+}
 
-        function updateSiteBranding() {
-            let db = getDB();
-            let name = db.settings?.siteName || 'Tournament Hub';
-            let logo = db.settings?.siteLogo || '🏆';
-            document.title = name + ' — Управление';
-            let logoLink = document.getElementById('siteLogoLink');
-            if (logoLink) logoLink.textContent = logo + ' ' + name;
-            let ft = document.getElementById('footerText');
-            if (ft) ft.textContent = '© ' + new Date().getFullYear() + ' ' + name;
-        }
+function generateBracket() {
+  if (!CURRENT_TOURNAMENT) {
+    toast("Нет турнира");
+    return;
+  }
 
-        initAuth();
-    </script>
+  const engine = new TournamentEngine();
+  const shuffled = engine.shuffle(CURRENT_TOURNAMENT.players);
+
+  CURRENT_TOURNAMENT.bracket = engine.createMatches(shuffled);
+  CURRENT_TOURNAMENT.round = 1;
+
+  saveDB();
+  toast("Сетка создана");
+}
+
+function finalizeRound() {
+  if (!CURRENT_TOURNAMENT) return;
+
+  const engine = new TournamentEngine();
+  const winners = CURRENT_TOURNAMENT.bracket.map(m => m.winner).filter(Boolean);
+
+  if (winners.length < 2) {
+    toast("Недостаточно победителей");
+    return;
+  }
+
+  CURRENT_TOURNAMENT.bracket = engine.createMatches(winners);
+  CURRENT_TOURNAMENT.round++;
+
+  saveDB();
+  toast("Раунд завершён");
+}
+
+/* =========================
+   STORAGE (db fallback)
+========================= */
+
+function saveDB() {
+  try {
+    localStorage.setItem("tournament", JSON.stringify(CURRENT_TOURNAMENT));
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function loadDB() {
+  try {
+    const data = localStorage.getItem("tournament");
+    if (data) CURRENT_TOURNAMENT = JSON.parse(data);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+/* =========================
+   IMPORT / EXPORT
+========================= */
+
+function exportData() {
+  const blob = new Blob(
+    [JSON.stringify(CURRENT_TOURNAMENT, null, 2)],
+    { type: "application/json" }
+  );
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+
+  a.href = url;
+  a.download = "tournament.json";
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    try {
+      CURRENT_TOURNAMENT = JSON.parse(e.target.result);
+      saveDB();
+      toast("Импорт завершён");
+    } catch (err) {
+      toast("Ошибка импорта");
+    }
+  };
+
+  reader.readAsText(file);
+}
+
+/* =========================
+   INIT
+========================= */
+
+loadDB();
+
+if (CURRENT_TOURNAMENT) {
+  toast("Загружен турнир: " + CURRENT_TOURNAMENT.name);
+}
+</script>
+
 </body>
 </html>
