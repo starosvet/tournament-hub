@@ -1,94 +1,408 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Управление | Tournament Hub</title>
-  <link rel="stylesheet" href="style.css">
-  <style>
-    .admin-login { max-width: 400px; margin: 60px auto; text-align: center; }
-    .admin-login input { width: 100%; margin-bottom: 12px; }
-    .admin-section { margin-bottom: 32px; }
-    .admin-section h3 { color: var(--accent); margin-bottom: 16px; font-size: 1.1em; }
-    .color-picker { display: flex; gap: 10px; flex-wrap: wrap; }
-    .color-opt { width: 40px; height: 40px; border-radius: 10px; cursor: pointer; border: 3px solid transparent; transition: all 0.2s; }
-    .color-opt:hover, .color-opt.active { border-color: #fff; transform: scale(1.1); }
-    .theme-preview { background: var(--bg-3); border-radius: 12px; padding: 20px; margin-top: 12px; }
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-    .stat-card { background: var(--bg); padding: 16px; border-radius: 12px; text-align: center; }
-    .stat-num { font-size: 2em; font-weight: bold; color: var(--accent); }
-    .stat-label { color: var(--text-3); font-size: 13px; margin-top: 4px; }
-    .user-list { max-height: 300px; overflow-y: auto; }
-    .user-item { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--bg); border-radius: 8px; margin-bottom: 6px; }
-    .user-item .badge-type { font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: auto; }
-    .badge-fandom { background: rgba(59,130,246,0.2); color: var(--blue); }
-    .badge-guest { background: rgba(148,163,184,0.2); color: var(--text-2); }
-    .match-editor { display: grid; gap: 8px; }
-    .match-row { display: flex; gap: 8px; align-items: center; background: var(--bg); padding: 10px; border-radius: 8px; }
-    .match-row input { flex: 1; margin: 0; }
-    .hidden-section { display: none; }
-    .tab-bar { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 12px; overflow-x: auto; }
-    .tab-btn { padding: 8px 16px; border: none; background: transparent; color: var(--text-2); border-radius: 8px; cursor: pointer; white-space: nowrap; }
-    .tab-btn.active { background: var(--bg-3); color: var(--text); }
-    .tab-panel { display: none; }
-    .tab-panel.active { display: block; }
-    .export-box { background: var(--bg); padding: 16px; border-radius: 10px; font-family: monospace; font-size: 12px; max-height: 200px; overflow: auto; word-break: break-all; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление | Tournament Hub</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="js/db.js"></script>
+    <script src="js/engine.js"></script>
+    <script src="js/auth.js"></script>
 </head>
 <body>
-  <header>
-    <div class="header-inner">
-      <a href="index.html" class="logo">🏆 Tournament Hub</a>
-      <nav>
-        <a href="index.html">Главная</a>
-        <a href="bracket.html">Сетка</a>
-        <a href="history.html">История</a>
-        <a href="rules.html">Правила</a>
-        <a href="admin.html" class="active">Управление</a>
-      </nav>
-      <div class="nav-user" id="navUser"></div>
-    </div>
-  </header>
+    <header>
+        <div class="header-inner">
+            <a href="index.html" class="logo">🏆 Tournament Hub</a>
+            <nav>
+                <a href="index.html">Главная</a>
+                <a href="bracket.html">Сетка</a>
+                <a href="history.html">История</a>
+                <a href="rules.html">Правила</a>
+                <a href="admin.html" class="active">Управление</a>
+            </nav>
+            <div class="nav-user" id="navUser"></div>
+        </div>
+    </header>
 
-  <div class="container">
-    <!-- LOGIN SCREEN -->
-    <div id="adminLogin" class="admin-login">
-      <div class="login-box">
-        <h2>🔒 Панель управления</h2>
-        <p>Введите пароль администратора</p>
-        <input type="password" id="adminPass" placeholder="Пароль" onkeypress="if(event.key==='Enter')doLogin()">
-        <button class="btn-admin" onclick="doLogin()" style="width:100%">Войти</button>
-        <p style="margin-top:16px"><a href="index.html">← На главную</a></p>
-      </div>
+    <div class="container" id="adminContainer">
+        <!-- Логин админа -->
+        <div id="adminLogin" class="admin-login-box">
+            <h2 style="margin-bottom:8px;">🔒 Панель управления</h2>
+            <p style="color:var(--text-3);margin-bottom:24px;">Введите пароль администратора</p>
+            <input type="password" id="adminPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkAdmin()">
+            <button class="btn-admin" style="width:100%;" onclick="checkAdmin()">Войти</button>
+            <div class="error" id="adminError"></div>
+            <p style="margin-top:20px;"><a href="index.html" style="color:var(--text-3);">← На главную</a></p>
+        </div>
+
+        <!-- Панель управления -->
+        <div id="adminPanel" class="hidden">
+            <h1 class="page-title">⚙️ Панель управления</h1>
+            
+            <div class="admin-grid">
+                <!-- Брендинг -->
+                <div class="admin-card">
+                    <h3>🎨 Брендинг</h3>
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Название сайта</label>
+                    <input type="text" id="siteName" placeholder="Tournament Hub">
+                    
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Описание под заголовком</label>
+                    <input type="text" id="siteDesc" placeholder="Описание...">
+                    
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Логотип (emoji или текст)</label>
+                    <input type="text" id="siteLogo" placeholder="🏆">
+                    
+                    <button class="btn-primary" onclick="saveBranding()">💾 Сохранить брендинг</button>
+                </div>
+
+                <!-- Цветовая тема -->
+                <div class="admin-card">
+                    <h3>🌈 Цветовая тема</h3>
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Выберите акцент</label>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+                        <button onclick="setTheme('amber')" style="width:40px;height:40px;border-radius:50%;background:#f59e0b;border:3px solid transparent;cursor:pointer;" id="theme-amber"></button>
+                        <button onclick="setTheme('blue')" style="width:40px;height:40px;border-radius:50%;background:#3b82f6;border:3px solid transparent;cursor:pointer;" id="theme-blue"></button>
+                        <button onclick="setTheme('purple')" style="width:40px;height:40px;border-radius:50%;background:#a855f7;border:3px solid transparent;cursor:pointer;" id="theme-purple"></button>
+                        <button onclick="setTheme('green')" style="width:40px;height:40px;border-radius:50%;background:#22c55e;border:3px solid transparent;cursor:pointer;" id="theme-green"></button>
+                        <button onclick="setTheme('pink')" style="width:40px;height:40px;border-radius:50%;background:#ec4899;border:3px solid transparent;cursor:pointer;" id="theme-pink"></button>
+                    </div>
+                    <button class="btn-primary" onclick="saveTheme()">💾 Сохранить тему</button>
+                </div>
+
+                <!-- Управление турниром -->
+                <div class="admin-card">
+                    <h3>🏆 Турнир</h3>
+                    <div class="btn-row">
+                        <button class="btn-primary" onclick="createNewTournament()">➕ Создать турнир</button>
+                        <button class="btn-warn" onclick="nextRound()">⏭ Следующий раунд</button>
+                    </div>
+                    <div class="btn-row" style="margin-top:10px;">
+                        <button class="btn-secondary" onclick="resetTournament()">🔄 Сбросить</button>
+                        <button class="btn-danger" onclick="deleteTournament()">🗑 Удалить</button>
+                    </div>
+                    <p class="hint" id="tournamentStatus">Нет активного турнира</p>
+                </div>
+
+                <!-- Участники -->
+                <div class="admin-card">
+                    <h3>👤 Участники</h3>
+                    <div class="btn-row">
+                        <button class="btn-primary" onclick="addParticipant()">➕ Добавить</button>
+                        <button class="btn-secondary" onclick="loadFromFile()">📁 Загрузить из файла</button>
+                    </div>
+                    <div id="participantsList" style="margin-top:16px;max-height:300px;overflow-y:auto;">
+                        <!-- Список участников -->
+                    </div>
+                </div>
+
+                <!-- Настройки голосования -->
+                <div class="admin-card">
+                    <h3>🗳️ Настройки голосования</h3>
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Длительность раунда (часов)</label>
+                    <input type="number" id="voteDuration" value="24" min="1" max="168">
+                    
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;margin-top:12px;">Минимум голосов для завершения</label>
+                    <input type="number" id="minVotes" value="1" min="1">
+                    
+                    <div class="settings-row" style="margin-top:12px;">
+                        <label>Разрешить гостям голосовать</label>
+                        <input type="checkbox" id="allowGuest" checked style="width:auto;">
+                    </div>
+                    
+                    <button class="btn-primary" style="margin-top:16px;" onclick="saveVoteSettings()">💾 Сохранить</button>
+                </div>
+
+                <!-- Модерация -->
+                <div class="admin-card danger-zone">
+                    <h3>🛡️ Модерация</h3>
+                    <div class="btn-row">
+                        <button class="btn-secondary" onclick="clearAllVotes()">🧹 Очистить все голоса</button>
+                        <button class="btn-danger" onclick="resetAllData()">☢️ Сбросить ВСЕ данные</button>
+                    </div>
+                    <p class="hint">⚠️ Опасные операции! Действия необратимы.</p>
+                    
+                    <h4 style="margin-top:20px;margin-bottom:12px;color:var(--text-2);font-size:14px;">Зарегистрированные пользователи</h4>
+                    <div id="usersList" style="max-height:200px;overflow-y:auto;font-size:13px;">
+                        <!-- Список пользователей -->
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- ADMIN DASHBOARD -->
-    <div id="adminDash" class="hidden-section">
-      <h1 class="page-title">⚙️ Панель управления</h1>
-      
-      <div class="tab-bar">
-        <button class="tab-btn active" onclick="switchAdminTab('site')">🎨 Сайт</button>
-        <button class="tab-btn" onclick="switchAdminTab('tournaments')">🏆 Турниры</button>
-        <button class="tab-btn" onclick="switchAdminTab('participants')">👥 Участники</button>
-        <button class="tab-btn" onclick="switchAdminTab('rounds')">⏱️ Раунды</button>
-        <button class="tab-btn" onclick="switchAdminTab('users')">🛡️ Пользователи</button>
-        <button class="tab-btn" onclick="switchAdminTab('data')">💾 Данные</button>
-      </div>
-      
-      <!-- TAB: SITE -->
-      <div class="tab-panel active" id="panel-site">
-        <div class="admin-grid">
-          <div class="admin-card">
-            <h3>🎨 Брендинг</h3>
-            <label>Название сайта</label>
-            <input type="text" id="siteName" placeholder="Tournament Hub">
-            <label>Описание под заголовком</label>
-            <input type="text" id="siteDesc" placeholder="Описание...">
-            <label>Логотип (emoji или текст)</label>
-            <input type="text" id="siteLogo" placeholder="🏆" maxlength="5">
-            <button class="btn-primary" onclick="saveBranding()">Сохранить</button>
-          </div>
-          
-          <div class="admin-card">
-            <h3>🌈 Цветовая тема</h3>
-            <p class="hint">Выберите акцент
+    <script>
+        // Проверка админа
+        function checkAdmin() {
+            let pass = document.getElementById('adminPass').value;
+            let res = loginAdmin(pass);
+            if (res.ok) {
+                document.getElementById('adminLogin').classList.add('hidden');
+                document.getElementById('adminPanel').classList.remove('hidden');
+                document.getElementById('adminPanel').classList.add('page-enter');
+                loadAdminData();
+            } else {
+                document.getElementById('adminError').textContent = res.err;
+                document.getElementById('adminPass').value = '';
+                document.getElementById('adminPass').focus();
+            }
+        }
+
+        // Авто-проверка если уже залогинен
+        if (isAdmin()) {
+            document.getElementById('adminLogin').classList.add('hidden');
+            document.getElementById('adminPanel').classList.remove('hidden');
+            loadAdminData();
+        }
+
+        function loadAdminData() {
+            let db = getDB();
+            
+            // Брендинг
+            document.getElementById('siteName').value = db.settings?.siteName || '';
+            document.getElementById('siteDesc').value = db.settings?.siteDesc || '';
+            document.getElementById('siteLogo').value = db.settings?.siteLogo || '';
+            
+            // Тема
+            let theme = db.settings?.theme || 'amber';
+            document.getElementById('theme-' + theme).style.borderColor = '#fff';
+            
+            // Турнир
+            let t = getActiveTournament(db);
+            document.getElementById('tournamentStatus').textContent = t 
+                ? `Активен: ${t.name} (Раунд ${t.currentRound + 1}/${t.rounds.length})`
+                : 'Нет активного турнира';
+            
+            // Участники
+            renderParticipants(db);
+            
+            // Настройки голосования
+            if (t) {
+                document.getElementById('voteDuration').value = t.config?.voteDurationHours || 24;
+            }
+            
+            // Пользователи
+            renderUsers(db);
+            
+            initAuth();
+        }
+
+        function saveBranding() {
+            let db = getDB();
+            db.settings = db.settings || {};
+            db.settings.siteName = document.getElementById('siteName').value || 'Tournament Hub';
+            db.settings.siteDesc = document.getElementById('siteDesc').value || '';
+            db.settings.siteLogo = document.getElementById('siteLogo').value || '🏆';
+            saveDB(db);
+            toast('Брендинг сохранён!');
+            updateSiteBranding();
+        }
+
+        function setTheme(color) {
+            let db = getDB();
+            db.settings = db.settings || {};
+            db.settings.theme = color;
+            saveDB(db);
+            
+            // Сброс рамок
+            ['amber','blue','purple','green','pink'].forEach(c => {
+                document.getElementById('theme-' + c).style.borderColor = 'transparent';
+            });
+            document.getElementById('theme-' + color).style.borderColor = '#fff';
+        }
+
+        function saveTheme() {
+            toast('Тема сохранена! Перезагрузите страницу.');
+        }
+
+        function createNewTournament() {
+            let db = getDB();
+            if (!db.players.length) {
+                toast('Сначала добавьте участников!');
+                return;
+            }
+            let t = createBracket(db.players);
+            t.name = "Турнир #" + (db.tournaments.length + 1);
+            t.description = "Автоматически созданный турнир";
+            t.config = { voteDurationHours: 24, minVotes: 1, allowGuest: true };
+            db.tournaments.push(t);
+            db.activeTournamentId = t.id;
+            saveDB(db);
+            toast('Турнир создан!');
+            loadAdminData();
+        }
+
+        function nextRound() {
+            let db = getDB();
+            let t = getActiveTournament(db);
+            if (!t) { toast('Нет активного турнира'); return; }
+            
+            let res = finalizeRound(t, db.players);
+            if (!res.ok) {
+                toast(res.err);
+                return;
+            }
+            
+            // Сохраняем обновлённый турнир
+            let idx = db.tournaments.findIndex(x => x.id === t.id);
+            db.tournaments[idx] = res.tournament;
+            saveDB(db);
+            toast('Раунд завершён!');
+            loadAdminData();
+        }
+
+        function resetTournament() {
+            if (!confirm('Сбросить текущий турнир? Все голоса будут удалены.')) return;
+            let db = getDB();
+            let t = getActiveTournament(db);
+            if (!t) return;
+            
+            resetVotes(t.id);
+            t.currentRound = 0;
+            t.status = 'active';
+            t.winner = null;
+            t.completedAt = null;
+            t.rounds.forEach(r => {
+                r.isActive = r.id === 0;
+                r.startedAt = r.id === 0 ? new Date().toISOString() : null;
+                r.endedAt = null;
+                r.matches.forEach(m => {
+                    m.votesA = 0; m.votesB = 0; m.winner = null; m.done = false;
+                });
+            });
+            
+            let idx = db.tournaments.findIndex(x => x.id === t.id);
+            db.tournaments[idx] = t;
+            saveDB(db);
+            toast('Турнир сброшен!');
+            loadAdminData();
+        }
+
+        function deleteTournament() {
+            if (!confirm('УДАЛИТЬ турнир навсегда?')) return;
+            let db = getDB();
+            let t = getActiveTournament(db);
+            if (t) resetVotes(t.id);
+            db.tournaments = db.tournaments.filter(x => x.id !== db.activeTournamentId);
+            db.activeTournamentId = null;
+            saveDB(db);
+            toast('Турнир удалён!');
+            loadAdminData();
+        }
+
+        function addParticipant() {
+            let name = prompt('Имя участника:');
+            if (!name) return;
+            let url = prompt('URL аватарки (или оставьте пустым):') || '#';
+            let db = getDB();
+            db.players.push({
+                id: 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                name: name,
+                url: url,
+                wins: 0
+            });
+            saveDB(db);
+            renderParticipants(db);
+            toast('Участник добавлен!');
+        }
+
+        function removeParticipant(id) {
+            let db = getDB();
+            db.players = db.players.filter(p => p.id !== id);
+            saveDB(db);
+            renderParticipants(db);
+        }
+
+        function renderParticipants(db) {
+            let el = document.getElementById('participantsList');
+            if (!db.players.length) {
+                el.innerHTML = '<p style="color:var(--text-3);font-size:13px;">Нет участников</p>';
+                return;
+            }
+            el.innerHTML = db.players.map(p => `
+                <div class="participant-row">
+                    <img src="${p.url !== '#' ? p.url : ''}" style="width:32px;height:32px;border-radius:50%;background:var(--bg-4);object-fit:cover;" onerror="this.style.display='none'">
+                    <input value="${p.name}" readonly style="flex:1;">
+                    <button onclick="removeParticipant('${p.id}')">×</button>
+                </div>
+            `).join('');
+        }
+
+        function loadFromFile() {
+            // Загрузка из data/players.txt
+            fetch('data/players.txt')
+                .then(r => r.text())
+                .then(text => {
+                    let lines = text.split('\n').filter(l => l.trim());
+                    let db = getDB();
+                    lines.forEach(line => {
+                        let parts = line.split('|');
+                        db.players.push({
+                            id: 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            name: parts[0].trim(),
+                            url: parts[1]?.trim() || '#',
+                            wins: 0
+                        });
+                    });
+                    saveDB(db);
+                    renderParticipants(db);
+                    toast('Загружено ' + lines.length + ' участников!');
+                })
+                .catch(() => toast('Ошибка загрузки файла'));
+        }
+
+        function saveVoteSettings() {
+            let db = getDB();
+            let t = getActiveTournament(db);
+            if (!t) { toast('Нет активного турнира'); return; }
+            
+            t.config = t.config || {};
+            t.config.voteDurationHours = parseInt(document.getElementById('voteDuration').value) || 24;
+            t.config.minVotes = parseInt(document.getElementById('minVotes').value) || 1;
+            t.config.allowGuest = document.getElementById('allowGuest').checked;
+            
+            let idx = db.tournaments.findIndex(x => x.id === t.id);
+            db.tournaments[idx] = t;
+            saveDB(db);
+            toast('Настройки сохранены!');
+        }
+
+        function clearAllVotes() {
+            if (!confirm('Очистить ВСЕ голоса во всех турнирах?')) return;
+            let db = getDB();
+            db.tournaments.forEach(t => resetVotes(t.id));
+            // Очищаем votes у пользователей
+            db.users.forEach(u => { u.votes = []; u.lastVote = null; });
+            saveDB(db);
+            toast('Все голоса очищены!');
+        }
+
+        function resetAllData() {
+            if (!confirm('☢️ УДАЛИТЬ ВСЕ ДАННЫЕ? Это необратимо!')) return;
+            if (!prompt('Введите DELETE для подтверждения:') === 'DELETE') return;
+            localStorage.removeItem(DB_KEY);
+            localStorage.clear();
+            location.reload();
+        }
+
+        function renderUsers(db) {
+            let el = document.getElementById('usersList');
+            if (!db.users.length) {
+                el.innerHTML = '<p style="color:var(--text-3);">Нет пользователей</p>';
+                return;
+            }
+            el.innerHTML = db.users.map(u => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+                    <span>
+                        ${u.authType === 'fandom' ? '✓' : '👤'} 
+                        <b>${escapeHtml(u.displayName || u.fandomName)}</b>
+                        <span style="color:var(--text-3);font-size:11px;">${u.authType}</span>
+                    </span>
+                    <span style="color:var(--text-3);font-size:12px;">${u.votes?.length || 0} голосов</span>
+                </div>
+            `).join('');
+        }
+
+        initAuth();
+    </script>
+</body>
+</html>
