@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/tournament.js"></script>
 </head>
 <body>
     <header>
@@ -31,22 +32,29 @@
         </div>
     </div>
 
-    <footer>
+    <footer style="text-align:center;padding:40px 20px;color:var(--text-3);font-size:13px;">
         <p id="footerText">© 2026 Tournament Hub</p>
     </footer>
 
     <script>
-        function loadProfile() {
-            let db = getDB();
-            updateSiteBranding();
-            renderNavUser(db);
-            renderAdminLink();
+        function escapeHTML(text) {
+            if (text === null || text === undefined) return "";
+            return String(text)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
 
+        function loadProfile() {
+            let db = DB.getDB();
+            
             let params = new URLSearchParams(location.search);
             let userId = params.get('id');
             let isMyProfile = false;
             
-            let currentUser = getCurrentUser();
+            let currentUser = DB.getCurrentUser();
             if (!userId && currentUser) {
                 userId = currentUser.id;
                 isMyProfile = true;
@@ -55,7 +63,7 @@
             let user = db.users.find(u => u.id === userId);
             if (!user) {
                 document.getElementById('profileContent').innerHTML = `
-                    <div class="hero-empty" style="padding:80px 20px;">
+                    <div style="text-align:center;padding:80px 20px;">
                         <h2>😕 Пользователь не найден</h2>
                         <p style="color:var(--text-3);">Такого профиля не существует</p>
                         <a href="index.html" class="btn-primary" style="margin-top:20px;text-decoration:none;display:inline-block;">На главную</a>
@@ -64,34 +72,27 @@
                 return;
             }
 
-            let isAdminView = isAdmin();
+            let isAdminView = Auth.isAdmin();
             let canEdit = isMyProfile || isAdminView;
             let roleText = user.role === 'admin' ? '👑 Администратор' : user.role === 'moderator' ? '🛡️ Модератор' : '👤 Пользователь';
             let roleColor = user.role === 'admin' ? 'var(--accent)' : user.role === 'moderator' ? 'var(--blue)' : 'var(--text-3)';
             
-            let totalVotes = user.votes ? user.votes.length : 0;
-            let fandomLink = user.wikiDomain ? `https://${user.wikiDomain}/wiki/User:${encodeURIComponent(user.fandomName)}` : null;
+            let totalVotes = typeof user.votes === 'number' ? user.votes : (user.votes ? user.votes.length : 0);
+            let displayName = user.displayName || user.username || 'Пользователь';
 
             let html = `
                 <div style="display:grid;grid-template-columns:280px 1fr;gap:24px;">
                     <div>
                         <div class="card" style="text-align:center;padding:32px 20px;">
                             <div style="width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--blue));display:flex;align-items:center;justify-content:center;font-size:3em;font-weight:800;color:white;margin:0 auto 16px;box-shadow:0 0 40px var(--accent-glow);">
-                                ${(user.displayName || user.fandomName || '?').charAt(0).toUpperCase()}
+                                ${displayName.charAt(0).toUpperCase()}
                             </div>
-                            <h2 style="font-size:1.5em;margin-bottom:8px;">${escapeHtml(user.displayName || user.fandomName || 'Пользователь')}</h2>
+                            <h2 style="font-size:1.5em;margin-bottom:8px;">${escapeHTML(displayName)}</h2>
                             <p style="color:${roleColor};font-weight:700;font-size:14px;margin-bottom:16px;">${roleText}</p>
                             
-                            ${user.authType === 'fandom' ? `
-                                <div style="background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:10px;margin-bottom:16px;">
-                                    <span style="color:var(--green);font-size:13px;font-weight:600;">✓ Подтверждённый Fandom</span>
-                                    ${fandomLink ? `<br><a href="${fandomLink}" target="_blank" style="color:var(--blue);font-size:12px;">Профиль на вики →</a>` : ''}
-                                </div>
-                            ` : `
-                                <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:16px;">
-                                    <span style="color:var(--text-3);font-size:13px;">👤 Гостевой аккаунт</span>
-                                </div>
-                            `}
+                            <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:16px;">
+                                <span style="color:var(--text-3);font-size:13px;">${user.authType === 'fandom' ? '✓ Подтверждённый Fandom' : '👤 Гостевой аккаунт'}</span>
+                            </div>
                             
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">
                                 <div style="background:var(--bg);border-radius:12px;padding:12px;">
@@ -108,30 +109,31 @@
                         ${canEdit ? `
                             <div class="card" style="margin-top:16px;">
                                 <h3 style="font-size:1em;margin-bottom:12px;">✏️ О себе</h3>
-                                <textarea id="editBio" maxlength="300" style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-family:inherit;resize:vertical;min-height:80px;font-size:14px;">${escapeHtml(user.bio || '')}</textarea>
+                                <textarea id="editBio" maxlength="300" style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-family:inherit;resize:vertical;min-height:80px;font-size:14px;">${escapeHTML(user.bio || '')}</textarea>
                                 <button class="btn-primary" style="width:100%;margin-top:10px;font-size:13px;padding:10px;" onclick="saveBio()">💾 Сохранить</button>
                             </div>
                         ` : (user.bio ? `
                             <div class="card" style="margin-top:16px;">
                                 <h3 style="font-size:1em;margin-bottom:8px;">📝 О пользователе</h3>
-                                <p style="color:var(--text-2);font-size:14px;line-height:1.6;">${escapeHtml(user.bio)}</p>
+                                <p style="color:var(--text-2);font-size:14px;line-height:1.6;">${escapeHTML(user.bio)}</p>
                             </div>
                         ` : '')}
                     </div>
                     
                     <div>
                         <div class="card" style="margin-bottom:16px;">
-                            <h3 style="font-size:1.1em;margin-bottom:16px;">📊 История голосования</h3>
-                            ${renderVoteHistory(user)}
+                            <h3 style="font-size:1.1em;margin-bottom:16px;">📊 Статистика</h3>
+                            <p style="color:var(--text-3);font-size:14px;">Участвовал в турнирах: ${(db.tournaments || []).filter(t => t.players && t.players.includes(displayName)).length}</p>
+                            <p style="color:var(--text-3);font-size:14px;">Дата регистрации: ${new Date(user.created || Date.now()).toLocaleDateString('ru-RU')}</p>
                         </div>
                         
                         ${isAdminView && !isMyProfile ? `
-                            <div class="card danger-zone" style="border-color:rgba(239,68,68,0.3);">
+                            <div class="card" style="border-color:rgba(239,68,68,0.3);">
                                 <h3 style="font-size:1.1em;margin-bottom:12px;color:var(--red);">🛡️ Админ-инструменты</h3>
-                                <div class="btn-row">
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
                                     <button class="btn-secondary" onclick="setUserRole('${user.id}', 'moderator')">Сделать модератором</button>
                                     <button class="btn-secondary" onclick="setUserRole('${user.id}', 'user')">Снять роль</button>
-                                    <button class="btn-danger" onclick="deleteUser('${user.id}')">Удалить пользователя</button>
+                                    <button class="btn-danger" onclick="deleteUser('${user.id}')">Удалить</button>
                                 </div>
                             </div>
                         ` : ''}
@@ -142,114 +144,47 @@
             document.getElementById('profileContent').innerHTML = html;
         }
 
-        function renderVoteHistory(user) {
-            if (!user.votes || !user.votes.length) {
-                return '<p style="color:var(--text-3);font-size:14px;">Пока нет голосов</p>';
-            }
-            
-            let db = getDB();
-            let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
-            
-            let byTournament = {};
-            user.votes.forEach(v => {
-                if (!byTournament[v.tournamentId]) byTournament[v.tournamentId] = [];
-                byTournament[v.tournamentId].push(v);
-            });
-            
-            Object.entries(byTournament).forEach(([tId, votes]) => {
-                let t = db.tournaments.find(x => x.id === tId);
-                let tName = t ? t.name : 'Неизвестный турнир';
-                html += `<div style="margin-bottom:12px;">`;
-                html += `<h4 style="color:var(--accent);font-size:14px;margin-bottom:8px;">${escapeHtml(tName)}</h4>`;
-                
-                votes.forEach(v => {
-                    let side = v.side === 0 ? 'A' : 'B';
-                    let time = new Date(v.time).toLocaleDateString('ru-RU');
-                    html += `<div style="padding:8px 12px;background:var(--bg);border-radius:8px;font-size:13px;color:var(--text-2);">Раунд ${v.roundIdx + 1}, матч ${v.matchIdx + 1} — голос за сторону ${side} <span style="color:var(--text-3);float:right;">${time}</span></div>`;
-                });
-                
-                html += `</div>`;
-            });
-            
-            html += '</div>';
-            return html;
-        }
-
         function saveBio() {
-            let bio = document.getElementById('editBio').value.trim();
-            let user = getCurrentUser();
-            if (!user) return;
-            
-            let db = getDB();
-            let u = db.users.find(x => x.id === user.id);
-            if (u) {
-                u.bio = bio;
-                saveDB(db);
-                toast('Сохранено!');
-            }
+            let currentUser = DB.getCurrentUser();
+            if (!currentUser) return;
+            let bio = document.getElementById('editBio').value;
+            DB.updateDB(db => {
+                let u = db.users.find(x => x.id === currentUser.id);
+                if (u) u.bio = bio;
+            });
+            alert('Сохранено!');
         }
 
         function setUserRole(userId, role) {
-            if (!isAdmin()) { toast('Нет доступа'); return; }
-            let db = getDB();
-            let u = db.users.find(x => x.id === userId);
-            if (u) {
-                u.role = role;
-                saveDB(db);
-                toast(`Роль изменена на: ${role}`);
-                loadProfile();
-            }
+            if (!Auth.isAdmin()) return;
+            DB.updateDB(db => {
+                let u = db.users.find(x => x.id === userId);
+                if (u) u.role = role;
+            });
+            location.reload();
         }
 
         function deleteUser(userId) {
-            if (!isAdmin()) return;
-            if (!confirm('УДАЛИТЬ пользователя?')) return;
-            let db = getDB();
-            db.users = db.users.filter(u => u.id !== userId);
-            saveDB(db);
-            toast('Пользователь удалён');
+            if (!Auth.isAdmin()) return;
+            if (!confirm('Удалить пользователя?')) return;
+            DB.updateDB(db => {
+                db.users = db.users.filter(u => u.id !== userId);
+            });
             location.href = 'index.html';
         }
 
-        function updateSiteBranding() {
-            let db = getDB();
-            let name = db.settings?.siteName || 'Tournament Hub';
-            let logo = db.settings?.siteLogo || '🏆';
+        document.addEventListener('DOMContentLoaded', function() {
+            const db = DB.getDB();
+            const name = db.settings?.siteName || 'Tournament Hub';
+            const logo = db.settings?.siteLogo || '🏆';
             document.title = name + ' — Профиль';
-            let logoLink = document.getElementById('siteLogoLink');
-            if (logoLink) logoLink.textContent = logo + ' ' + name;
-            let ft = document.getElementById('footerText');
-            if (ft) ft.textContent = '© ' + new Date().getFullYear() + ' ' + name;
-        }
-
-        function renderNavUser(db) {
-            let el = document.getElementById("navUser");
-            if (!el) return;
-            let user = getCurrentUser();
-            if (user) {
-                let name = user.displayName || user.fandomName || "Пользователь";
-                let isFandom = user.authType === "fandom";
-                let badge = isFandom ? '<span style="color:var(--green);font-size:12px;">✓</span>' : '<span style="color:var(--text-3);font-size:12px;">👤</span>';
-                el.innerHTML = `
-                    <span style="display:flex;align-items:center;gap:10px;">
-                        ${badge}
-                        <a href="profile.html?id=${user.id}" style="color:var(--text);text-decoration:none;font-weight:600;">${escapeHtml(name)}</a>
-                        <a href="#" onclick="logoutUser();location.reload();return false;" style="color:var(--text-3);font-size:12px;text-decoration:none;">Выйти</a>
-                    </span>
-                `;
-            } else {
-                el.innerHTML = '<a href="login.html" style="color:var(--blue);text-decoration:none;font-weight:600;">🔐 Войти</a>';
-            }
-        }
-
-        function escapeHtml(text) {
-            let div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        loadProfile();
-        initAuth();
+            document.getElementById('siteLogoLink').textContent = logo + ' ' + name;
+            document.getElementById('footerText').textContent = '© ' + new Date().getFullYear() + ' ' + name;
+            Auth.renderNavUser();
+            const adminLink = document.getElementById('navAdmin');
+            if (adminLink && Auth.isAdmin()) adminLink.classList.remove('hidden');
+            loadProfile();
+        });
     </script>
 </body>
 </html>
