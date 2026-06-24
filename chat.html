@@ -62,6 +62,16 @@
     <script>
         const CHAT_KEY = "tournament_hub_chat";
 
+        function escapeHTML(text) {
+            if (!text) return "";
+            return String(text)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
         function getChatMessages() {
             try {
                 const raw = localStorage.getItem(CHAT_KEY);
@@ -72,7 +82,7 @@
         }
 
         function saveChatMessages(msgs) {
-            localStorage.setItem(CHAT_KEY, JSON.stringify(msgs.slice(-200))); // храним последние 200
+            localStorage.setItem(CHAT_KEY, JSON.stringify(msgs.slice(-200)));
         }
 
         function sendChat() {
@@ -118,26 +128,14 @@
                 `).join("");
             }
 
-            // Скролл вниз
             container.scrollTop = container.scrollHeight;
 
-            // Статистика
             const stats = document.getElementById("chat-stats");
             const uniqueUsers = [...new Set(msgs.map(m => m.userId))];
             stats.innerHTML = `
                 <div class="stat-badge">💬 Сообщений: ${msgs.length}</div>
                 <div class="stat-badge" style="margin-top:8px;">👥 Пользователей: ${uniqueUsers.length}</div>
             `;
-        }
-
-        function escapeHTML(text) {
-            if (!text) return "";
-            return String(text)
-                .replaceAll("&", "&amp;")
-                .replaceAll("<", "&lt;")
-                .replaceAll(">", "&gt;")
-                .replaceAll('"', "&quot;")
-                .replaceAll("'", "&#39;");
         }
 
         document.addEventListener("DOMContentLoaded", function() {
@@ -148,7 +146,6 @@
 
             renderChat();
 
-            // Enter для отправки
             document.getElementById("chat-input").addEventListener("keydown", function(e) {
                 if (e.key === "Enter") sendChat();
             });
