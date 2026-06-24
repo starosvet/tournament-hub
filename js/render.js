@@ -40,19 +40,23 @@
       return;
     }
 
-    container.innerHTML = tournaments.map(t => `
-      <article class="tournament-card">
-        <div class="tournament-badge">${escapeHTML(t.status)}</div>
-        <h3>${escapeHTML(t.title || t.name || "Без названия")}</h3>
-        <p>${escapeHTML(t.description || "")}</p>
-        <div class="tournament-meta">
-          <span>${new Date(t.createdAt).toLocaleDateString("ru-RU")}</span>
-          <span>${t.players?.length || t.subjects?.length || 0} участников</span>
-          <span>${t.rounds?.length || t.rounds || 0} раундов</span>
-        </div>
-        <a class="btn-secondary" href="bracket.html?id=${encodeURIComponent(t.id)}">Открыть сетку</a>
-      </article>
-    `).join("");
+    container.innerHTML = tournaments.map(t => {
+      const roundsCount = Array.isArray(t.rounds) ? t.rounds.length : 0;
+      const playersCount = Array.isArray(t.players) ? t.players.length : 0;
+      return `
+        <article class="tournament-card">
+          <div class="tournament-badge">${escapeHTML(t.status)}</div>
+          <h3>${escapeHTML(t.title || t.name || "Без названия")}</h3>
+          <p>${escapeHTML(t.description || "")}</p>
+          <div class="tournament-meta">
+            <span>${new Date(t.createdAt).toLocaleDateString("ru-RU")}</span>
+            <span>${playersCount} участников</span>
+            <span>${roundsCount} раундов</span>
+          </div>
+          <a class="btn-secondary" href="bracket.html?id=${encodeURIComponent(t.id)}">Открыть сетку</a>
+        </article>
+      `;
+    }).join("");
   }
 
   function renderStats() {
@@ -61,9 +65,9 @@
     const db = DB.getDB();
     el.innerHTML = `
       <div class="stats-grid">
-        <div class="stat-card"><strong>${db.tournaments.length}</strong><span>Турниры</span></div>
-        <div class="stat-card"><strong>${db.users.length}</strong><span>Пользователи</span></div>
-        <div class="stat-card"><strong>${db.matches.length}</strong><span>Матчи</span></div>
+        <div class="stat-card"><strong>${(db.tournaments || []).length}</strong><span>Турниры</span></div>
+        <div class="stat-card"><strong>${(db.users || []).length}</strong><span>Пользователи</span></div>
+        <div class="stat-card"><strong>${(db.matches || []).length}</strong><span>Матчи</span></div>
       </div>
     `;
   }
