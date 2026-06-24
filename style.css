@@ -644,10 +644,9 @@ nav a.active::before {
   min-width: 300px;
   display: flex;
   flex-direction: column;
-  gap: 20px; /* ← было 40px, уменьшили */
+  gap: 20px;
   position: relative;
   scroll-snap-align: start;
-  /* ← убрали justify-content: center */
 }
 
 .round-col.active .round-title {
@@ -707,8 +706,8 @@ nav a.active::before {
   color: var(--text-3);
   font-weight: 700;
   transition: all var(--transition-base);
-  /* ← убрали position: sticky */
   flex-shrink: 0;
+  margin-bottom: 0;
 }
 
 /* ===== BRACKET MATCH ===== */
