@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="style.css">
     <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
-    <script src="js/tournament.js"></script>
 </head>
 <body>
     <header>
@@ -26,164 +25,87 @@
         </div>
     </header>
 
-    <div class="container page-enter">
-        <div id="profileContent">
-            <p style="color:var(--text-3);text-align:center;padding:60px;">Загрузка профиля...</p>
+    <div class="container">
+        <div id="profileBox" class="login-box page-enter" style="max-width:600px;">
+            <h2>👤 Профиль</h2>
+            <div id="profileContent">Загрузка профиля...</div>
         </div>
     </div>
 
-    <footer style="text-align:center;padding:40px 20px;color:var(--text-3);font-size:13px;">
-        <p id="footerText">© 2026 Tournament Hub</p>
+    <footer>
+        <p>Tournament Hub</p>
     </footer>
 
     <script>
+        function loadProfile() {
+            const user = DB.getCurrentUser();
+            const box = document.getElementById("profileContent");
+
+            if (!user) {
+                box.innerHTML = `
+                    <p style="color:var(--text-3);margin-bottom:20px;">Вы не авторизованы</p>
+                    <a href="login.html" class="btn-primary">🔐 Войти</a>
+                `;
+                return;
+            }
+
+            box.innerHTML = `
+                <div style="margin-bottom:24px;">
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Никнейм</label>
+                    <div style="font-size:1.3em;font-weight:700;">${escapeHTML(user.username)}</div>
+                </div>
+                <div style="margin-bottom:24px;">
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Отображаемое имя</label>
+                    <input type="text" id="displayName" value="${escapeHTML(user.displayName || user.username)}" style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);">
+                </div>
+                <div style="margin-bottom:24px;">
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Голосов отдано</label>
+                    <div style="font-size:1.1em;">${user.votes || 0}</div>
+                </div>
+                <div style="margin-bottom:24px;">
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Роль</label>
+                    <div style="font-size:1.1em;text-transform:capitalize;">${user.role || "user"}</div>
+                </div>
+                <button class="btn-primary" onclick="saveProfile()">💾 Сохранить</button>
+                <button class="btn-danger" style="margin-left:12px;" onclick="Auth.logout();location.reload();">🚪 Выйти</button>
+            `;
+        }
+
+        function saveProfile() {
+            const user = DB.getCurrentUser();
+            if (!user) return;
+
+            const newName = document.getElementById("displayName").value.trim();
+            if (!newName) return;
+
+            DB.updateDB(db => {
+                const u = db.users.find(x => x.id === user.id);
+                if (u) {
+                    u.displayName = newName;
+                    user.displayName = newName;
+                }
+            });
+
+            alert("Сохранено!");
+            Auth.renderNavUser();
+        }
+
         function escapeHTML(text) {
-            if (text === null || text === undefined) return "";
+            if (!text) return "";
             return String(text)
                 .replaceAll("&", "&amp;")
                 .replaceAll("<", "&lt;")
                 .replaceAll(">", "&gt;")
                 .replaceAll('"', "&quot;")
-                .replaceAll("'", "&#039;");
+                .replaceAll("'", "&#39;");
         }
 
-        function loadProfile() {
-            let db = DB.getDB();
-            
-            let params = new URLSearchParams(location.search);
-            let userId = params.get('id');
-            let isMyProfile = false;
-            
-            let currentUser = DB.getCurrentUser();
-            if (!userId && currentUser) {
-                userId = currentUser.id;
-                isMyProfile = true;
-            }
-            
-            let user = db.users.find(u => u.id === userId);
-            if (!user) {
-                document.getElementById('profileContent').innerHTML = `
-                    <div style="text-align:center;padding:80px 20px;">
-                        <h2>😕 Пользователь не найден</h2>
-                        <p style="color:var(--text-3);">Такого профиля не существует</p>
-                        <a href="index.html" class="btn-primary" style="margin-top:20px;text-decoration:none;display:inline-block;">На главную</a>
-                    </div>
-                `;
-                return;
-            }
-
-            let isAdminView = Auth.isAdmin();
-            let canEdit = isMyProfile || isAdminView;
-            let roleText = user.role === 'admin' ? '👑 Администратор' : user.role === 'moderator' ? '🛡️ Модератор' : '👤 Пользователь';
-            let roleColor = user.role === 'admin' ? 'var(--accent)' : user.role === 'moderator' ? 'var(--blue)' : 'var(--text-3)';
-            
-            let totalVotes = typeof user.votes === 'number' ? user.votes : (user.votes ? user.votes.length : 0);
-            let displayName = user.displayName || user.username || 'Пользователь';
-
-            let html = `
-                <div style="display:grid;grid-template-columns:280px 1fr;gap:24px;">
-                    <div>
-                        <div class="card" style="text-align:center;padding:32px 20px;">
-                            <div style="width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--blue));display:flex;align-items:center;justify-content:center;font-size:3em;font-weight:800;color:white;margin:0 auto 16px;box-shadow:0 0 40px var(--accent-glow);">
-                                ${displayName.charAt(0).toUpperCase()}
-                            </div>
-                            <h2 style="font-size:1.5em;margin-bottom:8px;">${escapeHTML(displayName)}</h2>
-                            <p style="color:${roleColor};font-weight:700;font-size:14px;margin-bottom:16px;">${roleText}</p>
-                            
-                            <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:16px;">
-                                <span style="color:var(--text-3);font-size:13px;">${user.authType === 'fandom' ? '✓ Подтверждённый Fandom' : '👤 Гостевой аккаунт'}</span>
-                            </div>
-                            
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">
-                                <div style="background:var(--bg);border-radius:12px;padding:12px;">
-                                    <div style="font-size:1.5em;font-weight:800;color:var(--blue);">${totalVotes}</div>
-                                    <div style="color:var(--text-3);font-size:11px;">Отдано голосов</div>
-                                </div>
-                                <div style="background:var(--bg);border-radius:12px;padding:12px;">
-                                    <div style="font-size:1.5em;font-weight:800;color:var(--purple);">${user.authType === 'fandom' ? '✓' : '—'}</div>
-                                    <div style="color:var(--text-3);font-size:11px;">Верификация</div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        ${canEdit ? `
-                            <div class="card" style="margin-top:16px;">
-                                <h3 style="font-size:1em;margin-bottom:12px;">✏️ О себе</h3>
-                                <textarea id="editBio" maxlength="300" style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-family:inherit;resize:vertical;min-height:80px;font-size:14px;">${escapeHTML(user.bio || '')}</textarea>
-                                <button class="btn-primary" style="width:100%;margin-top:10px;font-size:13px;padding:10px;" onclick="saveBio()">💾 Сохранить</button>
-                            </div>
-                        ` : (user.bio ? `
-                            <div class="card" style="margin-top:16px;">
-                                <h3 style="font-size:1em;margin-bottom:8px;">📝 О пользователе</h3>
-                                <p style="color:var(--text-2);font-size:14px;line-height:1.6;">${escapeHTML(user.bio)}</p>
-                            </div>
-                        ` : '')}
-                    </div>
-                    
-                    <div>
-                        <div class="card" style="margin-bottom:16px;">
-                            <h3 style="font-size:1.1em;margin-bottom:16px;">📊 Статистика</h3>
-                            <p style="color:var(--text-3);font-size:14px;">Участвовал в турнирах: ${(db.tournaments || []).filter(t => t.players && t.players.includes(displayName)).length}</p>
-                            <p style="color:var(--text-3);font-size:14px;">Дата регистрации: ${new Date(user.created || Date.now()).toLocaleDateString('ru-RU')}</p>
-                        </div>
-                        
-                        ${isAdminView && !isMyProfile ? `
-                            <div class="card" style="border-color:rgba(239,68,68,0.3);">
-                                <h3 style="font-size:1.1em;margin-bottom:12px;color:var(--red);">🛡️ Админ-инструменты</h3>
-                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                    <button class="btn-secondary" onclick="setUserRole('${user.id}', 'moderator')">Сделать модератором</button>
-                                    <button class="btn-secondary" onclick="setUserRole('${user.id}', 'user')">Снять роль</button>
-                                    <button class="btn-danger" onclick="deleteUser('${user.id}')">Удалить</button>
-                                </div>
-                            </div>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
-            
-            document.getElementById('profileContent').innerHTML = html;
-        }
-
-        function saveBio() {
-            let currentUser = DB.getCurrentUser();
-            if (!currentUser) return;
-            let bio = document.getElementById('editBio').value;
-            DB.updateDB(db => {
-                let u = db.users.find(x => x.id === currentUser.id);
-                if (u) u.bio = bio;
-            });
-            alert('Сохранено!');
-        }
-
-        function setUserRole(userId, role) {
-            if (!Auth.isAdmin()) return;
-            DB.updateDB(db => {
-                let u = db.users.find(x => x.id === userId);
-                if (u) u.role = role;
-            });
-            location.reload();
-        }
-
-        function deleteUser(userId) {
-            if (!Auth.isAdmin()) return;
-            if (!confirm('Удалить пользователя?')) return;
-            DB.updateDB(db => {
-                db.users = db.users.filter(u => u.id !== userId);
-            });
-            location.href = 'index.html';
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            const db = DB.getDB();
-            const name = db.settings?.siteName || 'Tournament Hub';
-            const logo = db.settings?.siteLogo || '🏆';
-            document.title = name + ' — Профиль';
-            document.getElementById('siteLogoLink').textContent = logo + ' ' + name;
-            document.getElementById('footerText').textContent = '© ' + new Date().getFullYear() + ' ' + name;
-            Auth.renderNavUser();
-            const adminLink = document.getElementById('navAdmin');
-            if (adminLink && Auth.isAdmin()) adminLink.classList.remove('hidden');
+        document.addEventListener("DOMContentLoaded", function() {
             loadProfile();
+            Auth.renderNavUser();
+            Auth.checkFandomAutoAdmin();
+            const navAdmin = document.getElementById("navAdmin");
+            if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
         });
     </script>
 </body>
