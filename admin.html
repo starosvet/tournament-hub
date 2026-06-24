@@ -115,6 +115,10 @@
                 <!-- Модерация -->
                 <div class="admin-card danger-zone">
                     <h3>🛡️ Модерация</h3>
+                    <div class="btn-row" style="margin-top:12px;">
+    <button class="btn-secondary" onclick="exportAllData()">💾 Экспорт бэкапа</button>
+    <button class="btn-secondary" onclick="importBackup()">📂 Импорт бэкапа</button>
+</div>
                     <div class="btn-row">
                         <button class="btn-secondary" onclick="clearAllVotes()">🧹 Очистить все голоса</button>
                         <button class="btn-danger" onclick="resetAllData()">☢️ Сбросить ВСЕ данные</button>
@@ -383,6 +387,27 @@
             localStorage.clear();
             location.reload();
         }
+
+        function importBackup() {
+    let input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = function(e) {
+        let file = e.target.files[0];
+        let reader = new FileReader();
+        reader.onload = function(e) {
+            let res = importAllData(e.target.result);
+            if (res.ok) {
+                toast('Данные импортированы! Перезагрузка...');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                toast(res.err);
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
 
         function renderUsers(db) {
             let el = document.getElementById('usersList');
