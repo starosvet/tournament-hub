@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="style.css">
     <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
-    <script src="js/tournament.js"></script>
 </head>
 <body>
     <header>
@@ -16,7 +15,7 @@
             <nav>
                 <a href="index.html">Главная</a>
                 <a href="bracket.html">Сетка</a>
-                <a href="history.html">История</a>
+                <a href="history.html" class="active">История</a>
                 <a href="chat.html">💬 Чат</a>
                 <a href="rules.html">Правила</a>
                 <a href="profile.html">👤 Профиль</a>
@@ -26,115 +25,112 @@
         </div>
     </header>
 
-    <div class="container page-enter">
+    <div class="container">
         <h1 class="page-title">📜 История матчей</h1>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
-            <div class="card">
-                <h3 style="color:var(--accent);margin-bottom:12px;">📊 Статистика</h3>
-                <div id="statsBox">
-                    <p style="color:var(--text-3);">Загрузка...</p>
-                </div>
-            </div>
-            <div class="card">
-                <h3 style="color:var(--accent);margin-bottom:12px;">🏆 Завершённые турниры</h3>
-                <div id="completedTournaments">
-                    <p style="color:var(--text-3);">Загрузка...</p>
-                </div>
-            </div>
+        <h2 class="section-title">📊 Статистика</h2>
+        <div id="history-stats" class="card" style="margin-bottom:28px;">
+            <div class="skeleton" style="height:60px;"></div>
         </div>
 
-        <div id="historyContent">
-            <p style="color:var(--text-3);text-align:center;padding:40px;">Загрузка истории...</p>
+        <h2 class="section-title">🏆 Завершённые турниры</h2>
+        <div id="finished-tournaments">
+            <div class="skeleton" style="height:120px;border-radius:14px;"></div>
+        </div>
+
+        <h2 class="section-title" style="margin-top:40px;">⚔️ История матчей</h2>
+        <div id="match-history">
+            <div class="skeleton" style="height:80px;border-radius:14px;"></div>
         </div>
     </div>
 
-    <footer style="text-align:center;padding:40px 20px;color:var(--text-3);font-size:13px;">
-        <p id="footerText">© 2026 Tournament Hub</p>
+    <footer>
+        <p>Tournament Hub</p>
     </footer>
 
     <script>
-        function escapeHTML(text) {
-            if (text === null || text === undefined) return "";
-            return String(text)
-                .replaceAll("&", "&amp;")
-                .replaceAll("<", "&lt;")
-                .replaceAll(">", "&gt;")
-                .replaceAll('"', "&quot;")
-                .replaceAll("'", "&#039;");
-        }
-
         function loadHistory() {
             const db = DB.getDB();
-            const tournaments = (db.tournaments || []).filter(t => t.status === "finished");
-            const matches = db.matches || [];
 
             // Статистика
-            const totalMatches = matches.filter(m => m.finished).length;
-            const totalVotes = matches.reduce((sum, m) => sum + (m.votes1 || 0) + (m.votes2 || 0), 0);
-            document.getElementById("statsBox").innerHTML = `
-                <p style="color:var(--text-2);font-size:14px;line-height:1.8;">
-                    Завершено матчей: <strong>${totalMatches}</strong><br>
-                    Всего голосов: <strong>${totalVotes}</strong><br>
-                    Турниров завершено: <strong>${tournaments.length}</strong>
-                </p>
+            const finished = (db.tournaments || []).filter(t => t.status === "finished");
+            const totalMatches = (db.matches || []).filter(m => m.finished).length;
+            const totalVotes = (db.matches || []).reduce((sum, m) => sum + (m.votes1 || 0) + (m.votes2 || 0), 0);
+
+            document.getElementById("history-stats").innerHTML = `
+                <div style="display:flex;gap:20px;flex-wrap:wrap;">
+                    <div class="stat-badge">🏆 Завершено турниров: ${finished.length}</div>
+                    <div class="stat-badge">⚔️ Матчей сыграно: ${totalMatches}</div>
+                    <div class="stat-badge">🗳️ Всего голосов: ${totalVotes}</div>
+                </div>
             `;
 
             // Завершённые турниры
-            if (!tournaments.length) {
-                document.getElementById("completedTournaments").innerHTML = '<p style="color:var(--text-3);">Пока нет завершённых турниров</p>';
+            const ftContainer = document.getElementById("finished-tournaments");
+            if (!finished.length) {
+                ftContainer.innerHTML = `<p style="color:var(--text-3);">Пока нет завершённых турниров</p>`;
             } else {
-                document.getElementById("completedTournaments").innerHTML = tournaments.map(t => `
-                    <div style="padding:10px;background:var(--bg);border-radius:8px;margin-bottom:8px;">
-                        <a href="bracket.html?id=${encodeURIComponent(t.id)}" style="color:var(--accent);text-decoration:none;font-weight:600;">${escapeHTML(t.title)}</a>
-                        <p style="color:var(--text-3);font-size:12px;margin-top:4px;">${new Date(t.createdAt).toLocaleDateString('ru-RU')}</p>
+                ftContainer.innerHTML = finished.map(t => `
+                    <div class="tournament-item" onclick="location.href='bracket.html?id=${t.id}'">
+                        <span class="ti-status completed"></span>
+                        <div class="ti-info">
+                            <h4>${escapeHTML(t.title)}</h4>
+                            <span>${new Date(t.createdAt).toLocaleDateString("ru-RU")} · ${t.players?.length || 0} участников</span>
+                        </div>
                     </div>
                 `).join("");
             }
 
             // История матчей
-            const finishedMatches = matches.filter(m => m.finished).sort((a, b) => (b.round || 0) - (a.round || 0));
-            if (!finishedMatches.length) {
-                document.getElementById("historyContent").innerHTML = '<p style="color:var(--text-3);text-align:center;padding:40px;">История пуста</p>';
-                return;
-            }
+            const mhContainer = document.getElementById("match-history");
+            const doneMatches = (db.matches || []).filter(m => m.finished).sort((a, b) => (b.finishedAt || b.createdAt || 0) - (a.finishedAt || a.createdAt || 0));
 
-            const byRound = {};
-            finishedMatches.forEach(m => {
-                if (!byRound[m.round]) byRound[m.round] = [];
-                byRound[m.round].push(m);
-            });
+            if (!doneMatches.length) {
+                mhContainer.innerHTML = `<p style="color:var(--text-3);">Пока нет завершённых матчей</p>`;
+            } else {
+                mhContainer.innerHTML = doneMatches.slice(0, 50).map(m => {
+                    const p1Name = escapeHTML(m.player1?.name || m.player1 || "—");
+                    const p2Name = escapeHTML(m.player2?.name || m.player2 || "—");
+                    const wName = escapeHTML(m.winner?.name || m.winner || "—");
+                    const p1Img = m.player1?.image || "";
+                    const p2Img = m.player2?.image || "";
 
-            document.getElementById("historyContent").innerHTML = Object.entries(byRound).map(([round, ms]) => `
-                <div class="card" style="margin-bottom:16px;">
-                    <h3 style="color:var(--accent);margin-bottom:12px;">Раунд ${round}</h3>
-                    <div style="display:flex;flex-direction:column;gap:8px;">
-                        ${ms.map(m => `
-                            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg);border-radius:10px;">
-                                <div style="display:flex;align-items:center;gap:12px;">
-                                    <span style="${m.winner === m.player1 ? 'color:var(--green);font-weight:700;' : 'color:var(--text-3);'}">${escapeHTML(m.player1 || '—')}</span>
-                                    <span style="color:var(--text-3);">vs</span>
-                                    <span style="${m.winner === m.player2 ? 'color:var(--green);font-weight:700;' : 'color:var(--text-3);'}">${escapeHTML(m.player2 || '—')}</span>
-                                </div>
-                                <span style="color:var(--accent);font-weight:700;font-size:14px;">${m.votes1 || 0} : ${m.votes2 || 0}</span>
+                    return `
+                        <div class="match-row">
+                            <div class="mr-side ${m.winner === m.player1 ? 'win' : ''}">
+                                ${p1Img ? `<img src="${escapeHTML(p1Img)}" alt="">` : ''}
+                                <span>${p1Name}</span>
                             </div>
-                        `).join("")}
-                    </div>
-                </div>
-            `).join("");
+                            <div class="mr-center">
+                                <span class="mr-score">${m.votes1 || 0} : ${m.votes2 || 0}</span>
+                                <div class="mr-winner">🏆 ${wName}</div>
+                            </div>
+                            <div class="mr-side ${m.winner === m.player2 ? 'win' : ''}">
+                                ${p2Img ? `<img src="${escapeHTML(p2Img)}" alt="">` : ''}
+                                <span>${p2Name}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            }
+        }
+
+        function escapeHTML(text) {
+            if (!text) return "";
+            return String(text)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#39;");
         }
 
         document.addEventListener("DOMContentLoaded", function() {
-            const db = DB.getDB();
-            const name = db.settings?.siteName || "Tournament Hub";
-            const logo = db.settings?.siteLogo || "🏆";
-            document.title = name + " — История";
-            document.getElementById("siteLogoLink").textContent = logo + " " + name;
-            document.getElementById("footerText").textContent = "© " + new Date().getFullYear() + " " + name;
-            Auth.renderNavUser();
-            const adminLink = document.getElementById("navAdmin");
-            if (adminLink && Auth.isAdmin()) adminLink.classList.remove("hidden");
             loadHistory();
+            Auth.renderNavUser();
+            Auth.checkFandomAutoAdmin();
+            const navAdmin = document.getElementById("navAdmin");
+            if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
         });
     </script>
 </body>
