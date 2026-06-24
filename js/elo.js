@@ -1,28 +1,31 @@
-// js/elo.js — система рейтинга Elo
+// js/elo.js — Elo-рейтинг для СУБЪЕКТОВ (статей, персонажей, и т.д.)
 
-const K_FACTOR = 32; // Коэффициент изменения рейтинга
+const K_FACTOR = 32;
 const INITIAL_ELO = 1000;
 
-function getElo(playerId) {
+function getSubjectElo(subjectId) {
     let db = getDB();
-    let ratings = db.eloRatings || {};
-    return ratings[playerId] || INITIAL_ELO;
+    let s = db.subjects.find(x => x.id === subjectId);
+    return s?.elo || INITIAL_ELO;
 }
 
-function setElo(playerId, rating) {
+function setSubjectElo(subjectId, rating) {
     let db = getDB();
-    db.eloRatings = db.eloRatings || {};
-    db.eloRatings[playerId] = Math.round(rating);
-    saveDB(db);
+    let s = db.subjects.find(x => x.id === subjectId);
+    if (s) {
+        s.elo = Math.round(rating);
+        saveDB(db);
+    }
 }
 
 function expectedScore(ratingA, ratingB) {
     return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
 }
 
-function updateElo(winnerId, loserId) {
-    let ratingA = getElo(winnerId);
-    let ratingB = getElo(loserId);
+// Обновление Elo после матча
+function updateEloAfterMatch(winnerSubjectId, loserSubjectId) {
+    let ratingA = getSubjectElo(winnerSubjectId);
+    let ratingB = getSubjectElo(loserSubjectId);
 
     let expectedA = expectedScore(ratingA, ratingB);
     let expectedB = expectedScore(ratingB, ratingA);
@@ -30,8 +33,8 @@ function updateElo(winnerId, loserId) {
     let newRatingA = ratingA + K_FACTOR * (1 - expectedA);
     let newRatingB = ratingB + K_FACTOR * (0 - expectedB);
 
-    setElo(winnerId, newRatingA);
-    setElo(loserId, newRatingB);
+    setSubjectElo(winnerSubjectId, newRatingA);
+    setSubjectElo(loserSubjectId, newRatingB);
 
     return {
         winnerChange: Math.round(newRatingA - ratingA),
@@ -42,7 +45,7 @@ function updateElo(winnerId, loserId) {
 }
 
 // Обновление Elo после завершения раунда
-function updateEloAfterRound(tournament, allPlayers) {
+function updateEloAfterRound(tournament) {
     let round = tournament.rounds[tournament.currentRound];
     if (!round) return;
 
@@ -50,53 +53,66 @@ function updateEloAfterRound(tournament, allPlayers) {
         if (!m.done || !m.winner) return;
         if (m.a.isBye || m.b.isBye) return;
 
-        let winnerId = findPlayerId(m.winner, allPlayers);
+        let winnerId = m.winner.id;
         let loser = m.winner.id === m.a.id ? m.b : m.a;
-        let loserId = findPlayerId(loser, allPlayers);
+        let loserId = loser.id;
 
-        if (winnerId && loserId) {
-            updateElo(winnerId, loserId);
+        // Находим реальные ID субъектов
+        let db = getDB();
+        let winnerSubject = db.subjects.find(s => s.id === winnerId) || 
+                           db.subjects.find(s => s.name === m.winner.name);
+        let loserSubject = db.subjects.find(s => s.id === loserId) ||
+                          db.subjects.find(s => s.name === loser.name);
+
+        if (winnerSubject && loserSubject) {
+            updateEloAfterMatch(winnerSubject.id, loserSubject.id);
         }
     });
 }
 
-function findPlayerId(matchPlayer, allPlayers) {
-    let p = allPlayers.find(ap => ap.name === matchPlayer.name);
-    return p ? p.id : null;
-}
-
-function getEloLeaderboard(allPlayers) {
+// Лидерборд по Elo
+function getEloLeaderboard() {
     let db = getDB();
-    let ratings = db.eloRatings || {};
-    
-    return allPlayers
-        .map(p => ({
-            ...p,
-            elo: ratings[p.id] || INITIAL_ELO
-        }))
+    return [...db.subjects]
+        .map(s => ({ ...s, elo: s.elo || INITIAL_ELO }))
         .sort((a, b) => b.elo - a.elo);
 }
 
-function renderEloLeaderboard(allPlayers) {
-    let sorted = getEloLeaderboard(allPlayers);
-    let html = '<h2 class="section-title">📊 Elo-рейтинг</h2>';
+// Лидерборд по победам
+function getWinsLeaderboard() {
+    let db = getDB();
+    return [...db.subjects]
+        .sort((a, b) => (b.wins || 0) - (a.wins || 0));
+}
+
+function renderEloLeaderboard() {
+    let sorted = getEloLeaderboard();
+    let html = '<h2 class="section-title">📊 Elo-рейтинг субъектов</h2>';
     
-    sorted.forEach((p, i) => {
+    if (!sorted.length) {
+        html += '<p style="color:var(--text-3);">Пока нет субъектов</p>';
+        return html;
+    }
+    
+    sorted.slice(0, 10).forEach((s, i) => {
         let medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
-        let change = p.elo - INITIAL_ELO;
+        let change = (s.elo || INITIAL_ELO) - INITIAL_ELO;
         let changeColor = change > 0 ? 'var(--green)' : change < 0 ? 'var(--red)' : 'var(--text-3)';
         let changeSign = change > 0 ? '+' : '';
+        let typeIcon = getSubjectTypeIcon(s.typeId);
         
         html += `
             <div class="lb-row" style="animation: fadeInUp 0.5s ease ${i * 0.05}s both;">
                 <div class="lb-medal">${medal}</div>
-                <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--bg-4),var(--border-2));display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);">${p.name.charAt(0)}</div>
+                <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--bg-4),var(--border-2));display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:18px;">
+                    ${typeIcon}
+                </div>
                 <div class="lb-name">
-                    <a href="#">${escapeHtml(p.name)}</a>
-                    <div style="font-size:12px;color:var(--text-3);">Турнирных побед: ${p.wins || 0}</div>
+                    <span style="font-weight:600;color:var(--text);">${escapeHtml(s.name)}</span>
+                    <div style="font-size:12px;color:var(--text-3);">${escapeHtml(s.type || 'Субъект')} | Побед: ${s.wins || 0}</div>
                 </div>
                 <div style="text-align:right;">
-                    <div style="font-size:1.3em;font-weight:800;color:var(--accent);">${p.elo}</div>
+                    <div style="font-size:1.3em;font-weight:800;color:var(--accent);">${s.elo || INITIAL_ELO}</div>
                     <div style="font-size:12px;color:${changeColor};">${changeSign}${change}</div>
                 </div>
             </div>
@@ -104,6 +120,12 @@ function renderEloLeaderboard(allPlayers) {
     });
     
     return html;
+}
+
+function getSubjectTypeIcon(typeId) {
+    let db = getDB();
+    let t = db.subjectTypes.find(x => x.id === typeId);
+    return t?.icon || '⭐';
 }
 
 function escapeHtml(text) {
