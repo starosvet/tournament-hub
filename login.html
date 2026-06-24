@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Supabase CDN -->
+    <script src="https://esm.sh/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <header>
@@ -39,8 +41,8 @@
                 <label>Имя пользователя (при регистрации)</label>
                 <input type="text" id="loginUsername" placeholder="username">
 
-                <button class="btn-primary" style="width:100%;margin-top:20px;" onclick="doLogin()">🔐 Войти</button>
-                <button class="btn-secondary" style="width:100%;margin-top:12px;" onclick="doRegister()">📝 Регистрация</button>
+                <button class="btn-primary" style="width:100%;margin-top:20px;" id="btnLogin">🔐 Войти</button>
+                <button class="btn-secondary" style="width:100%;margin-top:12px;" id="btnRegister">📝 Регистрация</button>
 
                 <div class="error" id="loginError" style="color:var(--red);margin-top:16px;text-align:center;"></div>
             </div>
@@ -54,7 +56,7 @@
             <div id="fandomStep1">
                 <label>Ваш ник на Fandom</label>
                 <input type="text" id="fandomName" placeholder="Например: Melanthe Weber">
-                <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="startFandomLogin()">📨 Получить код</button>
+                <button class="btn-primary" style="width:100%;margin-top:16px;" id="btnFandomStart">📨 Получить код</button>
             </div>
 
             <div id="fandomStep2" style="display:none;">
@@ -68,13 +70,11 @@
                     <li>В описании правки вставьте код выше</li>
                     <li>Сохраните правку</li>
                 </ol>
-                <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="checkFandomLogin()">✅ Я сделал правку</button>
-                <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="cancelFandomLogin()">❌ Отмена</button>
+                <button class="btn-primary" style="width:100%;margin-top:16px;" id="btnFandomCheck">✅ Я сделал правку</button>
+                <button class="btn-secondary" style="width:100%;margin-top:8px;" id="btnFandomCancel">❌ Отмена</button>
                 <div id="fandomStatus" style="margin-top:12px;text-align:center;font-size:13px;"></div>
-                <div id="fandomProgress" style="margin-top:8px;text-align:center;font-size:12px;color:var(--text-3);"></div>
+                <div id="fandomError" style="color:var(--red);margin-top:16px;text-align:center;font-size:13px;"></div>
             </div>
-
-            <div id="fandomError" style="color:var(--red);margin-top:16px;text-align:center;font-size:13px;"></div>
         </div>
     </div>
 
@@ -83,11 +83,18 @@
     </footer>
 
     <script type="module">
-        import { Auth, toast } from './js/auth.js'
+        // ═══════════════════════════════════════
+        // SUPABASE CLIENT (inline, без внешнего модуля)
+        // ═══════════════════════════════════════
+        const SUPABASE_URL = 'https://ВАШ-ПРОЕКТ.supabase.co'
+        const SUPABASE_KEY = 'eyJ...ваш-anon-ключ...'
 
-        // Экспортируем в глобальную область для onclick
-        window.Auth = Auth
-        window.toast = toast
+        const { createClient } = supabase
+        const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+        // ═══════════════════════════════════════
+        // AUTH FUNCTIONS
+        // ═══════════════════════════════════════
 
         async function doLogin() {
             const email = document.getElementById('loginEmail').value.trim()
@@ -95,12 +102,12 @@
             const err = document.getElementById('loginError')
             err.textContent = ''
 
-            const result = await Auth.login(email, password)
-            if (result.success) {
-                location.href = 'index.html'
-            } else {
-                err.textContent = result.error || 'Ошибка входа'
+            const { data, error } = await sb.auth.signInWithPassword({ email, password })
+            if (error) {
+                err.textContent = error.message
+                return
             }
+            location.href = 'index.html'
         }
 
         async function doRegister() {
@@ -110,84 +117,197 @@
             const err = document.getElementById('loginError')
             err.textContent = ''
 
-            const result = await Auth.register(email, password, username)
-            if (result.success) {
-                toast('Регистрация успешна! Подтвердите email если нужно.')
-                setTimeout(() => location.href = 'index.html', 800)
-            } else {
-                err.textContent = result.error || 'Ошибка регистрации'
+            if (password.length < 6) {
+                err.textContent = 'Пароль минимум 6 символов'
+                return
             }
+
+            const { data, error } = await sb.auth.signUp({
+                email,
+                password,
+                options: { data: { username: username || email.split('@')[0] } }
+            })
+
+            if (error) {
+                err.textContent = error.message
+                return
+            }
+
+            err.style.color = 'var(--green)'
+            err.textContent = 'Регистрация успешна! Подтвердите email, если требуется.'
+            setTimeout(() => location.href = 'index.html', 1500)
+        }
+
+        // ═══════════════════════════════════════
+        // FANDOM AUTH
+        // ═══════════════════════════════════════
+
+        const FANDOM_CODE_KEY = 'th_fandom_pending'
+
+        function generateCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+            let code = 'TH-'
+            for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)]
+            return code
         }
 
         function startFandomLogin() {
             const name = document.getElementById('fandomName').value.trim()
             const err = document.getElementById('fandomError')
-            err.textContent = ''
+            if (err) err.textContent = ''
+            if (!name) return
 
-            const result = Auth.startFandomAuth(name)
-            if (!result.ok) {
-                err.textContent = result.error
-                return
-            }
+            const code = generateCode()
+            localStorage.setItem(FANDOM_CODE_KEY, JSON.stringify({
+                code, fandomName: name, createdAt: Date.now()
+            }))
 
             document.getElementById('fandomStep1').style.display = 'none'
             document.getElementById('fandomStep2').style.display = 'block'
-            document.getElementById('fandomCode').textContent = result.code
+            document.getElementById('fandomCode').textContent = code
         }
 
         function cancelFandomLogin() {
-            Auth.clearPendingFandomAuth()
+            localStorage.removeItem(FANDOM_CODE_KEY)
             document.getElementById('fandomStep1').style.display = 'block'
             document.getElementById('fandomStep2').style.display = 'none'
-            document.getElementById('fandomStatus').textContent = ''
-            document.getElementById('fandomProgress').textContent = ''
-            document.getElementById('fandomError').textContent = ''
+            const st = document.getElementById('fandomStatus')
+            const er = document.getElementById('fandomError')
+            if (st) st.textContent = ''
+            if (er) er.textContent = ''
+        }
+
+        async function verifyFandomCode(fandomName, code) {
+            const url = `https://chickengun-fanon.fandom.com/ru/api.php?action=query&list=recentchanges&rcuser=${encodeURIComponent(fandomName)}&rclimit=20&rcprop=comment|timestamp|user&format=json&origin=*`
+            try {
+                const res = await fetch(url)
+                if (!res.ok) return { ok: false, error: 'Ошибка связи с Fandom' }
+                const data = await res.json()
+                const changes = data.query?.recentchanges || []
+                const regex = new RegExp(`(^|\\s)${code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`)
+                for (const rc of changes) {
+                    if (regex.test(rc.comment || '')) return { ok: true, fandomName: rc.user }
+                }
+                return { ok: false, error: 'Код не найден в правках' }
+            } catch {
+                return { ok: false, error: 'Ошибка сети' }
+            }
         }
 
         async function checkFandomLogin() {
             const status = document.getElementById('fandomStatus')
-            const progress = document.getElementById('fandomProgress')
             const err = document.getElementById('fandomError')
-            const pending = Auth.getPendingFandomAuth()
+            const pending = JSON.parse(localStorage.getItem(FANDOM_CODE_KEY) || 'null')
 
-            if (!pending) {
-                err.textContent = 'Код устарел. Начните заново.'
+            if (!pending || Date.now() - pending.createdAt > 600000) {
+                if (err) err.textContent = 'Код устарел. Начните заново.'
                 return
             }
 
-            status.textContent = '⏳ Проверяем правки...'
-            err.textContent = ''
+            if (status) status.textContent = '⏳ Проверяем...'
+            if (err) err.textContent = ''
 
-            const verify = await Auth.verifyFandomCode(pending.fandomName, pending.code)
-
+            const verify = await verifyFandomCode(pending.fandomName, pending.code)
             if (!verify.ok) {
-                status.textContent = ''
-                err.textContent = verify.error
+                if (status) status.textContent = ''
+                if (err) err.textContent = verify.error
                 return
             }
 
-            status.textContent = '✅ Код подтверждён! Входим...'
+            if (status) status.textContent = '✅ Код найден! Входим...'
 
-            const complete = await Auth.completeFandomAuth(verify.fandomName)
-            if (complete.ok) {
-                location.href = 'index.html'
+            // Создаём/логиним пользователя в Supabase
+            const email = `fandom_${verify.fandomName.replace(/\s+/g, '_').toLowerCase()}@tournament.local`
+            const password = crypto.randomUUID()
+
+            // Пробуем зарегистрировать
+            let { data, error } = await sb.auth.signUp({
+                email, password,
+                options: { data: { username: verify.fandomName, fandom_name: verify.fandomName, auth_type: 'fandom' } }
+            })
+
+            // Уже существует — пробуем войти с сохранённым паролем
+            if (error?.message?.includes('already') || error?.code === 'user_already_exists') {
+                const savedPass = localStorage.getItem('th_fandom_pass_' + verify.fandomName)
+                if (savedPass) {
+                    const login = await sb.auth.signInWithPassword({ email, password: savedPass })
+                    data = login.data
+                    error = login.error
+                } else {
+                    if (err) err.textContent = 'Аккаунт существует, но пароль утерян. Обратитесь к админу.'
+                    return
+                }
+            }
+
+            if (error) {
+                if (err) err.textContent = error.message
+                return
+            }
+
+            localStorage.setItem('th_fandom_pass_' + verify.fandomName, password)
+            localStorage.removeItem(FANDOM_CODE_KEY)
+            location.href = 'index.html'
+        }
+
+        // ═══════════════════════════════════════
+        // EVENT LISTENERS (вместо onclick)
+        // ═══════════════════════════════════════
+
+        document.getElementById('btnLogin').addEventListener('click', doLogin)
+        document.getElementById('btnRegister').addEventListener('click', doRegister)
+        document.getElementById('btnFandomStart').addEventListener('click', startFandomLogin)
+        document.getElementById('btnFandomCheck').addEventListener('click', checkFandomLogin)
+        document.getElementById('btnFandomCancel').addEventListener('click', cancelFandomLogin)
+
+        // Enter на полях
+        document.getElementById('loginPassword').addEventListener('keydown', e => {
+            if (e.key === 'Enter') doLogin()
+        })
+
+        // ═══════════════════════════════════════
+        // NAV
+        // ═══════════════════════════════════════
+
+        async function renderNav() {
+            const box = document.getElementById('navUser')
+            if (!box) return
+
+            const { data: { user } } = await sb.auth.getUser()
+            if (user) {
+                const name = user.user_metadata?.username || user.email?.split('@')[0] || 'Пользователь'
+                box.innerHTML = `
+                    <span style="color:var(--text-3);font-size:13px;">${name}</span>
+                    <button type="button" class="btn-secondary" style="margin-left:10px;padding:8px 12px;font-size:12px;" onclick="doLogout()">Выйти</button>
+                `
             } else {
-                status.textContent = ''
-                err.textContent = complete.error
+                box.innerHTML = `<a href="login.html" style="color:var(--text-3);font-size:13px;">Войти</a>`
             }
         }
 
-        // Глобальные функции для onclick
-        window.doLogin = doLogin
-        window.doRegister = doRegister
-        window.startFandomLogin = startFandomLogin
-        window.cancelFandomLogin = cancelFandomLogin
-        window.checkFandomLogin = checkFandomLogin
+        window.doLogout = async function() {
+            await sb.auth.signOut()
+            location.reload()
+        }
 
-        // Init
-        Auth.initAuth()
-        const navAdmin = document.getElementById('navAdmin')
-        if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove('hidden')
+        // Проверяем админку
+        async function checkAdmin() {
+            const { data: { user } } = await sb.auth.getUser()
+            const navAdmin = document.getElementById('navAdmin')
+            if (!navAdmin || !user) return
+
+            // Проверяем роль в app_metadata
+            const isAdmin = user.app_metadata?.role === 'admin'
+            // Или в user_metadata (если туда записали)
+            const isAdmin2 = user.user_metadata?.role === 'admin'
+
+            if (isAdmin || isAdmin2) {
+                navAdmin.classList.remove('hidden')
+                localStorage.setItem('th_admin', 'yes')
+            }
+        }
+
+        renderNav()
+        checkAdmin()
     </script>
 </body>
 </html>
