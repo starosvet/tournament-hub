@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="style.css">
     <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
-    <script src="js/elo.js"></script>
 </head>
 <body>
     <header>
@@ -75,7 +74,6 @@
 
             let html = `
                 <div style="display:grid;grid-template-columns:280px 1fr;gap:24px;">
-                    <!-- Левая колонка -->
                     <div>
                         <div class="card" style="text-align:center;padding:32px 20px;">
                             <div style="width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--blue));display:flex;align-items:center;justify-content:center;font-size:3em;font-weight:800;color:white;margin:0 auto 16px;box-shadow:0 0 40px var(--accent-glow);">
@@ -121,7 +119,6 @@
                         ` : '')}
                     </div>
                     
-                    <!-- Правая колонка -->
                     <div>
                         <div class="card" style="margin-bottom:16px;">
                             <h3 style="font-size:1.1em;margin-bottom:16px;">📊 История голосования</h3>
@@ -223,6 +220,26 @@
             if (logoLink) logoLink.textContent = logo + ' ' + name;
             let ft = document.getElementById('footerText');
             if (ft) ft.textContent = '© ' + new Date().getFullYear() + ' ' + name;
+        }
+
+        function renderNavUser(db) {
+            let el = document.getElementById("navUser");
+            if (!el) return;
+            let user = getCurrentUser();
+            if (user) {
+                let name = user.displayName || user.fandomName || "Пользователь";
+                let isFandom = user.authType === "fandom";
+                let badge = isFandom ? '<span style="color:var(--green);font-size:12px;">✓</span>' : '<span style="color:var(--text-3);font-size:12px;">👤</span>';
+                el.innerHTML = `
+                    <span style="display:flex;align-items:center;gap:10px;">
+                        ${badge}
+                        <a href="profile.html?id=${user.id}" style="color:var(--text);text-decoration:none;font-weight:600;">${escapeHtml(name)}</a>
+                        <a href="#" onclick="logoutUser();location.reload();return false;" style="color:var(--text-3);font-size:12px;text-decoration:none;">Выйти</a>
+                    </span>
+                `;
+            } else {
+                el.innerHTML = '<a href="login.html" style="color:var(--blue);text-decoration:none;font-weight:600;">🔐 Войти</a>';
+            }
         }
 
         function escapeHtml(text) {
