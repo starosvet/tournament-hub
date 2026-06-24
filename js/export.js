@@ -1,8 +1,8 @@
-// js/export.js — экспорт результатов турнира
+// js/export.js — экспорт результатов турнира v2 (фикс subjects)
 
 function exportTournamentToJSON(tournament) {
     if (!tournament) return null;
-    
+
     let exportData = {
         name: tournament.name,
         description: tournament.description,
@@ -23,28 +23,28 @@ function exportTournamentToJSON(tournament) {
             }))
         }))
     };
-    
+
     return JSON.stringify(exportData, null, 2);
 }
 
 function exportTournamentToCSV(tournament) {
     if (!tournament) return '';
-    
+
     let csv = 'Раунд,Игрок A,Голоса A,Игрок B,Голоса B,Победитель\n';
-    
+
     tournament.rounds.forEach(r => {
         r.matches.forEach(m => {
             let winner = m.winner ? m.winner.name : '—';
             csv += `"${r.name}","${m.a.name}",${m.votesA},"${m.b.name}",${m.votesB},"${winner}"\n`;
         });
     });
-    
+
     return csv;
 }
 
 function exportToFile(tournament, format) {
     let content, filename, mime;
-    
+
     if (format === 'json') {
         content = exportTournamentToJSON(tournament);
         filename = `tournament_${tournament.id}.json`;
@@ -54,7 +54,7 @@ function exportToFile(tournament, format) {
         filename = `tournament_${tournament.id}.csv`;
         mime = 'text/csv;charset=utf-8;';
     }
-    
+
     let blob = new Blob([content], { type: mime });
     let url = URL.createObjectURL(blob);
     let a = document.createElement('a');
@@ -64,7 +64,7 @@ function exportToFile(tournament, format) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     toast(`Экспортировано: ${filename}`);
 }
 
@@ -72,15 +72,11 @@ function renderExportButtons(tournamentId) {
     let db = getDB();
     let t = db.tournaments.find(x => x.id === tournamentId);
     if (!t) return '';
-    
+
     return `
-        <div style="display:flex;gap:10px;margin-top:16px;">
-            <button class="btn-secondary" onclick="exportToFileById(${tournamentId}, 'json')" style="font-size:13px;padding:8px 16px;">
-                📥 JSON
-            </button>
-            <button class="btn-secondary" onclick="exportToFileById(${tournamentId}, 'csv')" style="font-size:13px;padding:8px 16px;">
-                📄 CSV
-            </button>
+        <div style="display:flex;gap:12px;margin-top:16px;">
+            <button class="btn-secondary" onclick="exportToFileById('${tournamentId}', 'json')">📄 JSON</button>
+            <button class="btn-secondary" onclick="exportToFileById('${tournamentId}', 'csv')">📊 CSV</button>
         </div>
     `;
 }
@@ -97,9 +93,9 @@ function exportAllData() {
     let db = getDB();
     let data = {
         exportDate: new Date().toISOString(),
-        version: '2.0',
+        version: '5.0',
         tournaments: db.tournaments,
-        players: db.players,
+        subjects: db.subjects,
         users: db.users.map(u => ({
             id: u.id,
             displayName: u.displayName,
@@ -110,10 +106,9 @@ function exportAllData() {
             votesCount: u.votes ? u.votes.length : 0
         })),
         settings: db.settings,
-        eloRatings: db.eloRatings,
         comments: db.comments
     };
-    
+
     let blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     let url = URL.createObjectURL(blob);
     let a = document.createElement('a');
@@ -123,7 +118,7 @@ function exportAllData() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     toast('Полный бэкап сохранён!');
 }
 
@@ -131,18 +126,17 @@ function exportAllData() {
 function importAllData(jsonText) {
     try {
         let data = JSON.parse(jsonText);
-        if (!data.tournaments || !data.players) {
+        if (!data.tournaments || !data.subjects) {
             return { ok: false, err: "Неверный формат файла" };
         }
-        
+
         let db = getDB();
         db.tournaments = data.tournaments || [];
-        db.players = data.players || [];
+        db.subjects = data.subjects || [];
         db.users = data.users || [];
         db.settings = data.settings || db.settings;
-        db.eloRatings = data.eloRatings || {};
         db.comments = data.comments || [];
-        
+
         saveDB(db);
         return { ok: true };
     } catch (e) {
