@@ -1,131 +1,389 @@
-// js/render-bracket.js — рендер сетки v3 (Shikimori-style + комментарии)
+/*
+ Tournament Hub
+ Bracket renderer
+*/
 
-function renderBracket(tournament, allPlayers) {
-    let el = document.getElementById('bracketGrid');
-    if (!el) return;
-    
-    let user = getCurrentUser();
-    let html = '';
-    
-    tournament.rounds.forEach((r, idx) => {
-        let cls = idx === tournament.currentRound && tournament.status === "active" ? "round-col active" :
-                  idx < tournament.currentRound || tournament.status === "completed" ? "round-col past" : "round-col future";
-        
-        html += `
-            <div class="${cls}">
-                <div class="round-title">${r.name}</div>
-        `;
-        
-        r.matches.forEach((m, mi) => {
-            let wa = m.done && m.winner?.id === m.a.id;
-            let wb = m.done && m.winner?.id === m.b.id;
-            let voteKey = `vote_${tournament.id}_${idx}_${mi}`;
-            let hasVoted = localStorage.getItem(voteKey);
-            let canVote = idx === tournament.currentRound && tournament.status === "active" && !m.done && !m.a.isBye && !m.b.isBye
-                          && user && !hasVoted;
-            
-            // Проверка через базу (анти-накрутка)
-            if (user && user.votes) {
-                let dbVoted = user.votes.some(v => 
-                    v.tournamentId === tournament.id && v.roundIdx === idx && v.matchIdx === mi
-                );
-                if (dbVoted) canVote = false;
-            }
-            
-            // Проценты для визуализации
-            let total = m.votesA + m.votesB;
-            let pctA = total > 0 ? Math.round(m.votesA / total * 100) : 0;
-            let pctB = total > 0 ? Math.round(m.votesB / total * 100) : 0;
-            
-            let matchCls = 'bracket-match';
-            if (canVote) matchCls += ' canvote';
-            if (m.done) matchCls += ' done';
-            if (!user && !m.done) matchCls += ' need-login';
-            
-            html += `<div class="${matchCls}">`;
-            
-            // Игрок A
-            html += renderPlayer(m.a, wa, pctA, m.votesA, total, true);
-            
-            // VS зона
-            html += '<div class="bm-vs">';
-            
-            if (canVote) {
-                html += `<button class="vote-btn vote-a" onclick="doVote(${idx}, ${mi}, 0)" title="Голосовать за ${escapeHtml(m.a.name)}">▲</button>`;
-                html += `<span class="vs-divider">VS</span>`;
-                html += `<button class="vote-btn vote-b" onclick="doVote(${idx}, ${mi}, 1)" title="Голосовать за ${escapeHtml(m.b.name)}">▲</button>`;
-            } else if (m.done) {
-                html += `<span class="final-sc">${m.votesA} : ${m.votesB}</span>`;
-            } else if (!user) {
-                html += `<span class="vs-locked">🔒 <span class="vs-divider">VS</span></span>`;
-            } else if (hasVoted || (user && user.votes && user.votes.some(v => v.tournamentId === tournament.id && v.roundIdx === idx && v.matchIdx === mi))) {
-                html += `<span class="vs-voted">✓ <span class="vs-divider">VS</span></span>`;
-            } else {
-                html += `<span class="vs-divider">VS</span>`;
-            }
-            
-            html += '</div>';
-            
-            // Игрок B
-            html += renderPlayer(m.b, wb, pctB, m.votesB, total, false);
-            
-            // ===== КОММЕНТАРИИ К МАТЧУ (ВСТАВЛЯЙ СЮДА) =====
-            let matchComments = renderComments(tournament.id, idx, mi);
-            html += `
-                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-                    <details style="cursor:pointer;">
-                        <summary style="color:var(--text-3);font-size:12px;font-weight:600;list-style:none;">
-                            💬 Комментарии (${getComments(tournament.id, idx, mi).length})
-                        </summary>
-                        <div id="comments_${idx}_${mi}" style="margin-top:12px;">
-                            ${matchComments}
-                        </div>
-                    </details>
+
+(function () {
+
+
+
+    function escapeHTML(text) {
+
+        if(text === null || text === undefined) {
+            return "";
+        }
+
+
+        return String(text)
+            .replaceAll("&","&amp;")
+            .replaceAll("<","&lt;")
+            .replaceAll(">","&gt;")
+            .replaceAll('"',"&quot;")
+            .replaceAll("'","&#039;");
+
+    }
+
+
+
+
+
+
+
+
+    function playerName(player) {
+
+
+        if(!player) {
+
+            return "—";
+
+        }
+
+
+
+        if(typeof player === "string") {
+
+            return player;
+
+        }
+
+
+
+        return (
+            player.name ||
+            player.username ||
+            "Без имени"
+        );
+
+
+    }
+
+
+
+
+
+
+
+
+
+    function renderMatch(match) {
+
+
+        if(!match) {
+            return "";
+        }
+
+
+
+
+        const p1 =
+            playerName(
+                match.player1
+            );
+
+
+
+        const p2 =
+            playerName(
+                match.player2
+            );
+
+
+
+
+
+        const finished =
+            match.finished
+            ? "finished"
+            : "";
+
+
+
+
+
+        const winner =
+            match.winner;
+
+
+
+
+
+        return `
+
+        <div class="match ${finished}">
+
+
+            <div class="
+            player 
+            ${winner === match.player1 ? "winner" : ""}
+            ">
+
+
+                <span>
+                    ${escapeHTML(p1)}
+                </span>
+
+
+                <b>
+                    ${match.votes1 || 0}
+                </b>
+
+
+            </div>
+
+
+
+
+
+            <div class="
+            player
+            ${winner === match.player2 ? "winner" : ""}
+            ">
+
+
+                <span>
+                    ${escapeHTML(p2)}
+                </span>
+
+
+                <b>
+                    ${match.votes2 || 0}
+                </b>
+
+
+            </div>
+
+
+
+
+
+            ${
+                !finished
+                ?
+                `
+
+                <div class="vote-buttons">
+
+
+                    <button
+                    onclick="Bracket.vote('${match.id}',1)">
+                    Голос
+                    </button>
+
+
+                    <button
+                    onclick="Bracket.vote('${match.id}',2)">
+                    Голос
+                    </button>
+
+
                 </div>
-            `;
-            // ===== КОНЕЦ КОММЕНТАРИЕВ =====
-            
-            html += '</div>'; // закрываем bracket-match
-        });
-        
-        html += '</div>'; // закрываем round-col
-    });
-    
-    el.innerHTML = html;
-}
 
-function renderPlayer(player, isWinner, pct, votes, total, isA) {
-    let cls = 'bm-player';
-    if (isWinner) cls += ' winner';
-    if (player.isBye) cls += ' bye';
-    
-    let img = player.url !== '#' && player.url ? 
-        `<img src="${player.url}" alt="" onerror="this.style.display='none'">` : 
-        `<div style="width:40px;height:40px;border-radius:50%;background:var(--bg-4);display:flex;align-items:center;justify-content:center;font-size:18px;">${player.name.charAt(0)}</div>`;
-    
-    let barCls = isA ? 'bm-fill' : 'bm-fill bm-fill-b';
-    let voteText = total > 0 ? ` (${pct}%)` : '';
-    
-    return `
-        <div class="${cls}">
-            ${img}
-            <div class="bm-info">
-                <span class="bm-name">${player.name}</span>
-                ${!player.isBye ? `
-                    <div class="bm-bar">
-                        <div class="${barCls}" style="width:${pct}%"></div>
-                    </div>
-                ` : ''}
-            </div>
-            <div class="bm-score">
-                <b>${votes}</b><small>${voteText}</small>
-            </div>
+                `
+                :
+                `
+                <div class="closed">
+                    Завершён
+                </div>
+                `
+            }
+
+
+
+
         </div>
-    `;
-}
 
-function escapeHtml(text) {
-    let div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+        `;
+
+
+
+    }
+
+
+
+
+
+
+
+
+
+    function renderRound(round,container) {
+
+
+        const matches =
+            Bracket.getMatches(
+                round
+            );
+
+
+
+        if(!container) {
+            return;
+        }
+
+
+
+
+        if(!matches.length) {
+
+
+            container.innerHTML =
+            `
+
+            <div class="empty">
+                Нет матчей
+            </div>
+
+            `;
+
+
+            return;
+
+        }
+
+
+
+
+
+
+        container.innerHTML =
+            matches
+            .map(
+                renderMatch
+            )
+            .join("");
+
+
+
+    }
+
+
+
+
+
+
+
+
+
+    function renderBracket() {
+
+
+        const root =
+            document.querySelector(
+                "#bracket"
+            );
+
+
+
+        if(!root) {
+            return;
+        }
+
+
+
+
+
+
+        const db =
+            DB.getDB();
+
+
+
+        const rounds =
+            [
+                ...new Set(
+                    db.matches.map(
+                        m =>
+                        m.round
+                    )
+                )
+            ]
+            .sort(
+                (a,b)=>a-b
+            );
+
+
+
+
+
+
+        if(!rounds.length) {
+
+
+            root.innerHTML =
+            `
+
+            <p>
+            Турнир ещё не начат
+            </p>
+
+            `;
+
+
+            return;
+
+        }
+
+
+
+
+
+
+        root.innerHTML =
+        rounds
+        .map(round => {
+
+
+            const matches =
+                Bracket
+                .getMatches(round);
+
+
+
+            return `
+
+
+            <section class="round">
+
+
+                <h3>
+                    Раунд ${round}
+                </h3>
+
+
+
+                ${
+                    matches
+                    .map(
+                        renderMatch
+                    )
+                    .join("")
+                }
+
+
+            </section>
+
+
+            `;
+
+
+        })
+        .join("");
+
+
+
+    }
+
+
+
+
+
+
+
+    window.renderBracket =
+        renderBracket;
+
+
+
+})();
