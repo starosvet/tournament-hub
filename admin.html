@@ -20,7 +20,7 @@
                 <a href="history.html">История</a>
                 <a href="chat.html">💬 Чат</a>
                 <a href="rules.html">Правила</a>
-                <a href="admin.html" class="active">Управление</a>
+                <a href="admin.html" class="active">⚙️ Управление</a>
             </nav>
             <div class="nav-user" id="navUser"></div>
         </div>
@@ -34,7 +34,11 @@
             <input type="password" id="adminPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkAdmin()">
             <button class="btn-admin" style="width:100%;" onclick="checkAdmin()">Войти</button>
             <div class="error" id="adminError"></div>
-            <p style="margin-top:20px;"><a href="index.html" style="color:var(--text-3);">← На главную</a></p>
+            <p style="margin-top:20px;color:var(--text-3);font-size:13px;">
+                💡 Если вы вошли через Fandom как <b>Melanthe Weber</b>,<br>
+                админка откроется автоматически.
+            </p>
+            <p style="margin-top:12px;"><a href="index.html" style="color:var(--text-3);">← На главную</a></p>
         </div>
 
         <!-- Панель управления -->
@@ -71,6 +75,44 @@
                     <button class="btn-primary" onclick="saveTheme()">💾 Сохранить тему</button>
                 </div>
 
+                <!-- Управление субъектами -->
+                <div class="admin-card" style="grid-column:1 / -1;">
+                    <h3>📦 Субъекты турнира</h3>
+                    <p class="hint">Добавляйте статьи, персонажей, картинки, оружие — любые объекты для голосования.</p>
+                    
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+                        <div>
+                            <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Тип субъекта</label>
+                            <select id="subjectType" style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-size:14px;">
+                                <!-- Заполняется JS -->
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Название</label>
+                            <input type="text" id="subjectName" placeholder="Название объекта" style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-size:14px;">
+                        </div>
+                        <div>
+                            <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">URL изображения</label>
+                            <input type="text" id="subjectUrl" placeholder="https://..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-size:14px;">
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Описание (опционально)</label>
+                        <input type="text" id="subjectDesc" placeholder="Краткое описание..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-size:14px;">
+                    </div>
+                    
+                    <div class="btn-row">
+                        <button class="btn-primary" onclick="addSubject()">➕ Добавить субъект</button>
+                        <button class="btn-secondary" onclick="loadSubjectsFromFile()">📁 Загрузить из файла</button>
+                        <button class="btn-secondary" onclick="clearAllSubjects()">🧹 Очистить все</button>
+                    </div>
+                    
+                    <div id="subjectsList" style="margin-top:20px;">
+                        <!-- Список субъектов -->
+                    </div>
+                </div>
+
                 <!-- Управление турниром -->
                 <div class="admin-card">
                     <h3>🏆 Турнир</h3>
@@ -83,18 +125,6 @@
                         <button class="btn-danger" onclick="deleteTournament()">🗑 Удалить</button>
                     </div>
                     <p class="hint" id="tournamentStatus">Нет активного турнира</p>
-                </div>
-
-                <!-- Участники -->
-                <div class="admin-card">
-                    <h3>👤 Участники</h3>
-                    <div class="btn-row">
-                        <button class="btn-primary" onclick="addParticipant()">➕ Добавить</button>
-                        <button class="btn-secondary" onclick="loadFromFile()">📁 Загрузить из файла</button>
-                    </div>
-                    <div id="participantsList" style="margin-top:16px;max-height:300px;overflow-y:auto;">
-                        <!-- Список участников -->
-                    </div>
                 </div>
 
                 <!-- Настройки голосования -->
@@ -115,7 +145,7 @@
                 </div>
 
                 <!-- Модерация -->
-                <div class="admin-card danger-zone">
+                <div class="admin-card danger-zone" style="grid-column:1 / -1;">
                     <h3>🛡️ Модерация</h3>
                     <div class="btn-row">
                         <button class="btn-secondary" onclick="clearAllVotes()">🧹 Очистить все голоса</button>
@@ -127,8 +157,8 @@
                     </div>
                     <p class="hint">⚠️ Опасные операции! Действия необратимы.</p>
                     
-                    <h4 style="margin-top:20px;margin-bottom:12px;color:var(--text-2);font-size:14px;">Зарегистрированные пользователи</h4>
-                    <div id="usersList" style="max-height:200px;overflow-y:auto;font-size:13px;">
+                    <h4 style="margin-top:20px;margin-bottom:12px;color:var(--text-2);font-size:14px;">Пользователи</h4>
+                    <div id="usersList" style="max-height:300px;overflow-y:auto;font-size:13px;">
                         <!-- Список пользователей -->
                     </div>
                 </div>
@@ -142,10 +172,7 @@
             let pass = document.getElementById('adminPass').value;
             let res = loginAdmin(pass);
             if (res.ok) {
-                document.getElementById('adminLogin').classList.add('hidden');
-                document.getElementById('adminPanel').classList.remove('hidden');
-                document.getElementById('adminPanel').classList.add('page-enter');
-                loadAdminData();
+                showAdminPanel();
             } else {
                 document.getElementById('adminError').textContent = res.err;
                 document.getElementById('adminPass').value = '';
@@ -153,11 +180,19 @@
             }
         }
 
-        // Авто-проверка если уже залогинен
-        if (isAdmin()) {
+        function showAdminPanel() {
             document.getElementById('adminLogin').classList.add('hidden');
             document.getElementById('adminPanel').classList.remove('hidden');
+            document.getElementById('adminPanel').classList.add('page-enter');
             loadAdminData();
+        }
+
+        // Авто-проверка: если пользователь — Melanthe Weber (админ)
+        let currentUser = getCurrentUser();
+        if (currentUser && currentUser.fandomName === "Melanthe Weber") {
+            showAdminPanel();
+        } else if (isAdmin()) {
+            showAdminPanel();
         }
 
         function loadAdminData() {
@@ -172,14 +207,20 @@
             let theme = db.settings?.theme || 'amber';
             document.getElementById('theme-' + theme).style.borderColor = '#fff';
             
+            // Типы субъектов
+            let typeSelect = document.getElementById('subjectType');
+            typeSelect.innerHTML = db.subjectTypes.map(t => 
+                `<option value="${t.id}">${t.icon} ${t.name}</option>`
+            ).join('');
+            
             // Турнир
             let t = getActiveTournament(db);
             document.getElementById('tournamentStatus').textContent = t 
                 ? `Активен: ${t.name} (Раунд ${t.currentRound + 1}/${t.rounds.length})`
                 : 'Нет активного турнира';
             
-            // Участники
-            renderParticipants(db);
+            // Субъекты
+            renderSubjects(db);
             
             // Настройки голосования
             if (t) {
@@ -209,7 +250,6 @@
             db.settings.theme = color;
             saveDB(db);
             
-            // Сброс рамок
             ['amber','blue','purple','green','pink'].forEach(c => {
                 document.getElementById('theme-' + c).style.borderColor = 'transparent';
             });
@@ -220,15 +260,134 @@
             toast('Тема сохранена! Перезагрузите страницу.');
         }
 
-        function createNewTournament() {
+        function addSubject() {
+            let name = document.getElementById('subjectName').value.trim();
+            let url = document.getElementById('subjectUrl').value.trim() || '#';
+            let typeId = document.getElementById('subjectType').value;
+            let desc = document.getElementById('subjectDesc').value.trim();
+            
+            if (!name) { toast('Введите название'); return; }
+            
             let db = getDB();
-            if (!db.players.length) {
-                toast('Сначала добавьте участников!');
+            let typeInfo = db.subjectTypes.find(t => t.id === typeId);
+            
+            db.subjects.push({
+                id: 's_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                name: name,
+                url: url,
+                type: typeInfo?.name || 'Другое',
+                typeId: typeId,
+                wins: 0,
+                description: desc,
+                tags: []
+            });
+            
+            saveDB(db);
+            document.getElementById('subjectName').value = '';
+            document.getElementById('subjectUrl').value = '';
+            document.getElementById('subjectDesc').value = '';
+            renderSubjects(db);
+            toast('Субъект добавлен!');
+        }
+
+        function removeSubject(id) {
+            let db = getDB();
+            db.subjects = db.subjects.filter(s => s.id !== id);
+            saveDB(db);
+            renderSubjects(db);
+        }
+
+        function renderSubjects(db) {
+            let el = document.getElementById('subjectsList');
+            if (!db.subjects.length) {
+                el.innerHTML = '<p style="color:var(--text-3);font-size:13px;">Нет субъектов</p>';
                 return;
             }
-            let t = createBracket(db.players);
+            
+            // Группируем по типам
+            let byType = {};
+            db.subjects.forEach(s => {
+                if (!byType[s.typeId]) byType[s.typeId] = [];
+                byType[s.typeId].push(s);
+            });
+            
+            let html = '';
+            Object.entries(byType).forEach(([typeId, subjects]) => {
+                let typeInfo = db.subjectTypes.find(t => t.id === typeId);
+                html += `<h4 style="color:var(--accent);font-size:14px;margin:16px 0 8px;">${typeInfo?.icon || '⭐'} ${typeInfo?.name || 'Другое'} (${subjects.length})</h4>`;
+                html += `<div style="display:flex;flex-direction:column;gap:8px;">`;
+                
+                subjects.forEach(s => {
+                    let img = s.url !== '#' && s.url ? 
+                        `<img src="${s.url}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--bg-4);" onerror="this.style.display='none'">` :
+                        `<div style="width:40px;height:40px;border-radius:8px;background:var(--bg-4);display:flex;align-items:center;justify-content:center;font-size:18px;">${typeInfo?.icon || '⭐'}</div>`;
+                    
+                    html += `
+                        <div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg);border-radius:12px;border:1px solid var(--border-2);">
+                            ${img}
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-weight:600;font-size:14px;">${escapeHtml(s.name)}</div>
+                                ${s.description ? `<div style="color:var(--text-3);font-size:12px;">${escapeHtml(s.description)}</div>` : ''}
+                            </div>
+                            <button onclick="removeSubject('${s.id}')" style="background:var(--red);color:white;border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;">×</button>
+                        </div>
+                    `;
+                });
+                
+                html += `</div>`;
+            });
+            
+            el.innerHTML = html;
+        }
+
+        function loadSubjectsFromFile() {
+            fetch('data/players.txt')
+                .then(r => r.text())
+                .then(text => {
+                    let lines = text.split('\n').filter(l => l.trim());
+                    let db = getDB();
+                    let defaultType = document.getElementById('subjectType').value;
+                    let typeInfo = db.subjectTypes.find(t => t.id === defaultType);
+                    
+                    lines.forEach(line => {
+                        let parts = line.split('|');
+                        db.subjects.push({
+                            id: 's_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            name: parts[0].trim(),
+                            url: parts[1]?.trim() || '#',
+                            type: typeInfo?.name || 'Персонаж',
+                            typeId: defaultType,
+                            wins: 0,
+                            description: '',
+                            tags: []
+                        });
+                    });
+                    
+                    saveDB(db);
+                    renderSubjects(db);
+                    toast('Загружено ' + lines.length + ' субъектов!');
+                })
+                .catch(() => toast('Ошибка загрузки файла'));
+        }
+
+        function clearAllSubjects() {
+            if (!confirm('Удалить ВСЕ субъекты?')) return;
+            let db = getDB();
+            db.subjects = [];
+            saveDB(db);
+            renderSubjects(db);
+            toast('Все субъекты удалены');
+        }
+
+        function createNewTournament() {
+            let db = getDB();
+            if (!db.subjects.length) {
+                toast('Сначала добавьте субъекты!');
+                return;
+            }
+            let t = createBracket(db.subjects);
             t.name = "Турнир #" + (db.tournaments.length + 1);
-            t.description = "Автоматически созданный турнир";
+            t.description = "Тип: " + (db.subjects[0]?.type || 'Разное');
             t.config = { voteDurationHours: 24, minVotes: 1, allowGuest: true };
             db.tournaments.push(t);
             db.activeTournamentId = t.id;
@@ -242,7 +401,7 @@
             let t = getActiveTournament(db);
             if (!t) { toast('Нет активного турнира'); return; }
             
-            let res = finalizeRound(t, db.players);
+            let res = finalizeRound(t, db.subjects);
             if (!res.ok) {
                 toast(res.err);
                 return;
@@ -256,7 +415,7 @@
         }
 
         function resetTournament() {
-            if (!confirm('Сбросить текущий турнир? Все голоса будут удалены.')) return;
+            if (!confirm('Сбросить текущий турнир?')) return;
             let db = getDB();
             let t = getActiveTournament(db);
             if (!t) return;
@@ -294,66 +453,6 @@
             loadAdminData();
         }
 
-        function addParticipant() {
-            let name = prompt('Имя участника:');
-            if (!name) return;
-            let url = prompt('URL аватарки (или оставьте пустым):') || '#';
-            let db = getDB();
-            db.players.push({
-                id: 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                name: name,
-                url: url,
-                wins: 0
-            });
-            saveDB(db);
-            renderParticipants(db);
-            toast('Участник добавлен!');
-        }
-
-        function removeParticipant(id) {
-            let db = getDB();
-            db.players = db.players.filter(p => p.id !== id);
-            saveDB(db);
-            renderParticipants(db);
-        }
-
-        function renderParticipants(db) {
-            let el = document.getElementById('participantsList');
-            if (!db.players.length) {
-                el.innerHTML = '<p style="color:var(--text-3);font-size:13px;">Нет участников</p>';
-                return;
-            }
-            el.innerHTML = db.players.map(p => `
-                <div class="participant-row">
-                    <img src="${p.url !== '#' ? p.url : ''}" style="width:32px;height:32px;border-radius:50%;background:var(--bg-4);object-fit:cover;" onerror="this.style.display='none'">
-                    <input value="${p.name}" readonly style="flex:1;">
-                    <button onclick="removeParticipant('${p.id}')">×</button>
-                </div>
-            `).join('');
-        }
-
-        function loadFromFile() {
-            fetch('data/players.txt')
-                .then(r => r.text())
-                .then(text => {
-                    let lines = text.split('\n').filter(l => l.trim());
-                    let db = getDB();
-                    lines.forEach(line => {
-                        let parts = line.split('|');
-                        db.players.push({
-                            id: 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                            name: parts[0].trim(),
-                            url: parts[1]?.trim() || '#',
-                            wins: 0
-                        });
-                    });
-                    saveDB(db);
-                    renderParticipants(db);
-                    toast('Загружено ' + lines.length + ' участников!');
-                })
-                .catch(() => toast('Ошибка загрузки файла'));
-        }
-
         function saveVoteSettings() {
             let db = getDB();
             let t = getActiveTournament(db);
@@ -371,7 +470,7 @@
         }
 
         function clearAllVotes() {
-            if (!confirm('Очистить ВСЕ голоса во всех турнирах?')) return;
+            if (!confirm('Очистить ВСЕ голоса?')) return;
             let db = getDB();
             db.tournaments.forEach(t => resetVotes(t.id));
             db.users.forEach(u => { u.votes = []; u.lastVote = null; });
@@ -380,8 +479,8 @@
         }
 
         function resetAllData() {
-            if (!confirm('☢️ УДАЛИТЬ ВСЕ ДАННЫЕ? Это необратимо!')) return;
-            if (prompt('Введите DELETE для подтверждения:') !== 'DELETE') return;
+            if (!confirm('☢️ УДАЛИТЬ ВСЕ ДАННЫЕ?')) return;
+            if (prompt('Введите DELETE:') !== 'DELETE') return;
             localStorage.removeItem(DB_KEY);
             localStorage.clear();
             location.reload();
@@ -393,16 +492,22 @@
                 el.innerHTML = '<p style="color:var(--text-3);">Нет пользователей</p>';
                 return;
             }
-            el.innerHTML = db.users.map(u => `
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
-                    <span>
-                        ${u.authType === 'fandom' ? '✓' : '👤'} 
-                        <b>${escapeHtml(u.displayName || u.fandomName)}</b>
-                        <span style="color:var(--text-3);font-size:11px;">${u.authType}</span>
-                    </span>
-                    <span style="color:var(--text-3);font-size:12px;">${u.votes?.length || 0} голосов</span>
-                </div>
-            `).join('');
+            
+            el.innerHTML = db.users.map(u => {
+                let roleBadge = u.role === 'admin' ? '👑' : u.role === 'moderator' ? '🛡️' : (u.authType === 'fandom' ? '✓' : '👤');
+                let roleColor = u.role === 'admin' ? 'var(--accent)' : u.role === 'moderator' ? 'var(--blue)' : 'var(--text-3)';
+                
+                return `
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+                        <span>
+                            <span style="color:${roleColor};">${roleBadge}</span>
+                            <a href="profile.html?id=${u.id}" style="color:var(--text);text-decoration:none;font-weight:600;">${escapeHtml(u.displayName || u.fandomName)}</a>
+                            <span style="color:var(--text-3);font-size:11px;">${u.authType}</span>
+                        </span>
+                        <span style="color:var(--text-3);font-size:12px;">${u.votes?.length || 0} голосов</span>
+                    </div>
+                `;
+            }).join('');
         }
 
         function importBackup() {
@@ -424,6 +529,17 @@
                 reader.readAsText(file);
             };
             input.click();
+        }
+
+        function updateSiteBranding() {
+            let db = getDB();
+            let name = db.settings?.siteName || 'Tournament Hub';
+            let logo = db.settings?.siteLogo || '🏆';
+            document.title = name + ' — Управление';
+            let logoLink = document.getElementById('siteLogoLink');
+            if (logoLink) logoLink.textContent = logo + ' ' + name;
+            let ft = document.getElementById('footerText');
+            if (ft) ft.textContent = '© ' + new Date().getFullYear() + ' ' + name;
         }
 
         initAuth();
