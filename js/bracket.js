@@ -1,4 +1,4 @@
-// js/bracket.js — логика сетки и голосования v2 (с защитой)
+// js/bracket.js — логика сетки v3 (победы и Elo у субъектов)
 
 function voteInMatch(tournament, roundIdx, matchIdx, side) {
     let user = getCurrentUser();
@@ -6,7 +6,6 @@ function voteInMatch(tournament, roundIdx, matchIdx, side) {
         return { ok: false, err: "Войдите, чтобы голосовать" };
     }
 
-    // Анти-накрутка: проверяем в базе
     if (!canUserVote(user.id, tournament.id, roundIdx, matchIdx)) {
         return { ok: false, err: "Вы уже голосовали в этом матче" };
     }
@@ -24,15 +23,13 @@ function voteInMatch(tournament, roundIdx, matchIdx, side) {
     if (side === 0) match.votesA++;
     else match.votesB++;
 
-    // Записываем голос в базу
     recordVote(user.id, tournament.id, roundIdx, matchIdx, side);
     
     return { ok: true };
 }
 
-// ЗАЩИТА: только админ может завершать раунд досрочно
-function finalizeRound(tournament, allPlayers) {
-    // Проверка прав администратора
+// Завершение раунда (только админ)
+function finalizeRound(tournament, subjects) {
     if (!isAdmin()) {
         return { ok: false, err: "Только администратор может завершать раунд", tournament };
     }
@@ -44,6 +41,7 @@ function finalizeRound(tournament, allPlayers) {
     round.isActive = false;
 
     let winners = [];
+    let db = getDB();
 
     for (let m of round.matches) {
         if (m.a.isBye) { m.winner = m.b; m.done = true; winners.push(m.b); continue; }
@@ -55,30 +53,27 @@ function finalizeRound(tournament, allPlayers) {
 
         m.done = true;
 
-        let origWinnerId = tournament._playerMap ? tournament._playerMap[m.winner.id] : null;
-        if (origWinnerId) {
-            let orig = allPlayers.find(p => p.id === origWinnerId);
-            if (orig) orig.wins = (orig.wins || 0) + 1;
-        } else {
-            let orig = allPlayers.find(p => p.name === m.winner.name);
-            if (orig) orig.wins = (orig.wins || 0) + 1;
+        // +1 победа субъекту
+        let winnerSubject = db.subjects.find(s => s.id === m.winner.id) || 
+                           db.subjects.find(s => s.name === m.winner.name);
+        if (winnerSubject) {
+            winnerSubject.wins = (winnerSubject.wins || 0) + 1;
+        }
+
+        // +1 победа проигравшему (для статистики участия)
+        let loser = m.winner.id === m.a.id ? m.b : m.a;
+        let loserSubject = db.subjects.find(s => s.id === loser.id) ||
+                          db.subjects.find(s => s.name === loser.name);
+
+        // Обновляем Elo
+        if (winnerSubject && loserSubject) {
+            updateEloAfterMatch(winnerSubject.id, loserSubject.id);
         }
 
         winners.push(m.winner);
-        let winnerId = tournament._playerMap ? tournament._playerMap[m.winner.id] : null;
-let loserId = tournament._playerMap ? tournament._playerMap[loser.id] : null;
-if (!winnerId) {
-    let orig = allPlayers.find(p => p.name === m.winner.name);
-    if (orig) winnerId = orig.id;
-}
-if (!loserId) {
-    let orig = allPlayers.find(p => p.name === loser.name);
-    if (orig) loserId = orig.id;
-}
-if (winnerId && loserId) {
-    updateElo(winnerId, loserId);
-}
     }
+
+    saveDB(db);
 
     if (tournament.currentRound + 1 < tournament.rounds.length) {
         let next = tournament.rounds[tournament.currentRound + 1];
@@ -89,11 +84,11 @@ if (winnerId && loserId) {
 
         next.matches.forEach(m => {
             if (m.a.name !== "—" && m.a.name !== "TBD") {
-                let orig = allPlayers.find(op => op.name === m.a.name);
+                let orig = db.subjects.find(s => s.name === m.a.name);
                 if (orig) tournament._playerMap[m.a.id] = orig.id;
             }
             if (m.b.name !== "—" && m.b.name !== "TBD") {
-                let orig = allPlayers.find(op => op.name === m.b.name);
+                let orig = db.subjects.find(s => s.name === m.b.name);
                 if (orig) tournament._playerMap[m.b.id] = orig.id;
             }
         });
@@ -106,19 +101,20 @@ if (winnerId && loserId) {
     return { ok: true, tournament };
 }
 
-// Автозавершение по таймеру (без проверки админа — это системное)
-function autoFinalizeRound(tournament, allPlayers) {
+// Автозавершение по таймеру
+function autoFinalizeRound(tournament) {
     let round = tournament.rounds[tournament.currentRound];
     if (!round || !round.isActive) return tournament;
     
-    let timeLeft = getTimeLeft(round.startedAt, tournament.config.voteDurationHours || 24);
+    let timeLeft = getTimeLeft(round.startedAt, tournament.config?.voteDurationHours || 24);
     if (timeLeft > 0) return tournament;
     
-    // Время вышло — завершаем автоматически
     round.endedAt = new Date().toISOString();
     round.isActive = false;
 
     let winners = [];
+    let db = getDB();
+
     for (let m of round.matches) {
         if (m.a.isBye) { m.winner = m.b; m.done = true; winners.push(m.b); continue; }
         if (m.b.isBye) { m.winner = m.a; m.done = true; winners.push(m.a); continue; }
@@ -128,8 +124,26 @@ function autoFinalizeRound(tournament, allPlayers) {
         else m.winner = m.a;
 
         m.done = true;
+
+        // +1 победа субъекту
+        let winnerSubject = db.subjects.find(s => s.id === m.winner.id) || 
+                           db.subjects.find(s => s.name === m.winner.name);
+        if (winnerSubject) {
+            winnerSubject.wins = (winnerSubject.wins || 0) + 1;
+        }
+
+        let loser = m.winner.id === m.a.id ? m.b : m.a;
+        let loserSubject = db.subjects.find(s => s.id === loser.id) ||
+                          db.subjects.find(s => s.name === loser.name);
+
+        if (winnerSubject && loserSubject) {
+            updateEloAfterMatch(winnerSubject.id, loserSubject.id);
+        }
+
         winners.push(m.winner);
     }
+
+    saveDB(db);
 
     if (tournament.currentRound + 1 < tournament.rounds.length) {
         let next = tournament.rounds[tournament.currentRound + 1];
