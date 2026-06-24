@@ -23,7 +23,8 @@
     const pending = {
       code: code,
       fandomName: fandomName,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      verified: false
     };
     localStorage.setItem("th_fandom_pending", JSON.stringify(pending));
   }
@@ -46,6 +47,14 @@
 
   function clearPendingAuth() {
     localStorage.removeItem("th_fandom_pending");
+  }
+
+  function markPendingVerified() {
+    const pending = getPendingAuth();
+    if (pending) {
+      pending.verified = true;
+      localStorage.setItem("th_fandom_pending", JSON.stringify(pending));
+    }
   }
 
   /* ---------- API ---------- */
@@ -77,13 +86,16 @@
     const pending = getPendingAuth();
     if (!pending) return { ok: false, error: "Код устарел. Сгенерируйте новый." };
 
-    // Ищем правку с кодом в комментарии
+    // Ищем правку с кодом в комментарии (с проверкой границ слов)
     for (const rc of changes) {
       const comment = rc.comment || "";
-      if (comment.includes(code)) {
+      // Проверяем, что код стоит отдельно (с пробелами/началом/концом строки)
+      const regex = new RegExp("(^|\\s)" + code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(\\s|$)");
+      if (regex.test(comment)) {
         // Проверяем, что правка свежая (не старше 15 минут от создания кода)
         const editTime = new Date(rc.timestamp).getTime();
         if (editTime >= pending.createdAt - 60000) { // ±1 минута погрешность
+          markPendingVerified();
           return { ok: true, fandomName: rc.user, title: rc.title };
         }
       }
@@ -134,7 +146,6 @@
       const result = await verifyCode(pending.fandomName, pending.code);
 
       if (result.ok) {
-        clearPendingAuth();
         if (onSuccess) onSuccess(result);
         return;
       }
@@ -151,12 +162,31 @@
     doCheck();
   }
 
+  // Проверить, является ли fandomName админом (из DB.settings)
+  function isAdminFandomName(fandomName) {
+    const db = DB.getDB();
+    const admins = db.settings?.fandomAdmins || [];
+    return admins.includes(fandomName);
+  }
+
   // Завершить авторизацию — создать/обновить пользователя
+  // ИСПРАВЛЕНО: требуем verified pending auth
   function completeFandomAuth(fandomName, isAdmin) {
+    const pending = getPendingAuth();
+    if (!pending || !pending.verified) {
+      return { ok: false, error: "Код не подтверждён. Пройдите проверку через Fandom." };
+    }
+    if (pending.fandomName !== fandomName) {
+      return { ok: false, error: "Несоответствие имени пользователя." };
+    }
+
     const db = DB.getDB();
 
     // Ищем существующего пользователя по fandomName
     let user = db.users.find(u => u.fandomName === fandomName);
+
+    // Определяем админство из DB.settings, а не хардкода
+    const shouldBeAdmin = isAdmin || isAdminFandomName(fandomName);
 
     if (!user) {
       // Создаём нового
@@ -166,7 +196,7 @@
         password: null, // нет пароля для Fandom-юзеров
         created: Date.now(),
         votes: 0,
-        role: isAdmin ? "admin" : "user",
+        role: shouldBeAdmin ? "admin" : "user",
         authType: "fandom",
         displayName: fandomName,
         fandomName: fandomName
@@ -177,12 +207,14 @@
       // Обновляем существующего
       user.authType = "fandom";
       user.fandomName = fandomName;
+      if (shouldBeAdmin) user.role = "admin";
       DB.saveDB(db);
     }
 
     DB.setCurrentUser(user);
+    clearPendingAuth();
 
-    if (isAdmin) {
+    if (shouldBeAdmin) {
       localStorage.setItem("th_admin", "yes");
     }
 
@@ -204,7 +236,8 @@
     completeFandomAuth,
     isFandomUser,
     getPendingAuth,
-    clearPendingAuth
+    clearPendingAuth,
+    isAdminFandomName
   };
 
 })();

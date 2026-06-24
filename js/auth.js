@@ -2,10 +2,11 @@
 (function () {
   const ADMIN_PASSWORD = "admin123";
 
+  // ИСПРАВЛЕНО: более стойкий hash (djb2 вместо простой суммы)
   function hash(str) {
-    let out = 0;
+    let out = 5381;
     for (let i = 0; i < str.length; i++) {
-      out = ((out << 5) - out) + str.charCodeAt(i);
+      out = ((out << 5) + out) + str.charCodeAt(i); // out * 33 + c
       out |= 0;
     }
     return String(out);
@@ -21,9 +22,21 @@
       .replace(/'/g, "&#39;");
   }
 
+  // ИСПРАВЛЕНО: валидация пароля
+  function validatePassword(password) {
+    if (!password || password.length < 3) {
+      return { ok: false, error: "Пароль должен быть минимум 3 символа" };
+    }
+    return { ok: true };
+  }
+
   function register(username, password) {
-    if (!username || !password) {
-      return { success: false, error: "Заполни все поля" };
+    if (!username || !username.trim()) {
+      return { success: false, error: "Введите никнейм" };
+    }
+    const passCheck = validatePassword(password);
+    if (!passCheck.ok) {
+      return { success: false, error: passCheck.error };
     }
 
     const db = DB.getDB();
@@ -80,7 +93,6 @@
 
   /* ---------- ГОЛОСОВАНИЕ С ПРИВЯЗКОЙ К ТУРНИРУ ---------- */
 
-  // Вспомогательная: получить tournamentId по matchId
   function getTournamentIdByMatch(matchId) {
     const db = DB.getDB();
     for (const t of (db.tournaments || [])) {
@@ -93,7 +105,6 @@
     return null;
   }
 
-  // Ключ голоса: vote_<tournamentId>_<matchId>[_<userId>]
   function buildVoteKey(matchId) {
     const tournamentId = getTournamentIdByMatch(matchId);
     const base = tournamentId ? ("vote_" + tournamentId + "_" + matchId) : ("vote_" + matchId);
@@ -119,17 +130,33 @@
     }
   }
 
-  // Очистка старых ключей голосования (миграция)
+  // Миграция старых ключей голосования
   function migrateOldVotes() {
     const keys = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (k && k.startsWith("vote_") && !k.includes("_")) {
-        // Старый формат: vote_<matchId> без tournamentId
         keys.push(k);
       }
     }
     keys.forEach(k => localStorage.removeItem(k));
+  }
+
+  // ИСПРАВЛЕНО: админы из DB.settings.fandomAdmins
+  function checkFandomAutoAdmin() {
+    const user = DB.getCurrentUser();
+    if (!user || !user.fandomName) return;
+
+    const db = DB.getDB();
+    const admins = db.settings?.fandomAdmins || [];
+    if (admins.includes(user.fandomName)) {
+      localStorage.setItem("th_admin", "yes");
+      user.role = "admin";
+      DB.updateDB(db => {
+        const u = db.users.find(x => x.id === user.id);
+        if (u) u.role = "admin";
+      });
+    }
   }
 
   function renderNavUser() {
@@ -144,13 +171,6 @@
       `;
     } else {
       box.innerHTML = `<a href="login.html" style="color:var(--text-3);font-size:13px;">Войти</a>`;
-    }
-  }
-
-  function checkFandomAutoAdmin() {
-    const user = DB.getCurrentUser();
-    if (user && user.fandomName === "Melanthe Weber") {
-      localStorage.setItem("th_admin", "yes");
     }
   }
 
@@ -171,14 +191,13 @@
     renderNavUser,
     checkFandomAutoAdmin,
     initAuth,
-    // Вспомогательные для внешнего использования
     getTournamentIdByMatch,
     buildVoteKey,
     migrateOldVotes
   };
 
   window.escapeHTML = escapeHTML;
-  window.escapeHtml = escapeHTML; // legacy admin code uses this spelling
+  window.escapeHtml = escapeHTML;
   window.loginAdmin = loginAdmin;
   window.initAuth = initAuth;
 })();

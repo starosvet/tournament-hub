@@ -28,13 +28,13 @@
 
     return `
       <div class="bracket-match ${match.finished ? "done" : ""}">
-        <button class="player ${p1Win ? "winner" : ""} ${isActive && p1 && p2 && !match.finished ? "can-vote" : ""}" ${isActive && p1 && p2 && !match.finished ? `onclick="Bracket.vote('${match.id}', 1)"` : "disabled"}>
+        <button class="player ${p1Win ? "winner" : ""} ${isActive && p1 && p2 && !match.finished ? "can-vote" : ""}" ${isActive && p1 && p2 && !match.finished ? `onclick="Bracket.vote('${match.id}', 1)"` : "disabled tabindex='-1'"}>
           <span class="player-name">${p1 ? escapeHTML(p1.name || p1.title || "—") : "—"}</span>
           <span class="player-votes">${votes1}</span>
           <span class="player-bar" style="width:${pct1}%"></span>
         </button>
         <div class="vs-line">${match.finished ? `${votes1}:${votes2}` : "VS"}</div>
-        <button class="player ${p2Win ? "winner" : ""} ${isActive && p1 && p2 && !match.finished ? "can-vote" : ""}" ${isActive && p1 && p2 && !match.finished ? `onclick="Bracket.vote('${match.id}', 2)"` : "disabled"}>
+        <button class="player ${p2Win ? "winner" : ""} ${isActive && p1 && p2 && !match.finished ? "can-vote" : ""}" ${isActive && p1 && p2 && !match.finished ? `onclick="Bracket.vote('${match.id}', 2)"` : "disabled tabindex='-1'"}>
           <span class="player-name">${p2 ? escapeHTML(p2.name || p2.title || "—") : "—"}</span>
           <span class="player-votes">${votes2}</span>
           <span class="player-bar" style="width:${pct2}%"></span>
@@ -58,7 +58,8 @@
       return;
     }
 
-    const tournament = Bracket.getTournament(tournamentId);
+    // ИСПРАВЛЕНО: используем Bracket.getTournamentById() вместо Bracket.getTournament()
+    const tournament = Bracket.getTournamentById(tournamentId);
     if (!tournament) {
       container.innerHTML = `
         <div class="empty-state">
