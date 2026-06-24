@@ -1,161 +1,325 @@
-// js/bracket.js — логика сетки v3 (победы и Elo у субъектов)
+/*
+ Tournament Hub
+ Bracket logic
+*/
 
-function voteInMatch(tournament, roundIdx, matchIdx, side) {
-    let user = getCurrentUser();
-    if (!user) {
-        return { ok: false, err: "Войдите, чтобы голосовать" };
-    }
 
-    if (!canUserVote(user.id, tournament.id, roundIdx, matchIdx)) {
-        return { ok: false, err: "Вы уже голосовали в этом матче" };
-    }
+(function () {
 
-    let round = tournament.rounds[roundIdx];
-    if (!round || !round.isActive || round.endedAt) {
-        return { ok: false, err: "Голосование закрыто" };
-    }
 
-    let match = round.matches[matchIdx];
-    if (!match || match.done || match.a.isBye || match.b.isBye) {
-        return { ok: false, err: "Матч недоступен" };
-    }
 
-    if (side === 0) match.votesA++;
-    else match.votesB++;
+    function finishMatch(matchId,winnerId) {
 
-    recordVote(user.id, tournament.id, roundIdx, matchIdx, side);
-    
-    return { ok: true };
-}
 
-// Завершение раунда (только админ)
-function finalizeRound(tournament, subjects) {
-    if (!isAdmin()) {
-        return { ok: false, err: "Только администратор может завершать раунд", tournament };
-    }
+        const db =
+            DB.getDB();
 
-    let round = tournament.rounds[tournament.currentRound];
-    if (!round || !round.startedAt) return { ok: true, tournament };
 
-    round.endedAt = new Date().toISOString();
-    round.isActive = false;
 
-    let winners = [];
-    let db = getDB();
+        const match =
+            db.matches.find(
+                m =>
+                m.id === matchId
+            );
 
-    for (let m of round.matches) {
-        if (m.a.isBye) { m.winner = m.b; m.done = true; winners.push(m.b); continue; }
-        if (m.b.isBye) { m.winner = m.a; m.done = true; winners.push(m.a); continue; }
 
-        if (m.votesA > m.votesB) m.winner = m.a;
-        else if (m.votesB > m.votesA) m.winner = m.b;
-        else m.winner = m.a;
 
-        m.done = true;
-
-        // +1 победа субъекту
-        let winnerSubject = db.subjects.find(s => s.id === m.winner.id) || 
-                           db.subjects.find(s => s.name === m.winner.name);
-        if (winnerSubject) {
-            winnerSubject.wins = (winnerSubject.wins || 0) + 1;
+        if (!match) {
+            return;
         }
 
-        // +1 победа проигравшему (для статистики участия)
-        let loser = m.winner.id === m.a.id ? m.b : m.a;
-        let loserSubject = db.subjects.find(s => s.id === loser.id) ||
-                          db.subjects.find(s => s.name === loser.name);
 
-        // Обновляем Elo
-        if (winnerSubject && loserSubject) {
-            updateEloAfterMatch(winnerSubject.id, loserSubject.id);
-        }
 
-        winners.push(m.winner);
+        match.winner =
+            winnerId;
+
+
+
+        match.finished =
+            true;
+
+
+
+        DB.saveDB(db);
+
+
     }
 
-    saveDB(db);
 
-    if (tournament.currentRound + 1 < tournament.rounds.length) {
-        let next = tournament.rounds[tournament.currentRound + 1];
-        next.matches = createMatches(winners);
-        next.isActive = true;
-        next.startedAt = new Date().toISOString();
-        tournament.currentRound++;
 
-        next.matches.forEach(m => {
-            if (m.a.name !== "—" && m.a.name !== "TBD") {
-                let orig = db.subjects.find(s => s.name === m.a.name);
-                if (orig) tournament._playerMap[m.a.id] = orig.id;
+
+
+
+
+    function finalizeRound(round) {
+
+
+        const db =
+            DB.getDB();
+
+
+
+        const matches =
+            db.matches.filter(
+                m =>
+                m.round === round
+            );
+
+
+
+        const winners = [];
+
+
+
+        matches.forEach(match => {
+
+
+            if(match.winner) {
+
+
+                winners.push(
+                    match.winner
+                );
+
+
             }
-            if (m.b.name !== "—" && m.b.name !== "TBD") {
-                let orig = db.subjects.find(s => s.name === m.b.name);
-                if (orig) tournament._playerMap[m.b.id] = orig.id;
-            }
+
         });
-    } else {
-        tournament.status = "completed";
-        tournament.winner = winners[0] || null;
-        tournament.completedAt = new Date().toISOString();
+
+
+
+
+
+        createNextRound(
+            winners,
+            round + 1
+        );
+
+
     }
 
-    return { ok: true, tournament };
-}
 
-// Автозавершение по таймеру
-function autoFinalizeRound(tournament) {
-    let round = tournament.rounds[tournament.currentRound];
-    if (!round || !round.isActive) return tournament;
-    
-    let timeLeft = getTimeLeft(round.startedAt, tournament.config?.voteDurationHours || 24);
-    if (timeLeft > 0) return tournament;
-    
-    round.endedAt = new Date().toISOString();
-    round.isActive = false;
 
-    let winners = [];
-    let db = getDB();
 
-    for (let m of round.matches) {
-        if (m.a.isBye) { m.winner = m.b; m.done = true; winners.push(m.b); continue; }
-        if (m.b.isBye) { m.winner = m.a; m.done = true; winners.push(m.a); continue; }
 
-        if (m.votesA > m.votesB) m.winner = m.a;
-        else if (m.votesB > m.votesA) m.winner = m.b;
-        else m.winner = m.a;
 
-        m.done = true;
+    function autoFinalizeRound(round) {
 
-        // +1 победа субъекту
-        let winnerSubject = db.subjects.find(s => s.id === m.winner.id) || 
-                           db.subjects.find(s => s.name === m.winner.name);
-        if (winnerSubject) {
-            winnerSubject.wins = (winnerSubject.wins || 0) + 1;
+
+        const db =
+            DB.getDB();
+
+
+
+        const matches =
+            db.matches.filter(
+                m =>
+                m.round === round
+            );
+
+
+
+        matches.forEach(match => {
+
+
+            if(match.finished) {
+                return;
+            }
+
+
+
+
+            if(
+                match.votes1 >
+                match.votes2
+            ) {
+
+                match.winner =
+                    match.player1;
+
+            }
+
+            else if(
+                match.votes2 >
+                match.votes1
+            ) {
+
+                match.winner =
+                    match.player2;
+
+            }
+
+
+
+            match.finished =
+                true;
+
+
+
+        });
+
+
+
+
+        DB.saveDB(db);
+
+
+
+        finalizeRound(round);
+
+
+    }
+
+
+
+
+
+
+
+
+    function createNextRound(players,round) {
+
+
+        if (
+            !players ||
+            players.length < 2
+        ) {
+
+            return;
+
         }
 
-        let loser = m.winner.id === m.a.id ? m.b : m.a;
-        let loserSubject = db.subjects.find(s => s.id === loser.id) ||
-                          db.subjects.find(s => s.name === loser.name);
 
-        if (winnerSubject && loserSubject) {
-            updateEloAfterMatch(winnerSubject.id, loserSubject.id);
+
+        const matches =
+            TournamentEngine
+            .createMatches(players);
+
+
+
+        const db =
+            DB.getDB();
+
+
+
+
+        matches.forEach(m => {
+
+
+            m.round =
+                round;
+
+
+
+            db.matches.push(m);
+
+
+        });
+
+
+
+
+        DB.saveDB(db);
+
+
+    }
+
+
+
+
+
+
+
+    function vote(matchId,player) {
+
+
+        if(
+            !Auth.canUserVote(matchId)
+        ) {
+
+            return false;
+
         }
 
-        winners.push(m.winner);
+
+
+        const db =
+            DB.getDB();
+
+
+
+        const match =
+            db.matches.find(
+                m =>
+                m.id === matchId
+            );
+
+
+
+        if(!match) {
+            return false;
+        }
+
+
+
+
+
+        if(
+            player === 1
+        ) {
+
+            match.votes1++;
+
+        }
+
+
+        else if(
+            player === 2
+        ) {
+
+            match.votes2++;
+
+        }
+
+
+
+
+
+        DB.saveDB(db);
+
+
+
+        Auth.markVote(
+            matchId
+        );
+
+
+
+        return true;
+
+
     }
 
-    saveDB(db);
 
-    if (tournament.currentRound + 1 < tournament.rounds.length) {
-        let next = tournament.rounds[tournament.currentRound + 1];
-        next.matches = createMatches(winners);
-        next.isActive = true;
-        next.startedAt = new Date().toISOString();
-        tournament.currentRound++;
-    } else {
-        tournament.status = "completed";
-        tournament.winner = winners[0] || null;
-        tournament.completedAt = new Date().toISOString();
-    }
 
-    return tournament;
-}
+
+
+
+    window.Bracket = {
+
+        finishMatch,
+
+        finalizeRound,
+
+        autoFinalizeRound,
+
+        createNextRound,
+
+        vote
+
+    };
+
+
+
+
+})();
