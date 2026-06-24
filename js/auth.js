@@ -1,25 +1,56 @@
-// js/auth.js — авторизация v4 (рабочая Fandom + скрытый админ + защита)
+// js/auth.js — авторизация v5 (роли + привязка админа к Fandom)
 
-const ADMIN_PASS = "admin123"; // ← СМЕНИ ЭТОТ ПАРОЛЬ СРАЗУ!
+const ADMIN_FANDOM_NAME = "Melanthe Weber"; // ← ТВОЙ НИК НА FANDOM
+const ADMIN_PASS_FALLBACK = "admin123";    // ← Резервный пароль
 
-// ===== АДМИН =====
+// ===== РОЛИ =====
+const ROLES = {
+    USER: 'user',
+    MODERATOR: 'moderator',
+    ADMIN: 'admin'
+};
+
+// ===== ПРОВЕРКА АДМИНА =====
+function isAdmin() {
+    let user = getCurrentUser();
+    // Привязка по Fandom-нику
+    if (user && user.authType === 'fandom' && user.fandomName === ADMIN_FANDOM_NAME) {
+        return true;
+    }
+    // Резерв: по флагу localStorage (для тестов или если Fandom не работает)
+    if (localStorage.getItem("th_admin") === "yes") {
+        return true;
+    }
+    return false;
+}
+
+function isModerator() {
+    let user = getCurrentUser();
+    if (!user) return false;
+    if (isAdmin()) return true;
+    return user.role === ROLES.MODERATOR;
+}
+
+function getUserRole() {
+    if (isAdmin()) return ROLES.ADMIN;
+    let user = getCurrentUser();
+    return user?.role || ROLES.USER;
+}
+
+// ===== ЛОГИН АДМИНА (резервный) =====
 function loginAdmin(pass) {
-    if (pass === ADMIN_PASS) {
+    if (pass === ADMIN_PASS_FALLBACK) {
         localStorage.setItem("th_admin", "yes");
         return { ok: true };
     }
     return { ok: false, err: "Неверный пароль администратора" };
 }
 
-function isAdmin() {
-    return localStorage.getItem("th_admin") === "yes";
-}
-
 function logoutAdmin() {
     localStorage.removeItem("th_admin");
 }
 
-// ===== FANDOM AUTH v4 (через прокси-страницу на вики) =====
+// ===== FANDOM AUTH v5 =====
 function generateCode() {
     return "TH" + Math.random().toString(36).substring(2, 8).toUpperCase();
 }
@@ -37,13 +68,12 @@ function startFandomVerify(fandomName) {
     localStorage.setItem("th_pending", JSON.stringify({
         fandomName: fandomName,
         code: code,
-        expires: Date.now() + 3600000 // 1 час
+        expires: Date.now() + 3600000
     }));
 
     return { ok: true, code: code };
 }
 
-// Проверка через CORS-прокси (для GitHub Pages)
 async function checkFandomVerify(fandomName, wikiDomain) {
     let pending = JSON.parse(localStorage.getItem("th_pending") || "null");
     if (!pending) return { ok: false, err: "Нет активной верификации. Начните заново." };
@@ -56,79 +86,38 @@ async function checkFandomVerify(fandomName, wikiDomain) {
     }
 
     let domain = wikiDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    
-    // Пробуем несколько CORS-прокси
     const proxies = [
-        '', // прямой запрос (если Same Origin)
+        '',
         'https://api.allorigins.win/raw?url=',
         'https://corsproxy.io/?'
     ];
 
     let found = false;
-    let lastErr = "";
 
     for (let proxy of proxies) {
         try {
             let apiUrl = proxy + encodeURIComponent(`https://${domain}/api.php?action=query&list=usercontribs&ucuser=${encodeURIComponent(fandomName)}&uclimit=50&ucprop=comment|timestamp&format=json`);
-            
-            let res = await fetch(apiUrl, { 
-                method: 'GET',
-                headers: proxy ? {} : { 'Origin': '*' }
-            });
-            
+            let res = await fetch(apiUrl, { method: 'GET', headers: proxy ? {} : { 'Origin': '*' } });
             if (!res.ok) continue;
-            
             let data = await res.json();
-            
-            // AllOrigins оборачивает ответ
             if (data.contents) data = JSON.parse(data.contents);
-
             if (data.query && data.query.usercontribs) {
-                found = data.query.usercontribs.some(c => 
-                    c.comment && c.comment.includes(pending.code)
-                );
+                found = data.query.usercontribs.some(c => c.comment && c.comment.includes(pending.code));
                 if (found) break;
             }
-        } catch (e) {
-            lastErr = e.message;
-            continue;
-        }
-    }
-
-    // Резерв: проверяем существование пользователя + "доверительная" верификация
-    if (!found) {
-        try {
-            let userApi = `https://api.allorigins.win/raw?url=` + 
-                encodeURIComponent(`https://${domain}/api.php?action=query&list=users&ususers=${encodeURIComponent(fandomName)}&usprop=editcount|registration&format=json`);
-            
-            let res = await fetch(userApi);
-            let data = await res.json();
-            if (data.contents) data = JSON.parse(data.contents);
-            
-            if (data.query && data.query.users && data.query.users[0]) {
-                let u = data.query.users[0];
-                // Если пользователь реальный и активен — принимаем (упрощённо)
-                if (u.userid !== undefined && u.editcount > 0) {
-                    // Но код всё равно должен быть в правках — строгий режим
-                    return {
-                        ok: false,
-                        err: `Код ${pending.code} не найден в правках. Сделайте правку с этим кодом в комментарии и нажмите "Проверить" снова.`
-                    };
-                }
-            }
-        } catch (e) {}
+        } catch (e) { continue; }
     }
 
     if (!found) {
-        return {
-            ok: false,
-            err: `Код ${pending.code} не найден в правках вики. Убедитесь, что вы сделали правку с этим кодом в комментарии.`
-        };
+        return { ok: false, err: `Код ${pending.code} не найден в правках вики. Сделайте правку с этим кодом в комментарии.` };
     }
 
-    // Успех! Создаём пользователя
     let db = getDB();
     let userId = "u_" + fandomName.toLowerCase().replace(/[^a-z0-9а-яё]/g, "_") + "_" + Date.now().toString(36);
+
+    // Авто-админ для Melanthe Weber
+    let isAdminUser = fandomName === ADMIN_FANDOM_NAME;
+    let role = isAdminUser ? ROLES.ADMIN : ROLES.USER;
 
     let user = {
         id: userId,
@@ -139,8 +128,11 @@ async function checkFandomVerify(fandomName, wikiDomain) {
         verifiedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
         authType: "fandom",
-        votes: [], // массив {tournamentId, roundIdx, matchIdx, side}
-        lastVote: null
+        role: role,
+        votes: [],
+        lastVote: null,
+        bio: "",
+        avatar: ""
     };
 
     db.users.push(user);
@@ -148,10 +140,14 @@ async function checkFandomVerify(fandomName, wikiDomain) {
     setCurrentUser(userId);
     localStorage.removeItem("th_pending");
 
-    return { ok: true, user: user };
+    if (isAdminUser) {
+        localStorage.setItem("th_admin", "yes");
+    }
+
+    return { ok: true, user: user, isAdmin: isAdminUser };
 }
 
-// ===== ГОСТЕВОЙ ВХОД (с ограничениями) =====
+// ===== ГОСТЕВОЙ ВХОД =====
 function registerGuest(username) {
     if (!username || username.length < 2 || username.length > 20) {
         return { ok: false, err: "Ник от 2 до 20 символов" };
@@ -175,8 +171,11 @@ function registerGuest(username) {
         verifiedAt: null,
         createdAt: new Date().toISOString(),
         authType: "guest",
+        role: ROLES.USER,
         votes: [],
-        lastVote: null
+        lastVote: null,
+        bio: "",
+        avatar: ""
     };
 
     db.users.push(user);
@@ -186,31 +185,24 @@ function registerGuest(username) {
     return { ok: true, user: user };
 }
 
-// ===== АНТИНАКРУТКА: проверка голосов =====
+// ===== АНТИНАКРУТКА =====
 function canUserVote(userId, tournamentId, roundIdx, matchIdx) {
     let db = getDB();
     let user = db.users.find(u => u.id === userId);
     if (!user) return false;
     
-    // Гости могут голосовать, но с ограничениями
     if (user.authType === "guest") {
-        // Проверяем, не голосовал ли уже в этом матче
         let voteKey = `vote_${tournamentId}_${roundIdx}_${matchIdx}`;
         if (localStorage.getItem(voteKey)) return false;
         return true;
     }
     
-    // Fandom-пользователи: проверяем в базе
     let alreadyVoted = user.votes.some(v => 
-        v.tournamentId === tournamentId && 
-        v.roundIdx === roundIdx && 
-        v.matchIdx === matchIdx
+        v.tournamentId === tournamentId && v.roundIdx === roundIdx && v.matchIdx === matchIdx
     );
     if (alreadyVoted) return false;
     
-    // Анти-спам: минимум 5 секунд между голосами
     if (user.lastVote && Date.now() - new Date(user.lastVote).getTime() < 5000) return false;
-    
     return true;
 }
 
@@ -226,11 +218,10 @@ function recordVote(userId, tournamentId, roundIdx, matchIdx, side) {
     user.lastVote = new Date().toISOString();
     saveDB(db);
     
-    // Также сохраняем в localStorage для быстрой проверки
     localStorage.setItem(`vote_${tournamentId}_${roundIdx}_${matchIdx}`, side === 0 ? "A" : "B");
 }
 
-// ===== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЕМ =====
+// ===== ПОЛЬЗОВАТЕЛЬ =====
 function getCurrentUser() {
     let uid = localStorage.getItem("th_user_id");
     if (!uid) return null;
@@ -245,6 +236,7 @@ function setCurrentUser(userId) {
 
 function logoutUser() {
     setCurrentUser(null);
+    logoutAdmin();
 }
 
 // ===== РЕНДЕР =====
@@ -254,6 +246,7 @@ function renderAdminLink() {
         if (isAdmin()) {
             link.classList.remove('hidden');
             link.style.display = '';
+            link.textContent = '⚙️ Управление';
         } else {
             link.classList.add('hidden');
             link.style.display = 'none';
@@ -268,16 +261,18 @@ function renderNavUser(db) {
     if (user) {
         let name = user.displayName || user.fandomName || "Пользователь";
         let isFandom = user.authType === "fandom";
-        let badge = isFandom ? '✓' : '👤';
+        let roleBadge = user.role === ROLES.ADMIN ? '👑' : user.role === ROLES.MODERATOR ? '🛡️' : (isFandom ? '✓' : '👤');
+        let profileLink = `<a href="profile.html?id=${user.id}" style="color:var(--text);text-decoration:none;font-weight:600;">${escapeHtml(name)}</a>`;
+        
         el.innerHTML = `
-            <span style="display:flex;align-items:center;gap:8px;">
-                <span style="color:${isFandom ? '#22c55e' : '#94a3b8'};font-size:12px;">${badge}</span>
-                <span>${escapeHtml(name)}</span>
-                <a href="#" onclick="logoutUser();location.reload();return false;" style="color:#64748b;font-size:12px;">Выйти</a>
+            <span style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:12px;">${roleBadge}</span>
+                ${profileLink}
+                <a href="#" onclick="logoutUser();location.reload();return false;" style="color:var(--text-3);font-size:12px;text-decoration:none;">Выйти</a>
             </span>
         `;
     } else {
-        el.innerHTML = '<a href="login.html" style="color:#3b82f6;">🔐 Войти</a>';
+        el.innerHTML = '<a href="login.html" style="color:var(--blue);text-decoration:none;font-weight:600;">🔐 Войти</a>';
     }
 }
 
@@ -287,7 +282,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// ===== ИНИЦИАЛИЗАЦИЯ =====
 function initAuth() {
     renderAdminLink();
     let db = getDB();
