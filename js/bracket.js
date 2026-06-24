@@ -1,14 +1,185 @@
 /*
  Tournament Hub
- Bracket logic
+ Bracket controller
 */
 
 
 (function () {
 
 
+    function getMatches(round) {
 
-    function finishMatch(matchId,winnerId) {
+        const db = DB.getDB();
+
+        return db.matches.filter(
+            m => m.round === round
+        );
+
+    }
+
+
+
+
+
+    function getMatch(id) {
+
+        const db = DB.getDB();
+
+        return db.matches.find(
+            m => m.id === id
+        ) || null;
+
+    }
+
+
+
+
+
+    function vote(matchId, player) {
+
+
+        const match =
+            getMatch(matchId);
+
+
+
+        if (!match) {
+            return false;
+        }
+
+
+
+        if (match.finished) {
+
+            return false;
+
+        }
+
+
+
+        if (
+            player !== 1 &&
+            player !== 2
+        ) {
+
+            return false;
+
+        }
+
+
+
+
+        if (
+            !Auth.canUserVote(matchId)
+        ) {
+
+            return false;
+
+        }
+
+
+
+
+
+        if (player === 1) {
+
+            match.votes1 =
+                (match.votes1 || 0) + 1;
+
+        }
+
+
+        if (player === 2) {
+
+            match.votes2 =
+                (match.votes2 || 0) + 1;
+
+        }
+
+
+
+
+        DB.updateDB(db => {
+
+
+            const target =
+                db.matches.find(
+                    m =>
+                    m.id === matchId
+                );
+
+
+            Object.assign(
+                target,
+                match
+            );
+
+
+        });
+
+
+
+        Auth.markVote(
+            matchId
+        );
+
+
+
+        return true;
+
+    }
+
+
+
+
+
+
+
+    function calculateWinner(match) {
+
+
+        if (!match) {
+            return null;
+        }
+
+
+
+        if (
+            match.votes1 >
+            match.votes2
+        ) {
+
+            return match.player1;
+
+        }
+
+
+
+
+        if (
+            match.votes2 >
+            match.votes1
+        ) {
+
+            return match.player2;
+
+        }
+
+
+
+        return null;
+
+
+    }
+
+
+
+
+
+
+
+
+    function finishMatch(matchId) {
 
 
         const db =
@@ -25,25 +196,57 @@
 
 
         if (!match) {
-            return;
+            return false;
         }
 
 
 
-        match.winner =
-            winnerId;
+        if(match.finished) {
+            return false;
+        }
 
+
+
+
+        const winner =
+            calculateWinner(match);
+
+
+
+        if(!winner) {
+
+
+            return false;
+
+        }
+
+
+
+
+
+        match.winner =
+            winner;
 
 
         match.finished =
             true;
 
 
+        match.status =
+            "done";
+
+
 
         DB.saveDB(db);
 
 
+
+        return winner;
+
+
     }
+
+
 
 
 
@@ -67,6 +270,13 @@
 
 
 
+        if(!matches.length) {
+            return false;
+        }
+
+
+
+
         const winners = [];
 
 
@@ -74,17 +284,31 @@
         matches.forEach(match => {
 
 
-            if(match.winner) {
-
+            if(
+                match.winner &&
+                !winners.includes(
+                    match.winner
+                )
+            ) {
 
                 winners.push(
                     match.winner
                 );
 
-
             }
 
+
         });
+
+
+
+
+
+        if(winners.length < 2) {
+
+            return false;
+
+        }
 
 
 
@@ -96,79 +320,11 @@
         );
 
 
-    }
 
-
-
-
-
-
-    function autoFinalizeRound(round) {
-
-
-        const db =
-            DB.getDB();
-
-
-
-        const matches =
-            db.matches.filter(
-                m =>
-                m.round === round
-            );
-
-
-
-        matches.forEach(match => {
-
-
-            if(match.finished) {
-                return;
-            }
-
-
-
-
-            if(
-                match.votes1 >
-                match.votes2
-            ) {
-
-                match.winner =
-                    match.player1;
-
-            }
-
-            else if(
-                match.votes2 >
-                match.votes1
-            ) {
-
-                match.winner =
-                    match.player2;
-
-            }
-
-
-
-            match.finished =
-                true;
-
-
-
-        });
-
-
-
-
-        DB.saveDB(db);
-
-
-
-        finalizeRound(round);
-
+        return true;
 
     }
+
 
 
 
@@ -180,20 +336,16 @@
     function createNextRound(players,round) {
 
 
-        if (
+
+        if(
             !players ||
             players.length < 2
         ) {
 
-            return;
+            return false;
 
         }
 
-
-
-        const matches =
-            TournamentEngine
-            .createMatches(players);
 
 
 
@@ -203,15 +355,51 @@
 
 
 
-        matches.forEach(m => {
+        const already =
+            db.matches.some(
+                m =>
+                m.round === round
+            );
 
 
-            m.round =
+
+        if(already) {
+
+            return false;
+
+        }
+
+
+
+
+
+
+        const matches =
+            TournamentEngine
+            .createMatches(
+                players
+            );
+
+
+
+
+
+
+        matches.forEach(match => {
+
+
+            match.round =
                 round;
 
 
+            match.status =
+                "pending";
 
-            db.matches.push(m);
+
+
+            db.matches.push(
+                match
+            );
 
 
         });
@@ -222,6 +410,9 @@
         DB.saveDB(db);
 
 
+
+        return true;
+
     }
 
 
@@ -230,75 +421,41 @@
 
 
 
-    function vote(matchId,player) {
+
+    function autoFinalizeRound(round) {
 
 
-        if(
-            !Auth.canUserVote(matchId)
-        ) {
-
-            return false;
-
-        }
+        const matches =
+            getMatches(round);
 
 
 
-        const db =
-            DB.getDB();
+        matches.forEach(
+            match => {
 
+                if(
+                    !match.finished
+                ) {
 
+                    finishMatch(
+                        match.id
+                    );
 
-        const match =
-            db.matches.find(
-                m =>
-                m.id === matchId
-            );
+                }
 
-
-
-        if(!match) {
-            return false;
-        }
-
-
-
-
-
-        if(
-            player === 1
-        ) {
-
-            match.votes1++;
-
-        }
-
-
-        else if(
-            player === 2
-        ) {
-
-            match.votes2++;
-
-        }
-
-
-
-
-
-        DB.saveDB(db);
-
-
-
-        Auth.markVote(
-            matchId
+            }
         );
 
 
 
-        return true;
+        return finalizeRound(
+            round
+        );
 
 
     }
+
+
 
 
 
@@ -307,18 +464,23 @@
 
     window.Bracket = {
 
+
+        getMatches,
+
+        getMatch,
+
+        vote,
+
         finishMatch,
 
         finalizeRound,
 
         autoFinalizeRound,
 
-        createNextRound,
+        createNextRound
 
-        vote
 
     };
-
 
 
 
