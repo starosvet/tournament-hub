@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
-    <script src="js/auth.js"></script>
-    <script src="js/fandom-auth.js"></script>
 </head>
 <body>
     <header>
@@ -26,30 +24,29 @@
     </header>
 
     <div class="container">
-        <!-- ОБЫЧНАЯ АВТОРИЗАЦИЯ -->
+        <!-- EMAIL/PASS -->
         <div class="login-box page-enter" style="margin-bottom:24px;">
             <h2>🔐 Вход</h2>
-            <p>Гостевой аккаунт</p>
+            <p>Email и пароль</p>
 
             <div id="loginForm">
-                <label>Ваш никнейм</label>
-                <input type="text" id="loginUsername" placeholder="username">
+                <label>Email</label>
+                <input type="email" id="loginEmail" placeholder="you@example.com">
 
                 <label>Пароль</label>
                 <input type="password" id="loginPassword" placeholder="••••••••">
+
+                <label>Имя пользователя (при регистрации)</label>
+                <input type="text" id="loginUsername" placeholder="username">
 
                 <button class="btn-primary" style="width:100%;margin-top:20px;" onclick="doLogin()">🔐 Войти</button>
                 <button class="btn-secondary" style="width:100%;margin-top:12px;" onclick="doRegister()">📝 Регистрация</button>
 
                 <div class="error" id="loginError" style="color:var(--red);margin-top:16px;text-align:center;"></div>
             </div>
-
-            <p style="margin-top:24px;color:var(--text-3);font-size:13px;text-align:center;">
-                Гостевой аккаунт хранится локально. Вы сможете голосовать и оставлять комментарии.
-            </p>
         </div>
 
-        <!-- FANDOM АВТОРИЗАЦИЯ -->
+        <!-- FANDOM -->
         <div class="login-box page-enter" id="fandomBox">
             <h2>🌐 Вход через Fandom Wiki</h2>
             <p>chickengun-fanon.fandom.com/ru</p>
@@ -85,108 +82,112 @@
         <p>Tournament Hub</p>
     </footer>
 
-    <script>
-        /* ---------- обычная авторизация ---------- */
-        function doLogin() {
-            const username = document.getElementById("loginUsername").value.trim();
-            const password = document.getElementById("loginPassword").value;
-            const err = document.getElementById("loginError");
-            err.textContent = ""; // ИСПРАВЛЕНО: очищаем старую ошибку
+    <script type="module">
+        import { Auth, toast } from './js/auth.js'
 
-            const result = Auth.login(username, password);
+        // Экспортируем в глобальную область для onclick
+        window.Auth = Auth
+        window.toast = toast
+
+        async function doLogin() {
+            const email = document.getElementById('loginEmail').value.trim()
+            const password = document.getElementById('loginPassword').value
+            const err = document.getElementById('loginError')
+            err.textContent = ''
+
+            const result = await Auth.login(email, password)
             if (result.success) {
-                location.href = "index.html";
+                location.href = 'index.html'
             } else {
-                err.textContent = result.error || "Ошибка входа";
+                err.textContent = result.error || 'Ошибка входа'
             }
         }
 
-        function doRegister() {
-            const username = document.getElementById("loginUsername").value.trim();
-            const password = document.getElementById("loginPassword").value;
-            const err = document.getElementById("loginError");
-            err.textContent = ""; // ИСПРАВЛЕНО: очищаем старую ошибку
+        async function doRegister() {
+            const email = document.getElementById('loginEmail').value.trim()
+            const password = document.getElementById('loginPassword').value
+            const username = document.getElementById('loginUsername').value.trim()
+            const err = document.getElementById('loginError')
+            err.textContent = ''
 
-            const result = Auth.register(username, password);
+            const result = await Auth.register(email, password, username)
             if (result.success) {
-                location.href = "index.html";
+                toast('Регистрация успешна! Подтвердите email если нужно.')
+                setTimeout(() => location.href = 'index.html', 800)
             } else {
-                err.textContent = result.error || "Ошибка регистрации";
+                err.textContent = result.error || 'Ошибка регистрации'
             }
         }
 
-        document.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") doLogin();
-        });
-
-        /* ---------- fandom авторизация ---------- */
         function startFandomLogin() {
-            const name = document.getElementById("fandomName").value.trim();
-            const err = document.getElementById("fandomError");
-            err.textContent = "";
+            const name = document.getElementById('fandomName').value.trim()
+            const err = document.getElementById('fandomError')
+            err.textContent = ''
 
-            const result = FandomAuth.startFandomAuth(name);
+            const result = Auth.startFandomAuth(name)
             if (!result.ok) {
-                err.textContent = result.error;
-                return;
+                err.textContent = result.error
+                return
             }
 
-            document.getElementById("fandomStep1").style.display = "none";
-            document.getElementById("fandomStep2").style.display = "block";
-            document.getElementById("fandomCode").textContent = result.code;
+            document.getElementById('fandomStep1').style.display = 'none'
+            document.getElementById('fandomStep2').style.display = 'block'
+            document.getElementById('fandomCode').textContent = result.code
         }
 
         function cancelFandomLogin() {
-            FandomAuth.clearPendingAuth();
-            document.getElementById("fandomStep1").style.display = "block";
-            document.getElementById("fandomStep2").style.display = "none";
-            document.getElementById("fandomStatus").textContent = "";
-            document.getElementById("fandomProgress").textContent = "";
-            document.getElementById("fandomError").textContent = "";
+            Auth.clearPendingFandomAuth()
+            document.getElementById('fandomStep1').style.display = 'block'
+            document.getElementById('fandomStep2').style.display = 'none'
+            document.getElementById('fandomStatus').textContent = ''
+            document.getElementById('fandomProgress').textContent = ''
+            document.getElementById('fandomError').textContent = ''
         }
 
-        function checkFandomLogin() {
-            const status = document.getElementById("fandomStatus");
-            const progress = document.getElementById("fandomProgress");
-            const err = document.getElementById("fandomError");
-            status.textContent = "⏳ Проверяем правки...";
-            err.textContent = "";
+        async function checkFandomLogin() {
+            const status = document.getElementById('fandomStatus')
+            const progress = document.getElementById('fandomProgress')
+            const err = document.getElementById('fandomError')
+            const pending = Auth.getPendingFandomAuth()
 
-            FandomAuth.pollFandomAuth(
-                // onSuccess
-                function(result) {
-                    status.textContent = "✅ Код подтверждён!";
-                    progress.textContent = "";
+            if (!pending) {
+                err.textContent = 'Код устарел. Начните заново.'
+                return
+            }
 
-                    // ИСПРАВЛЕНО: isAdmin определяется внутри completeFandomAuth через DB.settings
-                    const complete = FandomAuth.completeFandomAuth(result.fandomName);
-                    if (complete.ok) {
-                        setTimeout(() => {
-                            location.href = "index.html";
-                        }, 800);
-                    } else {
-                        err.textContent = complete.error || "Ошибка создания пользователя";
-                    }
-                },
-                // onError
-                function(errorMsg) {
-                    status.textContent = "";
-                    progress.textContent = "";
-                    err.textContent = errorMsg;
-                },
-                // onProgress
-                function(current, max) {
-                    progress.textContent = "Проверка " + current + "/" + max;
-                }
-            );
+            status.textContent = '⏳ Проверяем правки...'
+            err.textContent = ''
+
+            const verify = await Auth.verifyFandomCode(pending.fandomName, pending.code)
+
+            if (!verify.ok) {
+                status.textContent = ''
+                err.textContent = verify.error
+                return
+            }
+
+            status.textContent = '✅ Код подтверждён! Входим...'
+
+            const complete = await Auth.completeFandomAuth(verify.fandomName)
+            if (complete.ok) {
+                location.href = 'index.html'
+            } else {
+                status.textContent = ''
+                err.textContent = complete.error
+            }
         }
 
-        document.addEventListener("DOMContentLoaded", function() {
-            Auth.renderNavUser();
-            Auth.checkFandomAutoAdmin();
-            const navAdmin = document.getElementById("navAdmin");
-            if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
-        });
+        // Глобальные функции для onclick
+        window.doLogin = doLogin
+        window.doRegister = doRegister
+        window.startFandomLogin = startFandomLogin
+        window.cancelFandomLogin = cancelFandomLogin
+        window.checkFandomLogin = checkFandomLogin
+
+        // Init
+        Auth.initAuth()
+        const navAdmin = document.getElementById('navAdmin')
+        if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove('hidden')
     </script>
 </body>
 </html>
