@@ -1,27 +1,22 @@
-// js/db.js — база данных v4 (универсальные субъекты)
+// js/db.js — база данных v5 (Elo у субъектов, победы у субъектов)
 
-const DB_KEY = "TOURNAMENT_HUB_V4";
+const DB_KEY = "TOURNAMENT_HUB_V5";
 
 function getDB() {
     let raw = localStorage.getItem(DB_KEY);
     if (!raw) {
         return {
-            // Универсальные субъекты (статьи, персонажи, картинки, и т.д.)
             subjects: [],
-            // Пользователи
             users: [],
-            // Турниры
             tournaments: [],
             activeTournamentId: null,
-            // Настройки
             settings: {
                 siteName: "Tournament Hub",
                 siteDesc: "",
                 siteLogo: "🏆",
                 theme: "amber",
-                defaultSubjectType: "character" // Тип субъекта по умолчанию
+                defaultSubjectType: "character"
             },
-            // Типы субъектов (категории)
             subjectTypes: [
                 { id: "article", name: "📄 Статья", icon: "📄" },
                 { id: "character", name: "👤 Персонаж", icon: "👤" },
@@ -31,7 +26,6 @@ function getDB() {
                 { id: "item", name: "📦 Предмет", icon: "📦" },
                 { id: "other", name: "⭐ Другое", icon: "⭐" }
             ],
-            eloRatings: {},
             comments: []
         };
     }
@@ -67,40 +61,59 @@ function resetVotes(tournamentId) {
     }
 }
 
-// Миграция со старой версии (players -> subjects)
-function migrateFromV3() {
-    let oldRaw = localStorage.getItem("TOURNAMENT_HUB_V3");
-    if (!oldRaw) return;
-    
-    let old = JSON.parse(oldRaw);
-    let db = getDB();
-    
-    // Мигрируем players в subjects
-    if (old.players && old.players.length && !db.subjects.length) {
-        db.subjects = old.players.map(p => ({
-            id: p.id,
-            name: p.name,
-            url: p.url,
-            type: "character", // По умолчанию персонаж
-            typeId: "character",
-            wins: p.wins || 0,
-            description: "",
-            tags: []
-        }));
+// Миграция со старых версий
+function migrateOldData() {
+    // V4 -> V5
+    let v4 = localStorage.getItem("TOURNAMENT_HUB_V4");
+    if (v4) {
+        let old = JSON.parse(v4);
+        let db = getDB();
+        if (old.subjects) db.subjects = old.subjects;
+        if (old.users) db.users = old.users;
+        if (old.tournaments) db.tournaments = old.tournaments;
+        if (old.activeTournamentId) db.activeTournamentId = old.activeTournamentId;
+        if (old.settings) db.settings = { ...db.settings, ...old.settings };
+        if (old.comments) db.comments = old.comments;
+        // Переносим eloRatings из старой структуры в subjects
+        if (old.eloRatings && old.subjects) {
+            Object.entries(old.eloRatings).forEach(([id, elo]) => {
+                let s = db.subjects.find(x => x.id === id);
+                if (s) s.elo = elo;
+            });
+        }
+        saveDB(db);
+        localStorage.removeItem("TOURNAMENT_HUB_V4");
+        console.log("Миграция V4 -> V5 завершена");
+        return;
     }
     
-    // Копируем остальное
-    if (old.users) db.users = old.users;
-    if (old.tournaments) db.tournaments = old.tournaments;
-    if (old.activeTournamentId) db.activeTournamentId = old.activeTournamentId;
-    if (old.settings) db.settings = { ...db.settings, ...old.settings };
-    if (old.eloRatings) db.eloRatings = old.eloRatings;
-    if (old.comments) db.comments = old.comments;
-    
-    saveDB(db);
-    localStorage.removeItem("TOURNAMENT_HUB_V3");
-    console.log("Миграция с V3 завершена");
+    // V3 -> V5
+    let v3 = localStorage.getItem("TOURNAMENT_HUB_V3");
+    if (v3) {
+        let old = JSON.parse(v3);
+        let db = getDB();
+        if (old.players) {
+            db.subjects = old.players.map(p => ({
+                id: p.id,
+                name: p.name,
+                url: p.url,
+                type: "character",
+                typeId: "character",
+                wins: p.wins || 0,
+                elo: 1000,
+                description: "",
+                tags: []
+            }));
+        }
+        if (old.users) db.users = old.users;
+        if (old.tournaments) db.tournaments = old.tournaments;
+        if (old.activeTournamentId) db.activeTournamentId = old.activeTournamentId;
+        if (old.settings) db.settings = { ...db.settings, ...old.settings };
+        if (old.comments) db.comments = old.comments;
+        saveDB(db);
+        localStorage.removeItem("TOURNAMENT_HUB_V3");
+        console.log("Миграция V3 -> V5 завершена");
+    }
 }
 
-// Запускаем миграцию при загрузке
-migrateFromV3();
+migrateOldData();
