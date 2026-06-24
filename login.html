@@ -80,13 +80,16 @@
             }
         }
 
-        // Enter для входа
         document.addEventListener("keydown", function(e) {
             if (e.key === "Enter") doLogin();
         });
 
-        // Навигация
-        Auth.renderNavUser();
+        document.addEventListener("DOMContentLoaded", function() {
+            Auth.renderNavUser();
+            Auth.checkFandomAutoAdmin();
+            const navAdmin = document.getElementById("navAdmin");
+            if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
+        });
     </script>
 </body>
 </html>
