@@ -32,34 +32,36 @@
     if (!tournaments.length) {
       container.innerHTML = `
         <div class="empty-state">
+          <span class="empty-state-icon">🏆</span>
           <h3>Турниров пока нет</h3>
           <p>Создайте первый турнир в панели управления.</p>
-          <p><a href="admin.html">⚙️ Управление</a></p>
+          <a href="admin.html">⚙️ Перейти в управление</a>
         </div>
       `;
       return;
     }
 
-    container.innerHTML = tournaments.map(t => {
+    container.innerHTML = tournaments.map((t, i) => {
       const roundsCount = Array.isArray(t.rounds) ? t.rounds.length : 0;
       const playersCount = Array.isArray(t.players) ? t.players.length : 0;
+      const statusClass = t.status === "active" ? "status-active" : t.status === "finished" ? "status-completed" : "";
+      const statusText = t.status === "active" ? "Активен" : t.status === "finished" ? "Завершён" : "Черновик";
       return `
-        <article class="tournament-card">
-          <div class="tournament-badge">${escapeHTML(t.status)}</div>
+        <article class="tournament-card stagger-${Math.min(i + 1, 5)}">
+          <div class="tournament-badge ${statusClass}">${escapeHTML(statusText)}</div>
           <h3>${escapeHTML(t.title || "Без названия")}</h3>
           <p>${escapeHTML(t.description || "")}</p>
           <div class="tournament-meta">
-            <span>${new Date(t.createdAt).toLocaleDateString("ru-RU")}</span>
-            <span>${playersCount} участников</span>
-            <span>${roundsCount} раундов</span>
+            <span>📅 ${new Date(t.createdAt).toLocaleDateString("ru-RU")}</span>
+            <span>👥 ${playersCount} участников</span>
+            <span>🎯 ${roundsCount} раундов</span>
           </div>
-          <a class="btn-secondary" href="bracket.html?id=${encodeURIComponent(t.id)}">Открыть сетку</a>
+          <a class="btn-secondary" href="bracket.html?id=${encodeURIComponent(t.id)}">Открыть сетку →</a>
         </article>
       `;
     }).join("");
   }
 
-  // ИСПРАВЛЕНО: считаем матчи из tournament.rounds[].matches, а не db.matches
   function renderStats() {
     const el = document.querySelector("#stats");
     if (!el) return;
@@ -74,9 +76,18 @@
 
     el.innerHTML = `
       <div class="stats-grid">
-        <div class="stat-card"><strong>${(db.tournaments || []).length}</strong><span>Турниры</span></div>
-        <div class="stat-card"><strong>${(db.users || []).length}</strong><span>Пользователи</span></div>
-        <div class="stat-card"><strong>${totalMatches}</strong><span>Матчи</span></div>
+        <div class="stat-card">
+          <strong>${(db.tournaments || []).length}</strong>
+          <span>Турниры</span>
+        </div>
+        <div class="stat-card">
+          <strong>${(db.users || []).length}</strong>
+          <span>Пользователи</span>
+        </div>
+        <div class="stat-card">
+          <strong>${totalMatches}</strong>
+          <span>Матчи</span>
+        </div>
       </div>
     `;
   }
