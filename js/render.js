@@ -8,6 +8,7 @@ function loadPage() {
   renderHero(db);
   renderLeaderboard(db);
   renderRecent(db);
+  renderEloBoard(db);
 }
 
 function updateSiteBranding() {
@@ -127,4 +128,14 @@ function toast(msg) {
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2500);
+}
+
+function renderEloBoard(db) {
+    let el = document.getElementById("eloBoard");
+    if (!el) return;
+    if (!db.players.length) {
+        el.innerHTML = '';
+        return;
+    }
+    el.innerHTML = renderEloLeaderboard(db.players);
 }
