@@ -58,7 +58,6 @@
       return;
     }
 
-    // ИСПРАВЛЕНО: используем Bracket.getTournamentById() вместо Bracket.getTournament()
     const tournament = Bracket.getTournamentById(tournamentId);
     if (!tournament) {
       container.innerHTML = `
@@ -98,7 +97,7 @@
       const matches = (round.matches || []).map(m => renderMatch(m, isActive)).join("");
       return `
         <section class="round-col ${isActive ? "active" : ""}">
-          <h2>${escapeHTML(roundTitle)}</h2>
+          <h2 class="round-title">${escapeHTML(roundTitle)}</h2>
           <div class="round-matches">${matches || "<p>Нет матчей</p>"}</div>
         </section>
       `;
