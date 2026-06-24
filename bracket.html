@@ -3,8 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сетка турнира | Tournament Hub</title>
+    <title>Сетка | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
+    <script src="js/db.js"></script>
+    <script src="js/engine.js"></script>
+    <script src="js/tournament.js"></script>
+    <script src="js/bracket.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/render-bracket.js"></script>
 </head>
 <body>
     <header>
@@ -12,7 +18,7 @@
             <a href="index.html" class="logo" id="siteLogoLink">🏆 Tournament Hub</a>
             <nav>
                 <a href="index.html">Главная</a>
-                <a href="bracket.html">Сетка</a>
+                <a href="bracket.html" class="active">Сетка</a>
                 <a href="history.html">История</a>
                 <a href="chat.html">💬 Чат</a>
                 <a href="rules.html">Правила</a>
@@ -23,80 +29,65 @@
         </div>
     </header>
 
-    <main class="container page-enter">
-        <h1 class="page-title">Турнирная сетка</h1>
+    <div class="container">
+        <div class="bracket-header" id="bracket-header">
+            <h1>🏆 Турнирная сетка</h1>
+        </div>
+        <p class="bracket-sub" id="bracket-sub">Выберите турнир на главной</p>
 
-        <div id="bracket">
-            <div class="empty">Загрузка...</div>
+        <div id="bracket-container">
+            <div class="skeleton" style="height:400px;border-radius:20px;"></div>
         </div>
 
-        <section id="comments-section" style="margin-top:40px;">
-            <h2>Комментарии</h2>
-            <div id="comments"></div>
-            <div id="commentForm" style="margin-top:16px;display:none;">
-                <textarea id="commentText" placeholder="Напишите комментарий..." maxlength="500" 
-                    style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:12px;color:var(--text);font-family:inherit;resize:vertical;min-height:80px;"></textarea>
-                <button class="btn-primary" style="margin-top:8px;" onclick="postComment()">Отправить</button>
+        <!-- Комментарии -->
+        <div style="margin-top:48px;">
+            <h2 class="section-title">💬 Комментарии</h2>
+            <div id="comments-box" style="background:var(--bg-3);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+                <div id="comments-list" style="max-height:400px;overflow-y:auto;"></div>
+                <div style="padding:16px 20px;border-top:1px solid var(--border);">
+                    <textarea id="commentText" placeholder="Написать комментарий..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);resize:vertical;min-height:80px;"></textarea>
+                    <button class="btn-primary" style="margin-top:10px;" onclick="postComment()">Отправить</button>
+                </div>
             </div>
-            <div id="commentLogin" style="margin-top:16px;text-align:center;">
-                <p style="color:var(--text-3);">Войдите, чтобы оставлять комментарии</p>
-                <a href="login.html" class="btn-primary" style="text-decoration:none;display:inline-block;margin-top:8px;">Войти</a>
-            </div>
-        </section>
-    </main>
+        </div>
+    </div>
 
-    <footer style="text-align:center;padding:40px 20px;color:var(--text-3);font-size:13px;">
-        <p id="footerText">© 2026 Tournament Hub</p>
+    <footer>
+        <p>Tournament Hub</p>
     </footer>
 
-    <script src="js/db.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/engine.js"></script>
-    <script src="js/elo.js"></script>
-    <script src="js/tournament.js"></script>
-    <script src="js/bracket.js"></script>
-    <script src="js/comments.js"></script>
-    <script src="js/render-bracket.js"></script>
-
     <script>
-        let currentTournamentId = null;
-
-        document.addEventListener("DOMContentLoaded", function() {
-            const params = new URLSearchParams(location.search);
-            currentTournamentId = params.get("id");
-
-            const db = DB.getDB();
-            const name = db.settings?.siteName || "Tournament Hub";
-            const logo = db.settings?.siteLogo || "🏆";
-            document.title = name + " — Сетка";
-            document.getElementById("siteLogoLink").textContent = logo + " " + name;
-            document.getElementById("footerText").textContent = "© " + new Date().getFullYear() + " " + name;
-
-            Auth.renderNavUser();
-            const adminLink = document.getElementById("navAdmin");
-            if (adminLink && Auth.isAdmin()) adminLink.classList.remove("hidden");
-
-            if (window.renderBracket) renderBracket();
-
-            // Комментарии
-            const user = DB.getCurrentUser();
-            if (user) {
-                document.getElementById("commentForm").style.display = "block";
-                document.getElementById("commentLogin").style.display = "none";
-            }
-            if (currentTournamentId && window.Comments) {
-                Comments.renderComments(currentTournamentId, document.getElementById("comments"));
-            }
-        });
-
         function postComment() {
             const text = document.getElementById("commentText").value;
-            if (!text.trim()) return;
-            if (!currentTournamentId) return;
-            Comments.addComment(currentTournamentId, text);
+            const params = new URLSearchParams(window.location.search);
+            const tid = params.get("id");
+            if (!tid) return;
+
+            if (!DB.getCurrentUser()) {
+                alert("Войдите, чтобы оставлять комментарии");
+                return;
+            }
+
+            Comments.addComment(tid, text);
             document.getElementById("commentText").value = "";
-            Comments.renderComments(currentTournamentId, document.getElementById("comments"));
+            loadComments();
         }
+
+        function loadComments() {
+            const params = new URLSearchParams(window.location.search);
+            const tid = params.get("id");
+            if (!tid) return;
+            Comments.renderComments(tid, document.getElementById("comments-list"));
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            Auth.renderNavUser();
+            Auth.checkFandomAutoAdmin();
+            const navAdmin = document.getElementById("navAdmin");
+            if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
+
+            setTimeout(loadComments, 100);
+        });
     </script>
 </body>
 </html>
