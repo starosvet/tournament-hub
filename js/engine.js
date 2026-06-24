@@ -1,118 +1,96 @@
-// js/engine.js — турнирный движок v2 (универсальные субъекты)
+/* 
+ Tournament Hub
+ Core tournament engine
+*/
 
-function createBracket(subjects) {
-    let shuffled = [...subjects].sort(() => Math.random() - 0.5);
-    let n = shuffled.length;
-    let p = 1;
-    while (p < n) p *= 2;
-    let byes = p - n;
+(function () {
 
-    let roundSubjects = shuffled.map(s => ({
-        id: s.id,
-        name: s.name,
-        url: s.url,
-        type: s.type || 'character',
-        isBye: false
-    }));
+    function shuffle(array) {
+        const result = [...array];
 
-    for (let i = 0; i < byes; i++) {
-        roundSubjects.push({ id: 'bye_' + i, name: '—', url: '#', type: 'bye', isBye: true });
+        for (let i = result.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+
+            [result[i], result[j]] = [
+                result[j],
+                result[i]
+            ];
+        }
+
+        return result;
     }
 
-    let rounds = [];
-    let matches = createMatches(roundSubjects);
-    rounds.push({
-        id: 0,
-        name: roundName(matches.length * 2),
-        matches: matches,
-        isActive: true,
-        startedAt: new Date().toISOString(),
-        endedAt: null
-    });
 
-    let remaining = matches.length;
-    while (remaining > 1) {
-        remaining = Math.ceil(remaining / 2);
-        rounds.push({
-            id: rounds.length,
-            name: roundName(remaining * 2),
-            matches: [],
-            isActive: false,
-            startedAt: null,
-            endedAt: null
-        });
+    function createMatches(players) {
+
+        if (!players || players.length < 2) {
+            return [];
+        }
+
+
+        let shuffled = shuffle(players);
+
+
+        const matches = [];
+
+
+        for (let i = 0; i < shuffled.length; i += 2) {
+
+            matches.push({
+                id: crypto.randomUUID
+                    ? crypto.randomUUID()
+                    : Date.now() + "_" + i,
+
+                player1: shuffled[i] || null,
+                player2: shuffled[i + 1] || null,
+
+                votes1: 0,
+                votes2: 0,
+
+                winner: null,
+
+                finished: false
+            });
+
+        }
+
+
+        return matches;
+
     }
 
-    let tournament = {
-        id: 't_' + Date.now(),
-        name: '',
-        description: '',
-        subjectType: subjects[0]?.type || 'character',
-        createdAt: new Date().toISOString(),
-        status: 'active',
-        currentRound: 0,
-        rounds: rounds,
-        winner: null,
-        completedAt: null,
-        config: { voteDurationHours: 24, minVotes: 1, allowGuest: true },
-        _playerMap: {}
+
+
+    function getWinner(match) {
+
+        if (!match) {
+            return null;
+        }
+
+
+        if (match.votes1 > match.votes2) {
+            return match.player1;
+        }
+
+
+        if (match.votes2 > match.votes1) {
+            return match.player2;
+        }
+
+
+        return null;
+
+    }
+
+
+
+    window.TournamentEngine = {
+
+        shuffle,
+        createMatches,
+        getWinner
+
     };
 
-    rounds[0].matches.forEach(m => {
-        if (!m.a.isBye) {
-            let orig = subjects.find(s => s.name === m.a.name);
-            if (orig) tournament._playerMap[m.a.id] = orig.id;
-        }
-        if (!m.b.isBye) {
-            let orig = subjects.find(s => s.name === m.b.name);
-            if (orig) tournament._playerMap[m.b.id] = orig.id;
-        }
-    });
 
-    return tournament;
-}
-
-function createMatches(subjects) {
-    let out = [];
-    for (let i = 0; i < subjects.length; i += 2) {
-        out.push({
-            a: subjects[i],
-            b: subjects[i + 1] || { id: 'bye_' + i, name: '—', url: '#', type: 'bye', isBye: true },
-            votesA: 0,
-            votesB: 0,
-            winner: null,
-            done: false
-        });
-    }
-    return out;
-}
-
-function roundName(totalSubjects) {
-    if (totalSubjects <= 2) return 'Финал';
-    if (totalSubjects <= 4) return '1/2 финала';
-    if (totalSubjects <= 8) return '1/4 финала';
-    if (totalSubjects <= 16) return '1/8 финала';
-    if (totalSubjects <= 32) return '1/16 финала';
-    if (totalSubjects <= 64) return '1/32 финала';
-    return '1/' + (totalSubjects / 2) + ' финала';
-}
-
-function getTimeLeft(startedAt, hours) {
-    let end = new Date(startedAt).getTime() + hours * 3600000;
-    return Math.max(0, end - Date.now());
-}
-
-function formatDuration(ms) {
-    if (ms <= 0) return '00:00:00';
-    let s = Math.floor(ms / 1000);
-    let h = Math.floor(s / 3600);
-    let m = Math.floor((s % 3600) / 60);
-    let sec = s % 60;
-    return [h, m, sec].map(x => String(x).padStart(2, '0')).join(':');
-}
-
-function formatDate(iso) {
-    if (!iso) return '—';
-    let d = new Date(iso);
-    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
+})();
