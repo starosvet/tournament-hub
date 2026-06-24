@@ -1,45 +1,45 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tournament Hub</title>
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tournament Hub</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="js/db.js"></script>
+    <script src="js/engine.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/render.js"></script>
 </head>
 <body>
+    <header>
+        <div class="header-inner">
+            <a href="index.html" class="logo" id="siteLogoLink">🏆 Tournament Hub</a>
+            <nav>
+                <a href="index.html" class="active">Главная</a>
+                <a href="bracket.html">Сетка</a>
+                <a href="history.html">История</a>
+                <a href="rules.html">Правила</a>
+                <a href="admin.html" id="navAdmin" class="hidden">Управление</a>
+            </nav>
+            <div class="nav-user" id="navUser"></div>
+        </div>
+    </header>
 
-<header>
-  <div class="header-inner">
-    <a href="index.html" class="logo">🏆 Tournament Hub</a>
-    <nav>
-      <a href="index.html" class="active">Главная</a>
-      <a href="bracket.html">Сетка</a>
-      <a href="history.html">История</a>
-      <a href="rules.html">Правила</a>
-      <a href="admin.html" id="navAdmin" class="hidden">Управление</a>
-    </nav>
-    <div id="navUser" class="nav-user"></div>
-  </div>
-</header>
+    <div class="container page-enter">
+        <div id="hero"></div>
+        
+        <div class="grid-2">
+            <div id="leaderboard"></div>
+            <div id="recent"></div>
+        </div>
+    </div>
 
-<main class="container">
-  <section id="hero"></section>
-  <div class="grid-2">
-    <section id="leaderboard"></section>
-    <section id="recent"></section>
-  </div>
-</main>
+    <footer>
+        <p id="footerText">© 2026 Tournament Hub</p>
+    </footer>
 
-<footer>
-  <span id="footerText">Tournament Hub</span>
-</footer>
-
-<script src="js/db.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/render.js"></script>
-
-<script>loadPage();</script>
-
+    <script>
+        loadPage();
+    </script>
 </body>
 </html>
