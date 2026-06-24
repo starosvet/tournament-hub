@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/fandom-auth.js"></script>
 </head>
 <body>
     <header>
@@ -26,9 +27,10 @@
     </header>
 
     <div class="container">
-        <div class="login-box page-enter">
+        <!-- ОБЫЧНАЯ АВТОРИЗАЦИЯ -->
+        <div class="login-box page-enter" style="margin-bottom:24px;">
             <h2>🔐 Вход</h2>
-            <p>Выберите способ авторизации</p>
+            <p>Гостевой аккаунт</p>
 
             <div id="loginForm">
                 <label>Ваш никнейм</label>
@@ -47,6 +49,37 @@
                 Гостевой аккаунт хранится локально. Вы сможете голосовать и оставлять комментарии.
             </p>
         </div>
+
+        <!-- FANDOM АВТОРИЗАЦИЯ -->
+        <div class="login-box page-enter" id="fandomBox">
+            <h2>🌐 Вход через Fandom Wiki</h2>
+            <p>chickengun-fanon.fandom.com/ru</p>
+
+            <div id="fandomStep1">
+                <label>Ваш ник на Fandom</label>
+                <input type="text" id="fandomName" placeholder="Например: Melanthe Weber">
+                <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="startFandomLogin()">📨 Получить код</button>
+            </div>
+
+            <div id="fandomStep2" style="display:none;">
+                <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:12px;padding:16px;margin:16px 0;text-align:center;">
+                    <div style="font-size:12px;color:var(--text-3);margin-bottom:8px;">Ваш код подтверждения</div>
+                    <div id="fandomCode" style="font-size:2em;font-weight:700;font-family:monospace;letter-spacing:4px;color:var(--accent);"></div>
+                </div>
+                <ol style="color:var(--text-2);font-size:14px;line-height:1.8;padding-left:20px;">
+                    <li>Зайдите в свой профиль на <a href="https://chickengun-fanon.fandom.com/ru/wiki/Участник:" target="_blank" style="color:var(--accent);">вики</a></li>
+                    <li>Сделайте любую правку (например, добавьте пробел)</li>
+                    <li>В описании правки вставьте код выше</li>
+                    <li>Сохраните правку</li>
+                </ol>
+                <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="checkFandomLogin()">✅ Я сделал правку</button>
+                <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="cancelFandomLogin()">❌ Отмена</button>
+                <div id="fandomStatus" style="margin-top:12px;text-align:center;font-size:13px;"></div>
+                <div id="fandomProgress" style="margin-top:8px;text-align:center;font-size:12px;color:var(--text-3);"></div>
+            </div>
+
+            <div id="fandomError" style="color:var(--red);margin-top:16px;text-align:center;font-size:13px;"></div>
+        </div>
     </div>
 
     <footer>
@@ -54,6 +87,7 @@
     </footer>
 
     <script>
+        /* ---------- обычная авторизация ---------- */
         function doLogin() {
             const username = document.getElementById("loginUsername").value.trim();
             const password = document.getElementById("loginPassword").value;
@@ -83,6 +117,70 @@
         document.addEventListener("keydown", function(e) {
             if (e.key === "Enter") doLogin();
         });
+
+        /* ---------- fandom авторизация ---------- */
+        function startFandomLogin() {
+            const name = document.getElementById("fandomName").value.trim();
+            const err = document.getElementById("fandomError");
+            err.textContent = "";
+
+            const result = FandomAuth.startFandomAuth(name);
+            if (!result.ok) {
+                err.textContent = result.error;
+                return;
+            }
+
+            document.getElementById("fandomStep1").style.display = "none";
+            document.getElementById("fandomStep2").style.display = "block";
+            document.getElementById("fandomCode").textContent = result.code;
+        }
+
+        function cancelFandomLogin() {
+            FandomAuth.clearPendingAuth();
+            document.getElementById("fandomStep1").style.display = "block";
+            document.getElementById("fandomStep2").style.display = "none";
+            document.getElementById("fandomStatus").textContent = "";
+            document.getElementById("fandomProgress").textContent = "";
+            document.getElementById("fandomError").textContent = "";
+        }
+
+        function checkFandomLogin() {
+            const status = document.getElementById("fandomStatus");
+            const progress = document.getElementById("fandomProgress");
+            const err = document.getElementById("fandomError");
+            status.textContent = "⏳ Проверяем правки...";
+            err.textContent = "";
+
+            FandomAuth.pollFandomAuth(
+                // onSuccess
+                function(result) {
+                    status.textContent = "✅ Код подтверждён!";
+                    progress.textContent = "";
+
+                    // Проверяем, является ли пользователь админом
+                    const isAdmin = result.fandomName === "Melanthe Weber";
+
+                    const complete = FandomAuth.completeFandomAuth(result.fandomName, isAdmin);
+                    if (complete.ok) {
+                        setTimeout(() => {
+                            location.href = "index.html";
+                        }, 800);
+                    } else {
+                        err.textContent = "Ошибка создания пользователя";
+                    }
+                },
+                // onError
+                function(errorMsg) {
+                    status.textContent = "";
+                    progress.textContent = "";
+                    err.textContent = errorMsg;
+                },
+                // onProgress
+                function(current, max) {
+                    progress.textContent = "Проверка " + current + "/" + max;
+                }
+            );
+        }
 
         document.addEventListener("DOMContentLoaded", function() {
             Auth.renderNavUser();
