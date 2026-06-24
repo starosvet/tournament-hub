@@ -1,91 +1,208 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>История | Tournament Hub</title>
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>История | Tournament Hub</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="js/db.js"></script>
+    <script src="js/engine.js"></script>
+    <script src="js/auth.js"></script>
 </head>
 <body>
+    <header>
+        <div class="header-inner">
+            <a href="index.html" class="logo" id="siteLogoLink">🏆 Tournament Hub</a>
+            <nav>
+                <a href="index.html">Главная</a>
+                <a href="bracket.html">Сетка</a>
+                <a href="history.html" class="active">История</a>
+                <a href="rules.html">Правила</a>
+                <a href="admin.html" id="navAdmin" class="hidden">Управление</a>
+            </nav>
+            <div class="nav-user" id="navUser"></div>
+        </div>
+    </header>
 
-<header>
-  <div class="header-inner">
-    <a href="index.html" class="logo">🏆 Tournament Hub</a>
-    <nav>
-      <a href="index.html">Главная</a>
-      <a href="bracket.html">Сетка</a>
-      <a href="history.html" class="active">История</a>
-      <a href="rules.html">Правила</a>
-      <a href="admin.html" id="navAdmin" class="hidden">Управление</a>
-    </nav>
-    <div id="navUser" class="nav-user"></div>
-  </div>
-</header>
+    <div class="container page-enter">
+        <h1 class="page-title">📜 История матчей</h1>
 
-<main class="container">
-  <h1 class="page-title">📜 История матчей</h1>
-  <div id="historyList"></div>
-</main>
+        <div class="grid-2" style="margin-bottom:24px;">
+            <div class="card">
+                <h3 style="color:var(--accent);margin-bottom:12px;">📊 Статистика</h3>
+                <div id="statsBox">
+                    <p style="color:var(--text-3);">Загрузка...</p>
+                </div>
+            </div>
+            <div class="card">
+                <h3 style="color:var(--accent);margin-bottom:12px;">🏆 Завершённые турниры</h3>
+                <div id="completedTournaments">
+                    <p style="color:var(--text-3);">Загрузка...</p>
+                </div>
+            </div>
+        </div>
 
-<footer>
-  <span id="footerText">Tournament Hub</span>
-</footer>
+        <div id="historyContent">
+            <p style="color:var(--text-3);text-align:center;padding:40px;">Загрузка истории...</p>
+        </div>
+    </div>
 
-<script src="js/db.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/render.js"></script>
+    <footer>
+        <p id="footerText">© 2026 Tournament Hub</p>
+    </footer>
 
-<script>
-function loadHistoryPage() {
-  let db = getDB();
-  renderNavUser(db);
-  renderHistory(db);
-  renderAdminLink();
-}
+    <script>
+        function loadHistory() {
+            let db = getDB();
+            updateSiteBranding();
+            renderNavUser(db);
+            renderAdminLink();
 
-function renderHistory(db) {
-  let el = document.getElementById("historyList");
-  if (!el) return;
-  
-  let t = getActiveTournament(db);
-  if (!t || !t.rounds) {
-    el.innerHTML = '<div class="hero-empty"><h2>Нет истории</h2><p>Пока не проведено ни одного матча.</p></div>';
-    return;
-  }
-  
-  let html = '';
-  t.rounds.forEach((r, idx) => {
-    let done = r.matches.filter(m => m.done);
-    if (!done.length) return;
-    
-    html += '<div class="round-block"><h2>' + r.name + '</h2>';
-    done.forEach(m => {
-      let wa = m.winner && m.winner.id === m.a.id;
-      let wb = m.winner && m.winner.id === m.b.id;
-      html += '<div class="match-row">' +
-        '<div class="mr-side ' + (wa ? 'win' : '') + '">' +
-        '<img src="' + (m.a.img || '') + '" onerror="this.style.display=\'none\'">' +
-        '<span>' + m.a.name + '</span></div>' +
-        '<div class="mr-center"><span class="mr-score">' + m.votesA + ' : ' + m.votesB + '</span>' +
-        '<span class="mr-winner">🏆 ' + (m.winner ? m.winner.name : '—') + '</span></div>' +
-        '<div class="mr-side ' + (wb ? 'win' : '') + '">' +
-        '<img src="' + (m.b.img || '') + '" onerror="this.style.display=\'none\'">' +
-        '<span>' + m.b.name + '</span></div>' +
-        '</div>';
-    });
-    html += '</div>';
-  });
-  
-  if (!html) {
-    el.innerHTML = '<div class="hero-empty"><h2>Нет истории</h2><p>Пока не проведено ни одного матча.</p></div>';
-  } else {
-    el.innerHTML = html;
-  }
-}
+            // Статистика
+            let totalMatches = 0;
+            let totalVotes = 0;
+            let totalTournaments = db.tournaments.length;
+            let completedTournaments = db.tournaments.filter(t => t.status === 'completed').length;
 
-loadHistoryPage();
-</script>
+            db.tournaments.forEach(t => {
+                t.rounds.forEach(r => {
+                    r.matches.forEach(m => {
+                        if (m.done) {
+                            totalMatches++;
+                            totalVotes += m.votesA + m.votesB;
+                        }
+                    });
+                });
+            });
 
+            document.getElementById('statsBox').innerHTML = `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                    <div style="text-align:center;padding:16px;background:var(--bg);border-radius:12px;">
+                        <div style="font-size:2em;font-weight:800;color:var(--accent);">${totalMatches}</div>
+                        <div style="color:var(--text-3);font-size:13px;">Матчей сыграно</div>
+                    </div>
+                    <div style="text-align:center;padding:16px;background:var(--bg);border-radius:12px;">
+                        <div style="font-size:2em;font-weight:800;color:var(--blue);">${totalVotes}</div>
+                        <div style="color:var(--text-3);font-size:13px;">Голосов отдано</div>
+                    </div>
+                    <div style="text-align:center;padding:16px;background:var(--bg);border-radius:12px;">
+                        <div style="font-size:2em;font-weight:800;color:var(--green);">${totalTournaments}</div>
+                        <div style="color:var(--text-3);font-size:13px;">Всего турниров</div>
+                    </div>
+                    <div style="text-align:center;padding:16px;background:var(--bg);border-radius:12px;">
+                        <div style="font-size:2em;font-weight:800;color:var(--purple);">${completedTournaments}</div>
+                        <div style="color:var(--text-3);font-size:13px;">Завершено</div>
+                    </div>
+                </div>
+            `;
+
+            // Завершённые турниры
+            let completed = db.tournaments.filter(t => t.status === 'completed');
+            if (completed.length) {
+                document.getElementById('completedTournaments').innerHTML = completed.map(t => `
+                    <div class="tournament-item" style="margin-bottom:8px;">
+                        <div class="ti-status completed"></div>
+                        <div class="ti-info">
+                            <h4>${t.name}</h4>
+                            <span>Победитель: ${t.winner?.name || '—'} | ${formatDate(t.completedAt)}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                document.getElementById('completedTournaments').innerHTML = '<p style="color:var(--text-3);font-size:13px;">Нет завершённых турниров</p>';
+            }
+
+            // История матчей по раундам
+            let html = '';
+            let activeT = getActiveTournament(db);
+            
+            if (activeT) {
+                activeT.rounds.forEach((r, ri) => {
+                    if (ri > activeT.currentRound) return; // Показываем только прошедшие и текущий
+                    
+                    let doneMatches = r.matches.filter(m => m.done);
+                    if (!doneMatches.length && ri !== activeT.currentRound) return;
+                    
+                    html += `<div class="round-block">`;
+                    html += `<h2>${r.name} ${ri === activeT.currentRound && activeT.status === 'active' ? '<span style="color:var(--green);font-size:14px;">(текущий)</span>' : ''}</h2>`;
+                    
+                    r.matches.forEach(m => {
+                        let wa = m.done && m.winner?.id === m.a.id;
+                        let wb = m.done && m.winner?.id === m.b.id;
+                        let total = m.votesA + m.votesB;
+                        
+                        html += `
+                            <div class="match-row">
+                                <div class="mr-side ${wa ? 'win' : ''}">
+                                    ${m.a.url !== '#' && m.a.url ? `<img src="${m.a.url}" onerror="this.style.display='none'">` : `<div style="width:36px;height:36px;border-radius:50%;background:var(--bg-4);display:flex;align-items:center;justify-content:center;font-weight:700;">${m.a.name.charAt(0)}</div>`}
+                                    <span>${m.a.name}</span>
+                                </div>
+                                <div class="mr-center">
+                                    <span class="mr-score">${m.votesA} : ${m.votesB}</span>
+                                    ${m.done ? `<span class="mr-winner">🏆 ${m.winner?.name || '—'}</span>` : `<span style="color:var(--text-3);font-size:12px;">${total} голосов</span>`}
+                                </div>
+                                <div class="mr-side ${wb ? 'win' : ''}" style="justify-content:flex-end;">
+                                    <span>${m.b.name}</span>
+                                    ${m.b.url !== '#' && m.b.url ? `<img src="${m.b.url}" onerror="this.style.display='none'">` : `<div style="width:36px;height:36px;border-radius:50%;background:var(--bg-4);display:flex;align-items:center;justify-content:center;font-weight:700;">${m.b.name.charAt(0)}</div>`}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += `</div>`;
+                });
+            }
+
+            // История завершённых турниров
+            completed.forEach(t => {
+                html += `<div class="round-block" style="margin-top:40px;border-top:2px solid var(--border);padding-top:24px;">`;
+                html += `<h2 style="color:var(--purple);">🏆 ${t.name} <span style="font-size:14px;color:var(--text-3);">— ${formatDate(t.completedAt)}</span></h2>`;
+                
+                t.rounds.forEach(r => {
+                    let doneMatches = r.matches.filter(m => m.done);
+                    if (!doneMatches.length) return;
+                    
+                    html += `<h3 style="color:var(--text-2);font-size:1em;margin:16px 0 12px;">${r.name}</h3>`;
+                    doneMatches.forEach(m => {
+                        html += `
+                            <div class="match-row" style="opacity:0.85;">
+                                <div class="mr-side ${m.winner?.id === m.a.id ? 'win' : ''}">
+                                    <span>${m.a.name}</span>
+                                </div>
+                                <div class="mr-center">
+                                    <span class="mr-score">${m.votesA} : ${m.votesB}</span>
+                                </div>
+                                <div class="mr-side ${m.winner?.id === m.b.id ? 'win' : ''}" style="justify-content:flex-end;">
+                                    <span>${m.b.name}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                });
+                
+                html += `</div>`;
+            });
+
+            if (!html) {
+                html = '<div class="hero-empty" style="padding:60px 20px;"><p>История пуста. Создайте турнир!</p></div>';
+            }
+
+            document.getElementById('historyContent').innerHTML = html;
+        }
+
+        function updateSiteBranding() {
+            let db = getDB();
+            let name = db.settings?.siteName || 'Tournament Hub';
+            let logo = db.settings?.siteLogo || '🏆';
+            document.title = name + ' — История';
+            let logoLink = document.getElementById('siteLogoLink');
+            if (logoLink) logoLink.textContent = logo + ' ' + name;
+            let ft = document.getElementById('footerText');
+            if (ft) ft.textContent = '© ' + new Date().getFullYear() + ' ' + name;
+        }
+
+        loadHistory();
+        initAuth();
+    </script>
 </body>
 </html>
