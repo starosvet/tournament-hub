@@ -49,6 +49,16 @@
     </footer>
 
     <script>
+        function escapeHTML(text) {
+            if (!text) return "";
+            return String(text)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
         function loadHistory() {
             const db = DB.getDB();
 
@@ -71,11 +81,11 @@
                 ftContainer.innerHTML = `<p style="color:var(--text-3);">Пока нет завершённых турниров</p>`;
             } else {
                 ftContainer.innerHTML = finished.map(t => `
-                    <div class="tournament-item" onclick="location.href='bracket.html?id=${t.id}'">
+                    <div class="tournament-item" onclick="location.href='bracket.html?id=${encodeURIComponent(t.id)}'" style="cursor:pointer;">
                         <span class="ti-status completed"></span>
                         <div class="ti-info">
-                            <h4>${escapeHTML(t.title)}</h4>
-                            <span>${new Date(t.createdAt).toLocaleDateString("ru-RU")} · ${t.players?.length || 0} участников</span>
+                            <h4>${escapeHTML(t.title || t.name || "Без названия")}</h4>
+                            <span>${new Date(t.createdAt).toLocaleDateString("ru-RU")} — Победитель: ${escapeHTML(t.winner?.name || "?")}</span>
                         </div>
                     </div>
                 `).join("");
@@ -83,54 +93,38 @@
 
             // История матчей
             const mhContainer = document.getElementById("match-history");
-            const doneMatches = (db.matches || []).filter(m => m.finished).sort((a, b) => (b.finishedAt || b.createdAt || 0) - (a.finishedAt || a.createdAt || 0));
+            const allMatches = [];
+            (db.tournaments || []).forEach(t => {
+                (t.rounds || []).forEach((r, ri) => {
+                    (r.matches || []).forEach(m => {
+                        if (m.finished) {
+                            allMatches.push({ ...m, tournamentName: t.title || t.name, roundName: r.name || "Раунд " + (ri + 1) });
+                        }
+                    });
+                });
+            });
 
-            if (!doneMatches.length) {
+            if (!allMatches.length) {
                 mhContainer.innerHTML = `<p style="color:var(--text-3);">Пока нет завершённых матчей</p>`;
             } else {
-                mhContainer.innerHTML = doneMatches.slice(0, 50).map(m => {
-                    const p1Name = escapeHTML(m.player1?.name || m.player1 || "—");
-                    const p2Name = escapeHTML(m.player2?.name || m.player2 || "—");
-                    const wName = escapeHTML(m.winner?.name || m.winner || "—");
-                    const p1Img = m.player1?.image || "";
-                    const p2Img = m.player2?.image || "";
-
-                    return `
-                        <div class="match-row">
-                            <div class="mr-side ${m.winner === m.player1 ? 'win' : ''}">
-                                ${p1Img ? `<img src="${escapeHTML(p1Img)}" alt="">` : ''}
-                                <span>${p1Name}</span>
-                            </div>
-                            <div class="mr-center">
-                                <span class="mr-score">${m.votes1 || 0} : ${m.votes2 || 0}</span>
-                                <div class="mr-winner">🏆 ${wName}</div>
-                            </div>
-                            <div class="mr-side ${m.winner === m.player2 ? 'win' : ''}">
-                                ${p2Img ? `<img src="${escapeHTML(p2Img)}" alt="">` : ''}
-                                <span>${p2Name}</span>
-                            </div>
-                        </div>
-                    `;
-                }).join("");
+                mhContainer.innerHTML = allMatches.map(m => `
+                    <div class="recent-match">
+                        <span class="win">${escapeHTML(m.winner?.name || "?")}</span>
+                        <span style="color:var(--text-3);">победил</span>
+                        <span>${escapeHTML((m.player1?.id === m.winner?.id ? m.player2 : m.player1)?.name || "?")}</span>
+                        <span class="recent-score">${m.votes1 || 0}:${m.votes2 || 0}</span>
+                        <span class="recent-round">${escapeHTML(m.tournamentName)} — ${escapeHTML(m.roundName)}</span>
+                    </div>
+                `).join("");
             }
         }
 
-        function escapeHTML(text) {
-            if (!text) return "";
-            return String(text)
-                .replaceAll("&", "&amp;")
-                .replaceAll("<", "&lt;")
-                .replaceAll(">", "&gt;")
-                .replaceAll('"', "&quot;")
-                .replaceAll("'", "&#39;");
-        }
-
         document.addEventListener("DOMContentLoaded", function() {
-            loadHistory();
             Auth.renderNavUser();
             Auth.checkFandomAutoAdmin();
             const navAdmin = document.getElementById("navAdmin");
             if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
+            loadHistory();
         });
     </script>
 </body>
