@@ -13,15 +13,15 @@
     <header>
         <div class="header-inner">
             <a href="index.html" class="logo" id="siteLogoLink">🏆 Tournament Hub</a>
-<nav>
-    <a href="index.html">Главная</a>
-    <a href="bracket.html">Сетка</a>
-    <a href="history.html">История</a>
-    <a href="chat.html">💬 Чат</a>
-    <a href="rules.html">Правила</a>
-    <a href="profile.html">👤 Профиль</a>
-    <a href="admin.html" id="navAdmin" class="hidden">⚙️ Управление</a>
-</nav>
+            <nav>
+                <a href="index.html">Главная</a>
+                <a href="bracket.html">Сетка</a>
+                <a href="history.html">История</a>
+                <a href="chat.html">💬 Чат</a>
+                <a href="rules.html">Правила</a>
+                <a href="profile.html" class="active">👤 Профиль</a>
+                <a href="admin.html" id="navAdmin" class="hidden">⚙️ Управление</a>
+            </nav>
             <div class="nav-user" id="navUser"></div>
         </div>
     </header>
@@ -70,7 +70,6 @@
             let roleText = user.role === 'admin' ? '👑 Администратор' : user.role === 'moderator' ? '🛡️ Модератор' : '👤 Пользователь';
             let roleColor = user.role === 'admin' ? 'var(--accent)' : user.role === 'moderator' ? 'var(--blue)' : 'var(--text-3)';
             
-            let elo = getElo(user.id);
             let totalVotes = user.votes ? user.votes.length : 0;
             let fandomLink = user.wikiDomain ? `https://${user.wikiDomain}/wiki/User:${encodeURIComponent(user.fandomName)}` : null;
 
@@ -98,26 +97,25 @@
                             
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">
                                 <div style="background:var(--bg);border-radius:12px;padding:12px;">
-                                    <div style="font-size:1.5em;font-weight:800;color:var(--accent);">${elo}</div>
-                                    <div style="color:var(--text-3);font-size:11px;">Elo рейтинг</div>
+                                    <div style="font-size:1.5em;font-weight:800;color:var(--blue);">${totalVotes}</div>
+                                    <div style="color:var(--text-3);font-size:11px;">Отдано голосов</div>
                                 </div>
                                 <div style="background:var(--bg);border-radius:12px;padding:12px;">
-                                    <div style="font-size:1.5em;font-weight:800;color:var(--blue);">${totalVotes}</div>
-                                    <div style="color:var(--text-3);font-size:11px;">Голосов</div>
+                                    <div style="font-size:1.5em;font-weight:800;color:var(--purple);">${user.authType === 'fandom' ? '✓' : '—'}</div>
+                                    <div style="color:var(--text-3);font-size:11px;">Верификация</div>
                                 </div>
                             </div>
                         </div>
                         
                         ${canEdit ? `
                             <div class="card" style="margin-top:16px;">
-                                <h3 style="font-size:1em;margin-bottom:12px;">✏️ Редактировать</h3>
-                                <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">О себе</label>
+                                <h3 style="font-size:1em;margin-bottom:12px;">✏️ О себе</h3>
                                 <textarea id="editBio" maxlength="300" style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);font-family:inherit;resize:vertical;min-height:80px;font-size:14px;">${escapeHtml(user.bio || '')}</textarea>
                                 <button class="btn-primary" style="width:100%;margin-top:10px;font-size:13px;padding:10px;" onclick="saveBio()">💾 Сохранить</button>
                             </div>
                         ` : (user.bio ? `
                             <div class="card" style="margin-top:16px;">
-                                <h3 style="font-size:1em;margin-bottom:8px;">📝 О себе</h3>
+                                <h3 style="font-size:1em;margin-bottom:8px;">📝 О пользователе</h3>
                                 <p style="color:var(--text-2);font-size:14px;line-height:1.6;">${escapeHtml(user.bio)}</p>
                             </div>
                         ` : '')}
@@ -126,7 +124,7 @@
                     <!-- Правая колонка -->
                     <div>
                         <div class="card" style="margin-bottom:16px;">
-                            <h3 style="font-size:1.1em;margin-bottom:16px;">📊 Статистика голосования</h3>
+                            <h3 style="font-size:1.1em;margin-bottom:16px;">📊 История голосования</h3>
                             ${renderVoteHistory(user)}
                         </div>
                         
@@ -155,7 +153,6 @@
             let db = getDB();
             let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
             
-            // Группируем по турнирам
             let byTournament = {};
             user.votes.forEach(v => {
                 if (!byTournament[v.tournamentId]) byTournament[v.tournamentId] = [];
@@ -191,7 +188,7 @@
             if (u) {
                 u.bio = bio;
                 saveDB(db);
-                toast('Био сохранено!');
+                toast('Сохранено!');
             }
         }
 
@@ -209,7 +206,7 @@
 
         function deleteUser(userId) {
             if (!isAdmin()) return;
-            if (!confirm('УДАЛИТЬ пользователя? Все его данные будут потеряны!')) return;
+            if (!confirm('УДАЛИТЬ пользователя?')) return;
             let db = getDB();
             db.users = db.users.filter(u => u.id !== userId);
             saveDB(db);
@@ -226,6 +223,12 @@
             if (logoLink) logoLink.textContent = logo + ' ' + name;
             let ft = document.getElementById('footerText');
             if (ft) ft.textContent = '© ' + new Date().getFullYear() + ' ' + name;
+        }
+
+        function escapeHtml(text) {
+            let div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         loadProfile();
