@@ -12,15 +12,15 @@
     <header>
         <div class="header-inner">
             <a href="index.html" class="logo" id="siteLogoLink">🏆 Tournament Hub</a>
-<nav>
-    <a href="index.html">Главная</a>
-    <a href="bracket.html">Сетка</a>
-    <a href="history.html">История</a>
-    <a href="chat.html">💬 Чат</a>
-    <a href="rules.html">Правила</a>
-    <a href="profile.html">👤 Профиль</a>
-    <a href="admin.html" id="navAdmin" class="hidden">⚙️ Управление</a>
-</nav>
+            <nav>
+                <a href="index.html">Главная</a>
+                <a href="bracket.html">Сетка</a>
+                <a href="history.html">История</a>
+                <a href="chat.html">💬 Чат</a>
+                <a href="rules.html">Правила</a>
+                <a href="profile.html">👤 Профиль</a>
+                <a href="admin.html" id="navAdmin" class="hidden">⚙️ Управление</a>
+            </nav>
             <div class="nav-user" id="navUser"></div>
         </div>
     </header>
@@ -28,88 +28,77 @@
     <div class="container page-enter">
         <h1 class="page-title">📋 Правила и механика</h1>
 
-        <div class="rules-box">
-            <h3>🎯 Общая концепция</h3>
-            <p>Турнир проводится по олимпийской системе (single elimination). Участники соревнуются в парах, победитель проходит дальше, проигравший выбывает. Победитель определяется по большинству голосов сообщества.</p>
+        <div class="rules-box" style="background:var(--bg-2);border:1px solid var(--border);border-radius:20px;padding:28px;max-width:800px;">
+            <h3 style="color:var(--accent);margin-bottom:12px;">🎯 Общая концепция</h3>
+            <p style="color:var(--text-2);line-height:1.7;margin-bottom:20px;">Турнир проводится по олимпийской системе (single elimination). Участники соревнуются в парах, победитель проходит дальше, проигравший выбывает. Победитель определяется по большинству голосов сообщества.</p>
 
-            <h3>⚔️ Формат сетки</h3>
-            <ul>
+            <h3 style="color:var(--accent);margin-bottom:12px;">⚔️ Формат сетки</h3>
+            <ul style="color:var(--text-2);line-height:1.8;margin-bottom:20px;padding-left:20px;">
                 <li><strong>1/64, 1/32, 1/16, 1/8, 1/4, 1/2, Финал</strong> — стандартные раунды.</li>
-                <li>Если участников не кратно степени двойки (4, 8, 16, 32, 64), слабейшие по посеву получают <strong>bye</strong> (автопроход в следующий раунд).</li>
-                <li>Победитель определяется по большинству голосов сообщества.</li>
-                <li>В случае ничьи победителем считается участник, расположенный <strong>выше в сетке</strong> (первый по списку).</li>
+                <li>Если участников не кратно степени двойки, слабейшие по посеву получают <strong>bye</strong> (автопроход).</li>
+                <li>В случае ничьи победителем считается участник, расположенный <strong>выше в сетке</strong>.</li>
             </ul>
 
-            <h3>🗳️ Голосование</h3>
-            <ul>
+            <h3 style="color:var(--accent);margin-bottom:12px;">🗳️ Голосование</h3>
+            <ul style="color:var(--text-2);line-height:1.8;margin-bottom:20px;padding-left:20px;">
                 <li>Каждый зарегистрированный пользователь может проголосовать <strong>один раз за матч</strong>.</li>
                 <li>Голосование в раунде длится фиксированное время (по умолчанию 24 часа).</li>
-                <li>По окончании времени раунд <strong>автоматически завершается</strong>, и победители переходят в следующий раунд.</li>
+                <li>По окончании времени раунд <strong>автоматически завершается</strong>.</li>
                 <li><strong>Досрочное завершение раунда доступно только администратору.</strong></li>
                 <li>Голоса нельзя отменить или изменить.</li>
-                <li>Гостевые аккаунты могут голосовать, но с пометкой "неподтверждённый".</li>
             </ul>
 
-            <h3>👤 Аккаунты и авторизация</h3>
-            <ul>
+            <h3 style="color:var(--accent);margin-bottom:12px;">👤 Аккаунты и авторизация</h3>
+            <ul style="color:var(--text-2);line-height:1.8;margin-bottom:20px;padding-left:20px;">
                 <li>Для голосования требуется авторизация.</li>
-                <li>Можно войти через <strong>Fandom Wiki</strong> (верификация через правку с кодом) или как <strong>гость</strong> (локальный аккаунт).</li>
-                <li>Один ник — один аккаунт. Повторная регистрация на тот же ник невозможна.</li>
-                <li>Fandom-аккаунты помечаются галочкой ✓ и имеют больший вес доверия.</li>
+                <li>Можно войти как <strong>гость</strong> (локальный аккаунт).</li>
+                <li>Один ник — один аккаунт. Повторная регистрация невозможна.</li>
             </ul>
 
-<h3>🏆 Определение победителя</h3>
-<ul>
-    <li>Победитель турнира — <strong>субъект</strong> (статья, персонаж, картинка и т.д.), набравший наибольшее количество голосов.</li>
-    <li>Победитель получает корону 👑 и отображается на главной странице.</li>
-    <li>Все результаты сохраняются в истории и доступны для просмотра.</li>
-    <li>Субъекты накапливают победы в общем зачёте (лидерборд по победам).</li>
-</ul>
-
-            <h3>⚠️ Запрещено</h3>
-            <ul>
-                <li><strong>Накрутка голосов</strong> — голосование с нескольких аккаунтов. Система отслеживает подозрительную активность.</li>
-                <li>Оскорбительные ники или аватарки участников.</li>
-                <li>Попытки взлома или подмены данных турнира.</li>
+            <h3 style="color:var(--accent);margin-bottom:12px;">🏆 Определение победителя</h3>
+            <ul style="color:var(--text-2);line-height:1.8;margin-bottom:20px;padding-left:20px;">
+                <li>Победитель турнира — субъект, набравший наибольшее количество голосов.</li>
+                <li>Все результаты сохраняются в истории.</li>
             </ul>
 
-<h3>🔢 Рейтинг Elo</h3>
-<ul>
-    <li>Каждый <strong>субъект</strong> имеет рейтинг Elo (начальный: 1000).</li>
-    <li>Чем больше голосов набрал субъект в матче против сильного соперника — тем больше Elo.</li>
-    <li>Рейтинг обновляется после каждого матча.</li>
-    <li>Лидерборд Elo отображается отдельно от турнирных побед.</li>
-</ul>
+            <h3 style="color:var(--accent);margin-bottom:12px;">⚠️ Запрещено</h3>
+            <ul style="color:var(--text-2);line-height:1.8;margin-bottom:20px;padding-left:20px;">
+                <li><strong>Накрутка голосов</strong> — голосование с нескольких аккаунтов.</li>
+                <li>Оскорбительные ники.</li>
+                <li>Попытки взлома или подмены данных.</li>
+            </ul>
 
-            <h3>💬 Комментарии и чат</h3>
-            <ul>
+            <h3 style="color:var(--accent);margin-bottom:12px;">🔢 Рейтинг Elo</h3>
+            <ul style="color:var(--text-2);line-height:1.8;margin-bottom:20px;padding-left:20px;">
+                <li>Каждый субъект имеет рейтинг Elo (начальный: 1000).</li>
+                <li>Рейтинг обновляется после каждого матча.</li>
+            </ul>
+
+            <h3 style="color:var(--accent);margin-bottom:12px;">💬 Комментарии и чат</h3>
+            <ul style="color:var(--text-2);line-height:1.8;padding-left:20px;">
                 <li>Авторизованные пользователи могут оставлять комментарии к матчам.</li>
                 <li>Общий чат доступен всем авторизованным пользователям.</li>
-                <li>Комментарии и сообщения привязаны к аккаунту.</li>
                 <li>Администратор может удалять неуместные сообщения.</li>
-            </ul>
-
-            <h3>🔧 Для администраторов</h3>
-            <ul>
-                <li>Админ-панель скрыта от обычных пользователей.</li>
-                <li>Админ может: создавать/сбрасывать турниры, управлять участниками, завершать раунды досрочно, очищать голоса, менять настройки сайта, банить пользователей.</li>
-                <li>Пароль админа хранится локально. <strong>Смените его сразу после установки!</strong></li>
             </ul>
         </div>
     </div>
 
-    <footer>
+    <footer style="text-align:center;padding:40px 20px;color:var(--text-3);font-size:13px;">
         <p id="footerText">© 2026 Tournament Hub</p>
     </footer>
 
     <script>
-        let db = getDB();
-        let name = db.settings?.siteName || 'Tournament Hub';
-        let logo = db.settings?.siteLogo || '🏆';
-        document.title = name + ' — Правила';
-        document.getElementById('siteLogoLink').textContent = logo + ' ' + name;
-        document.getElementById('footerText').textContent = '© ' + new Date().getFullYear() + ' ' + name;
-        initAuth();
+        document.addEventListener('DOMContentLoaded', function() {
+            const db = DB.getDB();
+            const name = db.settings?.siteName || 'Tournament Hub';
+            const logo = db.settings?.siteLogo || '🏆';
+            document.title = name + ' — Правила';
+            document.getElementById('siteLogoLink').textContent = logo + ' ' + name;
+            document.getElementById('footerText').textContent = '© ' + new Date().getFullYear() + ' ' + name;
+            Auth.renderNavUser();
+            const adminLink = document.getElementById('navAdmin');
+            if (adminLink && Auth.isAdmin()) adminLink.classList.remove('hidden');
+        });
     </script>
 </body>
 </html>
