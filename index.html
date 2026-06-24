@@ -52,14 +52,14 @@
     </footer>
 
     <script>
-        // Проверяем админку
-        (function() {
+        document.addEventListener("DOMContentLoaded", function() {
             Auth.checkFandomAutoAdmin();
             const navAdmin = document.getElementById("navAdmin");
             if (navAdmin && Auth.isAdmin()) {
                 navAdmin.classList.remove("hidden");
             }
-        })();
+            Auth.renderNavUser();
+        });
     </script>
 </body>
 </html>
