@@ -4,109 +4,80 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin | Tournament Hub</title>
-
   <link rel="stylesheet" href="style.css"/>
-
   <style>
-    body {
-      background: #0f1115;
-      color: #eaeaea;
-      font-family: Arial, sans-serif;
-    }
-
-    .wrap {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 20px;
-    }
-
-    .panel {
-      background: #171a21;
-      border: 1px solid #2a2f3a;
-      border-radius: 12px;
-      padding: 15px;
-      margin-bottom: 15px;
-    }
-
-    button {
-      background: #2d6cdf;
-      color: white;
-      border: none;
-      padding: 8px 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin: 3px;
-    }
-
-    button:hover {
-      background: #1f5ed0;
-    }
-
-    input, textarea {
-      width: 100%;
-      padding: 8px;
-      margin-top: 5px;
-      margin-bottom: 10px;
-      border-radius: 8px;
-      border: 1px solid #333;
-      background: #0f1115;
-      color: #fff;
-    }
-
-    .row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .row > * {
-      flex: 1;
-      min-width: 200px;
-    }
-
-    .log {
-      font-size: 12px;
-      opacity: 0.8;
-      white-space: pre-wrap;
-    }
+    body { background: #0f1115; color: #eaeaea; font-family: Arial, sans-serif; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    .panel { background: #171a21; border: 1px solid #2a2f3a; border-radius: 12px; padding: 15px; margin-bottom: 15px; }
+    button { background: #2d6cdf; color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; margin: 3px; }
+    button:hover { background: #1f5ed0; }
+    input, textarea { width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #333; background: #0f1115; color: #fff; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .row > * { flex: 1; min-width: 200px; }
+    .log { font-size: 12px; opacity: 0.8; white-space: pre-wrap; }
+    .hidden { display: none !important; }
+    .danger { background: #ef4444 !important; }
+    .danger:hover { background: #dc2626 !important; }
   </style>
 </head>
-
 <body>
 <div class="wrap">
 
   <h1>⚙️ Tournament Hub Admin</h1>
 
   <!-- AUTH -->
-  <div class="panel">
+  <div class="panel" id="authPanel">
     <h3>Авторизация</h3>
     <input id="adminPass" type="password" placeholder="Пароль админа"/>
     <button onclick="loginAdmin()">Войти</button>
     <div id="authStatus" class="log"></div>
   </div>
 
-  <!-- TOURNAMENT -->
-  <div class="panel">
-    <h3>Турнир</h3>
+  <!-- ADMIN CONTROLS (скрыты до входа) -->
+  <div id="adminControls" class="hidden">
 
-    <input id="tName" placeholder="Название турнира"/>
-    <textarea id="tData" placeholder="Список участников (каждый с новой строки)"></textarea>
-
-    <div class="row">
+    <!-- TOURNAMENT CREATE -->
+    <div class="panel">
+      <h3>Создать турнир</h3>
+      <input id="tName" placeholder="Название турнира"/>
+      <textarea id="tDesc" placeholder="Описание турнира (необязательно)" rows="2"></textarea>
+      <textarea id="tData" placeholder="Список участников (каждый с новой строки, формат: Имя | https://wiki/ссылка)" rows="8"></textarea>
       <button onclick="createTournament()">Создать турнир</button>
-      <button onclick="generateBracket()">Сгенерировать сетку</button>
-      <button onclick="finalizeRound()">Завершить раунд</button>
+      <div id="tCreateStatus" class="log"></div>
     </div>
 
-    <div id="tStatus" class="log"></div>
-  </div>
+    <!-- TOURNAMENT MANAGE -->
+    <div class="panel">
+      <h3>Управление турниром</h3>
+      <div id="activeTournamentInfo" class="log" style="margin-bottom:10px;">Нет активного турнира</div>
+      <div class="row">
+        <button onclick="startTournament()">🚀 Запустить турнир</button>
+        <button onclick="advanceRound()">⏭ Завершить раунд</button>
+        <button onclick="resetTournament()">🔄 Сбросить голоса</button>
+        <button class="danger" onclick="deleteActiveTournament()">🗑 Удалить турнир</button>
+      </div>
+      <div id="tStatus" class="log"></div>
+    </div>
 
-  <!-- IMPORT / EXPORT -->
-  <div class="panel">
-    <h3>Импорт / Экспорт</h3>
+    <!-- TOURNAMENT LIST -->
+    <div class="panel">
+      <h3>Все турниры</h3>
+      <div id="tournamentList" class="log"></div>
+    </div>
 
-    <button onclick="exportData()">Экспорт JSON</button>
-    <input type="file" onchange="importData(event)"/>
+    <!-- IMPORT / EXPORT -->
+    <div class="panel">
+      <h3>Импорт / Экспорт</h3>
+      <button onclick="exportData()">📥 Экспорт JSON</button>
+      <input type="file" onchange="importData(event)" style="margin-top:10px;"/>
+    </div>
+
+    <!-- USERS -->
+    <div class="panel">
+      <h3>Пользователи</h3>
+      <div id="userList" class="log"></div>
+    </div>
+
   </div>
 
   <!-- LOG -->
@@ -119,182 +90,233 @@
 
 <script src="js/db.js"></script>
 <script src="js/engine.js"></script>
+<script src="js/tournament.js"></script>
+<script src="js/auth.js"></script>
 
 <script>
 /* =========================
-   SAFE LAYER / FIX WRAPPER
+   UTILS
 ========================= */
-
-let CURRENT_TOURNAMENT = null;
-
-/* ---- fallback utils ---- */
-function toast(msg) {
-  log(msg);
-}
-
+function toast(msg) { log(msg); }
 function log(msg) {
   const el = document.getElementById("log");
-  el.textContent += "\n" + msg;
+  if (el) el.textContent += "\\n" + msg;
 }
 
-/* безопасный escape */
-function escapeHTML(str = "") {
-  return String(str)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+function escapeHTML(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 /* =========================
-   AUTH (stub + supabase-ready)
+   AUTH (единый пароль)
 ========================= */
-
 function loginAdmin() {
   const pass = document.getElementById("adminPass").value;
-
   if (!pass) {
     document.getElementById("authStatus").innerText = "Введите пароль";
     return;
   }
-
-  // временная логика (можно заменить на Supabase later)
-  if (pass === "admin") {
-    localStorage.setItem("admin", "1");
+  // Единый пароль из auth.js
+  if (Auth.adminLogin(pass)) {
+    localStorage.setItem("th_admin", "yes");
     document.getElementById("authStatus").innerText = "✔ Вход выполнен";
+    document.getElementById("authPanel").classList.add("hidden");
+    document.getElementById("adminControls").classList.remove("hidden");
+    refreshAll();
   } else {
     document.getElementById("authStatus").innerText = "❌ Неверный пароль";
   }
 }
 
-/* =========================
-   TOURNAMENT CORE
-========================= */
+function checkAuth() {
+  if (Auth.isAdmin()) {
+    document.getElementById("authPanel").classList.add("hidden");
+    document.getElementById("adminControls").classList.remove("hidden");
+    refreshAll();
+  }
+}
 
+/* =========================
+   TOURNAMENT CREATE
+========================= */
 function createTournament() {
-  const name = document.getElementById("tName").value;
+  const name = document.getElementById("tName").value.trim();
+  const desc = document.getElementById("tDesc").value.trim();
   const raw = document.getElementById("tData").value;
 
-  if (!name || !raw) {
-    toast("Заполни название и участников");
-    return;
+  if (!name) { toast("Введите название турнира"); return; }
+  if (!raw.trim()) { toast("Введите список участников"); return; }
+
+  const players = raw.split("\\n").map(line => {
+    line = line.trim();
+    if (!line) return null;
+    const parts = line.split("|").map(s => s.trim());
+    return {
+      id: parts[0] || line,
+      name: parts[0] || line,
+      image: parts[1] || "",
+      type: "character",
+      description: ""
+    };
+  }).filter(Boolean);
+
+  if (players.length < 2) { toast("Минимум 2 участника"); return; }
+
+  const result = Tournament.createTournament(name, desc, players);
+  if (result.success) {
+    toast("✅ Турнир создан: " + escapeHTML(name));
+    document.getElementById("tName").value = "";
+    document.getElementById("tDesc").value = "";
+    document.getElementById("tData").value = "";
+    refreshAll();
+  } else {
+    toast("❌ " + (result.error || "Ошибка"));
   }
-
-  const players = raw.split("\n").map(p => p.trim()).filter(Boolean);
-
-  CURRENT_TOURNAMENT = {
-    name,
-    players,
-    round: 0,
-    bracket: []
-  };
-
-  saveDB();
-  toast("Турнир создан: " + name);
-}
-
-function generateBracket() {
-  if (!CURRENT_TOURNAMENT) {
-    toast("Нет турнира");
-    return;
-  }
-
-  const engine = new TournamentEngine();
-  const shuffled = engine.shuffle(CURRENT_TOURNAMENT.players);
-
-  CURRENT_TOURNAMENT.bracket = engine.createMatches(shuffled);
-  CURRENT_TOURNAMENT.round = 1;
-
-  saveDB();
-  toast("Сетка создана");
-}
-
-function finalizeRound() {
-  if (!CURRENT_TOURNAMENT) return;
-
-  const engine = new TournamentEngine();
-  const winners = CURRENT_TOURNAMENT.bracket.map(m => m.winner).filter(Boolean);
-
-  if (winners.length < 2) {
-    toast("Недостаточно победителей");
-    return;
-  }
-
-  CURRENT_TOURNAMENT.bracket = engine.createMatches(winners);
-  CURRENT_TOURNAMENT.round++;
-
-  saveDB();
-  toast("Раунд завершён");
 }
 
 /* =========================
-   STORAGE (db fallback)
+   TOURNAMENT MANAGE
 ========================= */
+function startTournament() {
+  const db = DB.getDB();
+  const t = db.activeTournamentId ? Tournament.getTournament(db.activeTournamentId) : null;
+  if (!t) { toast("Нет активного турнира. Создайте сначала."); return; }
 
-function saveDB() {
-  try {
-    localStorage.setItem("tournament", JSON.stringify(CURRENT_TOURNAMENT));
-  } catch (e) {
-    console.error(e);
+  const result = Tournament.startTournament(t.id);
+  if (result.success) {
+    toast("🚀 Турнир запущен!");
+    refreshAll();
+  } else {
+    toast("❌ " + (result.error || "Ошибка"));
   }
 }
 
-function loadDB() {
-  try {
-    const data = localStorage.getItem("tournament");
-    if (data) CURRENT_TOURNAMENT = JSON.parse(data);
-  } catch (e) {
-    console.error(e);
+function advanceRound() {
+  const db = DB.getDB();
+  const t = db.activeTournamentId ? Tournament.getTournament(db.activeTournamentId) : null;
+  if (!t) { toast("Нет активного турнира"); return; }
+
+  const result = Tournament.advanceRound(t.id);
+  if (result.success) {
+    if (result.finished) {
+      toast("🏆 Турнир завершён! Победитель: " + escapeHTML(result.tournament.winner?.name || "?"));
+    } else {
+      toast("⏭ Раунд завершён, следующий начался");
+    }
+    refreshAll();
+  } else {
+    toast("❌ " + (result.error || "Ошибка"));
   }
+}
+
+function resetTournament() {
+  const db = DB.getDB();
+  const t = db.activeTournamentId ? Tournament.getTournament(db.activeTournamentId) : null;
+  if (!t) { toast("Нет активного турнира"); return; }
+
+  const engine = new TournamentEngine();
+  engine.resetVotes(t.id);
+  toast("🔄 Голоса сброшены");
+  refreshAll();
+}
+
+function deleteActiveTournament() {
+  const db = DB.getDB();
+  const t = db.activeTournamentId ? Tournament.getTournament(db.activeTournamentId) : null;
+  if (!t) { toast("Нет активного турнира"); return; }
+  if (!confirm("Точно удалить турнир \\"" + t.title + "\\"?")) return;
+
+  Tournament.deleteTournament(t.id);
+  toast("🗑 Турнир удалён");
+  refreshAll();
+}
+
+/* =========================
+   REFRESH UI
+========================= */
+function refreshAll() {
+  refreshActiveTournament();
+  refreshTournamentList();
+  refreshUserList();
+}
+
+function refreshActiveTournament() {
+  const db = DB.getDB();
+  const t = db.activeTournamentId ? Tournament.getTournament(db.activeTournamentId) : null;
+  const el = document.getElementById("activeTournamentInfo");
+  if (!t) {
+    el.innerHTML = "Нет активного турнира. Создайте новый выше.";
+    return;
+  }
+  el.innerHTML = `<b>${escapeHTML(t.title)}</b> (${t.status}) — ${(t.players || []).length} участников, ${(t.rounds || []).length} раундов`;
+}
+
+function refreshTournamentList() {
+  const list = Tournament.listTournaments();
+  const el = document.getElementById("tournamentList");
+  if (!list.length) {
+    el.innerHTML = "Нет турниров";
+    return;
+  }
+  el.innerHTML = list.map(t =>
+    `<div style="margin-bottom:6px;">• <b>${escapeHTML(t.title)}</b> — ${t.status} — ${(t.players || []).length} участников — <a href="bracket.html?id=${encodeURIComponent(t.id)}" target="_blank">Сетка</a></div>`
+  ).join("");
+}
+
+function refreshUserList() {
+  const db = DB.getDB();
+  const users = db.users || [];
+  const el = document.getElementById("userList");
+  if (!users.length) {
+    el.innerHTML = "Нет пользователей";
+    return;
+  }
+  el.innerHTML = users.map(u =>
+    `<div style="margin-bottom:4px;">• ${escapeHTML(u.displayName || u.username)} (${u.authType || "guest"}) — голосов: ${u.votes || 0}</div>`
+  ).join("");
 }
 
 /* =========================
    IMPORT / EXPORT
 ========================= */
-
 function exportData() {
-  const blob = new Blob(
-    [JSON.stringify(CURRENT_TOURNAMENT, null, 2)],
-    { type: "application/json" }
-  );
-
+  const db = DB.getDB();
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-
   a.href = url;
-  a.download = "tournament.json";
+  a.download = "tournament-hub-backup-" + new Date().toISOString().slice(0, 10) + ".json";
   a.click();
-
   URL.revokeObjectURL(url);
+  toast("📥 Экспортировано");
 }
 
 function importData(event) {
   const file = event.target.files[0];
+  if (!file) return;
   const reader = new FileReader();
-
   reader.onload = function(e) {
     try {
-      CURRENT_TOURNAMENT = JSON.parse(e.target.result);
-      saveDB();
-      toast("Импорт завершён");
+      const data = JSON.parse(e.target.result);
+      DB.saveDB(data);
+      toast("📤 Импорт завершён");
+      refreshAll();
     } catch (err) {
-      toast("Ошибка импорта");
+      toast("❌ Ошибка импорта: " + err.message);
     }
   };
-
   reader.readAsText(file);
 }
 
 /* =========================
    INIT
 ========================= */
-
-loadDB();
-
-if (CURRENT_TOURNAMENT) {
-  toast("Загружен турнир: " + CURRENT_TOURNAMENT.name);
-}
+checkAuth();
 </script>
 
 </body>
