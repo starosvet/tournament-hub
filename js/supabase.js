@@ -5,7 +5,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // КОНФИГ (замени на свои значения!)
 // ═══════════════════════════════════════
 const SUPABASE_URL = 'https://fpabooteqfahhzobcpnh.supabase.co'
-const SUPABASE_ANON_KEY = 'sb_publishable_pUncQUYP8Upb97hBcLJxIQ_lknWselK'
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwYWJvb3RlcWZhaGh6b2JjcG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjgwOTIsImV4cCI6MjA5NzkwNDA5Mn0.cc1oG5-73US61LI9uDaPwuQsOjLkIAPxDcfGQvVY9Ac'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
