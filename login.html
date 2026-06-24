@@ -25,114 +25,68 @@
         </div>
     </header>
 
-    <div class="container page-enter">
-        <div class="login-box" style="max-width:420px;margin:40px auto;background:var(--bg-2);border:1px solid var(--border);border-radius:20px;padding:32px;">
-            <h2 style="margin-bottom:8px;">🔐 Вход</h2>
-            <p style="color:var(--text-3);margin-bottom:24px;">Выберите способ авторизации</p>
+    <div class="container">
+        <div class="login-box page-enter">
+            <h2>🔐 Вход</h2>
+            <p>Выберите способ авторизации</p>
 
-            <!-- Вкладки -->
-            <div style="display:flex;gap:8px;margin-bottom:20px;">
-                <button id="tabGuest" class="btn-primary" style="flex:1;" onclick="showTab('guest')">Гость</button>
-                <button id="tabLogin" class="btn-secondary" style="flex:1;" onclick="showTab('login')">Уже есть аккаунт</button>
+            <div id="loginForm">
+                <label>Ваш никнейм</label>
+                <input type="text" id="loginUsername" placeholder="username">
+
+                <label>Пароль</label>
+                <input type="password" id="loginPassword" placeholder="••••••••">
+
+                <button class="btn-primary" style="width:100%;margin-top:20px;" onclick="doLogin()">🔐 Войти</button>
+                <button class="btn-secondary" style="width:100%;margin-top:12px;" onclick="doRegister()">📝 Регистрация</button>
+
+                <div class="error" id="loginError" style="color:var(--red);margin-top:16px;text-align:center;"></div>
             </div>
 
-            <!-- Регистрация гостя -->
-            <div id="panelGuest">
-                <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Ваш никнейм</label>
-                <input type="text" id="guestName" placeholder="От 2 до 20 символов" maxlength="20" 
-                    style="width:100%;padding:12px 16px;background:var(--bg);border:1px solid var(--border-2);border-radius:12px;color:var(--text);font-size:15px;margin-bottom:8px;font-family:inherit;"
-                    onkeydown="if(event.key==='Enter')loginGuest()">
-                <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Пароль</label>
-                <input type="password" id="guestPass" placeholder="Минимум 4 символа" 
-                    style="width:100%;padding:12px 16px;background:var(--bg);border:1px solid var(--border-2);border-radius:12px;color:var(--text);font-size:15px;margin-bottom:12px;font-family:inherit;"
-                    onkeydown="if(event.key==='Enter')loginGuest()">
-                <p class="hint" style="color:var(--text-3);font-size:12px;margin-bottom:16px;">Гостевой аккаунт хранится локально. Вы сможете голосовать и оставлять комментарии.</p>
-                <button class="btn-primary" style="width:100%;" onclick="loginGuest()">Создать аккаунт и войти</button>
-            </div>
-
-            <!-- Вход -->
-            <div id="panelLogin" style="display:none;">
-                <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Никнейм</label>
-                <input type="text" id="loginName" placeholder="Ваш ник" 
-                    style="width:100%;padding:12px 16px;background:var(--bg);border:1px solid var(--border-2);border-radius:12px;color:var(--text);font-size:15px;margin-bottom:8px;font-family:inherit;"
-                    onkeydown="if(event.key==='Enter')doLogin()">
-                <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Пароль</label>
-                <input type="password" id="loginPass" placeholder="••••••" 
-                    style="width:100%;padding:12px 16px;background:var(--bg);border:1px solid var(--border-2);border-radius:12px;color:var(--text);font-size:15px;margin-bottom:16px;font-family:inherit;"
-                    onkeydown="if(event.key==='Enter')doLogin()">
-                <button class="btn-primary" style="width:100%;" onclick="doLogin()">Войти</button>
-            </div>
-
-            <div id="errorBox" style="color:#ef4444;margin-top:16px;font-size:14px;"></div>
-            <div id="successBox" style="color:#22c55e;margin-top:16px;font-size:14px;"></div>
+            <p style="margin-top:24px;color:var(--text-3);font-size:13px;text-align:center;">
+                Гостевой аккаунт хранится локально. Вы сможете голосовать и оставлять комментарии.
+            </p>
         </div>
     </div>
 
+    <footer>
+        <p>Tournament Hub</p>
+    </footer>
+
     <script>
-        function showTab(tab) {
-            document.getElementById('panelGuest').style.display = tab === 'guest' ? 'block' : 'none';
-            document.getElementById('panelLogin').style.display = tab === 'login' ? 'block' : 'none';
-            document.getElementById('tabGuest').className = tab === 'guest' ? 'btn-primary' : 'btn-secondary';
-            document.getElementById('tabLogin').className = tab === 'login' ? 'btn-primary' : 'btn-secondary';
-            clearMessages();
-        }
-
-        function clearMessages() {
-            document.getElementById('errorBox').textContent = '';
-            document.getElementById('successBox').textContent = '';
-        }
-
-        function showError(msg) {
-            document.getElementById('errorBox').textContent = '❌ ' + msg;
-            document.getElementById('successBox').textContent = '';
-        }
-
-        function showSuccess(msg) {
-            document.getElementById('successBox').textContent = '✓ ' + msg;
-            document.getElementById('errorBox').textContent = '';
-        }
-
-        function loginGuest() {
-            clearMessages();
-            let name = document.getElementById('guestName').value.trim();
-            let pass = document.getElementById('guestPass').value;
-            if (name.length < 2) { showError('Никнейм слишком короткий'); return; }
-            if (pass.length < 4) { showError('Пароль слишком короткий'); return; }
-            
-            let res = Auth.register(name, pass);
-            if (!res.success) {
-                showError(res.error);
-                return;
-            }
-            showSuccess('Добро пожаловать, ' + name + '! Перенаправляем...');
-            setTimeout(() => location.href = 'index.html', 1000);
-        }
-
         function doLogin() {
-            clearMessages();
-            let name = document.getElementById('loginName').value.trim();
-            let pass = document.getElementById('loginPass').value;
-            
-            let res = Auth.login(name, pass);
-            if (!res.success) {
-                showError(res.error);
-                return;
+            const username = document.getElementById("loginUsername").value.trim();
+            const password = document.getElementById("loginPassword").value;
+            const err = document.getElementById("loginError");
+
+            const result = Auth.login(username, password);
+            if (result.success) {
+                location.href = "index.html";
+            } else {
+                err.textContent = result.error || "Ошибка входа";
             }
-            showSuccess('С возвращением, ' + res.user.username + '! Перенаправляем...');
-            setTimeout(() => location.href = 'index.html', 1000);
         }
 
-        // Брендинг и навбар
-        document.addEventListener('DOMContentLoaded', function() {
-            const db = DB.getDB();
-            const name = db.settings?.siteName || 'Tournament Hub';
-            const logo = db.settings?.siteLogo || '🏆';
-            document.title = name + ' — Вход';
-            document.getElementById('siteLogoLink').textContent = logo + ' ' + name;
-            Auth.renderNavUser();
-            const adminLink = document.getElementById('navAdmin');
-            if (adminLink && Auth.isAdmin()) adminLink.classList.remove('hidden');
+        function doRegister() {
+            const username = document.getElementById("loginUsername").value.trim();
+            const password = document.getElementById("loginPassword").value;
+            const err = document.getElementById("loginError");
+
+            const result = Auth.register(username, password);
+            if (result.success) {
+                location.href = "index.html";
+            } else {
+                err.textContent = result.error || "Ошибка регистрации";
+            }
+        }
+
+        // Enter для входа
+        document.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") doLogin();
         });
+
+        // Навигация
+        Auth.renderNavUser();
     </script>
 </body>
 </html>
