@@ -65,6 +65,19 @@ function finalizeRound(tournament, allPlayers) {
         }
 
         winners.push(m.winner);
+        let winnerId = tournament._playerMap ? tournament._playerMap[m.winner.id] : null;
+let loserId = tournament._playerMap ? tournament._playerMap[loser.id] : null;
+if (!winnerId) {
+    let orig = allPlayers.find(p => p.name === m.winner.name);
+    if (orig) winnerId = orig.id;
+}
+if (!loserId) {
+    let orig = allPlayers.find(p => p.name === loser.name);
+    if (orig) loserId = orig.id;
+}
+if (winnerId && loserId) {
+    updateElo(winnerId, loserId);
+}
     }
 
     if (tournament.currentRound + 1 < tournament.rounds.length) {
