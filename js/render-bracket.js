@@ -58,7 +58,7 @@
       return;
     }
 
-    const tournament = Tournament.getTournament(tournamentId);
+    const tournament = Bracket.getTournament(tournamentId);
     if (!tournament) {
       container.innerHTML = `
         <div class="empty-state">
@@ -72,6 +72,11 @@
     const header = document.querySelector("#bracket-header");
     if (header) {
       header.innerHTML = `<h1>${escapeHTML(tournament.title || tournament.name || "Турнир")}</h1><p>${escapeHTML(tournament.description || "")}</p>`;
+    }
+
+    const sub = document.querySelector("#bracket-sub");
+    if (sub) {
+      sub.textContent = tournament.status === "active" ? "Голосуйте за участников!" : tournament.status === "finished" ? "Турнир завершён" : "Турнир в режиме черновика";
     }
 
     const rounds = tournament.rounds || [];
@@ -103,8 +108,8 @@
       const w = tournament.winner;
       footer = `
         <section class="champion-card">
-          <h2>Чемпион</h2>
-          <p>${escapeHTML(w.name || w.title || "Победитель")}</p>
+          <h2>🏆 Чемпион</h2>
+          <p style="font-size:1.5em;font-weight:700;color:var(--accent);">${escapeHTML(w.name || w.title || "Победитель")}</p>
         </section>
       `;
     }
