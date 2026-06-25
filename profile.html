@@ -269,18 +269,24 @@
             }
         );
     }
-
     document.addEventListener("DOMContentLoaded", async function() {
-        if (window.TH) {
-            window.TH.init();
-            await DB.syncSupabaseUser();
-        }
-        await loadProfile();
-        Auth.renderNavUser();
-        Auth.checkFandomAutoAdmin();
-        // FIX: Используем isAdminSync
-        const navAdmin = document.getElementById("navAdmin");
-        if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) navAdmin.classList.remove("hidden");
+        // 🔧 FIX: Ждём инициализации TH из db.js
+        let attempts = 0;
+        const waitForInit = setInterval(() => {
+            if (window.TH && window.TH.init) {
+                clearInterval(waitForInit);
+                
+                const navAdmin = document.getElementById("navAdmin");
+                if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) {
+                    navAdmin.classList.remove("hidden");
+                }
+                
+                loadProfile();
+                Auth.renderNavUser();
+            }
+            attempts++;
+            if (attempts > 30) clearInterval(waitForInit);
+        }, 100);
     });
 </script>
 </body>
