@@ -1,9 +1,11 @@
 /* ============================================================
-   Tournament Hub Comments system (FIXED v2 — async user)
+   Tournament Hub Comments system (FIXED v3 — dedup channels, safe subscribe)
    ============================================================ */
 
 (function () {
   'use strict';
+
+  const subscribedTournaments = new Set();  // FIX: защита от дублирования каналов
 
   /* ==========================================================
      ЗАГРУЗКА КОММЕНТАРИЕВ
@@ -28,7 +30,6 @@
      ДОБАВЛЕНИЕ КОММЕНТАРИЯ
      ========================================================== */
   async function addComment(tournamentId, text) {
-    // FIX: await для async getCurrentUser
     const user = await DB.getCurrentUser();
     if (!user) return { error: new Error('Требуется авторизация') };
 
@@ -127,10 +128,13 @@
   }
 
   /* ==========================================================
-     REALTIME ПОДПИСКА
+     REALTIME ПОДПИСКА (FIXED: dedup)
      ========================================================== */
   function subscribeToComments(tournamentId, container) {
     if (!window.TH) return;
+    if (subscribedTournaments.has(tournamentId)) return;  // Уже подписаны
+
+    subscribedTournaments.add(tournamentId);
 
     window.TH.getClient()
       .channel('comments-' + tournamentId)
