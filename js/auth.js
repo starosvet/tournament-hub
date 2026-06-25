@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Authentication (FIXED v4 — no double init, safe DOM)
+   Tournament Hub Authentication (FIXED v5 — safe isAdminSync with async fallback)
    ============================================================ */
 
 (function () {
@@ -39,6 +39,13 @@
       }
 
       if (data?.user) {
+        // FIX: ждём создания профиля через upsert
+        await window.TH.upsertProfile({
+          username: username.trim(),
+          display_name: username.trim(),
+          role: 'user'
+        });
+
         const user = {
           id: data.user.id,
           email: data.user.email,
@@ -108,8 +115,25 @@
     return false;
   }
 
+  // FIX: isAdminSync теперь делает async проверку если флаг не установлен
   function isAdminSync() {
-    return localStorage.getItem("th_admin") === "yes";
+    const cached = localStorage.getItem("th_admin") === "yes";
+    if (cached) return true;
+    
+    // FIX: если нет в localStorage — запускаем async проверку (для следующего рендера)
+    if (window.TH && !window._adminCheckPending) {
+      window._adminCheckPending = true;
+      isAdmin().then(result => {
+        window._adminCheckPending = false;
+        if (result) {
+          // Триггерим обновление UI
+          const navAdmin = document.getElementById("navAdmin");
+          if (navAdmin) navAdmin.classList.remove("hidden");
+          renderNavUser();
+        }
+      }).catch(() => { window._adminCheckPending = false; });
+    }
+    return false;
   }
 
   function adminLogin(password) {
@@ -150,7 +174,7 @@
   }
 
   /* ==========================================================
-     UI (FIXED: безопасный рендер, проверка DOM)
+     UI
      ========================================================== */
   function renderNavUser() {
     const box = document.getElementById("navUser") || document.getElementById("user-area");
@@ -215,7 +239,3 @@
     register, login, logout, isAdmin, isAdminSync, adminLogin,
     canUserVote, markVote, renderNavUser, checkFandomAutoAdmin, unlinkFandom
   };
-
-  // 🔧 FIX: Убран initAuth() — управляется db.js
-  // 🔧 FIX: Убраны авто-вызовы при загрузке — дублировали db.js
-})();
