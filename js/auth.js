@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  const ADMIN_PASSWORD = "NecroZeroCode"; // Для аварийного доступа
+  const ADMIN_PASSWORD = "admin123"; // Для аварийного доступа
 
   /* ==========================================================
      УТИЛИТЫ
