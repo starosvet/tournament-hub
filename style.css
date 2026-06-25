@@ -1898,212 +1898,554 @@ footer {
 
 
 /* =========================================================
-   SHIKIMORI-STYLE BRACKET ADDON
-   Добавьте это в конец вашего style.css
+   SHIKIMORI SWISS SYSTEM BRACKET STYLES
+   Добавьте ВЕСЬ этот код в конец вашего style.css
    ========================================================= */
 
-/* Match container — Shikimori style: two big cards with VS in middle */
-.bracket-match {
+/* ===== Container ===== */
+.shiki-container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ===== Status Badge ===== */
+.shiki-status-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 12px;
+}
+
+.shiki-status-badge.active {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.shiki-status-badge.finished {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.shiki-status-badge.draft {
+  background: rgba(96, 165, 250, 0.15);
+  color: var(--blue);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+}
+
+.shiki-meta {
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+/* ===== Standings Table ===== */
+.shiki-standings {
   background: var(--bg-3);
   border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 0;
-  margin-bottom: 20px;
-  overflow: hidden;
-  transition: all 0.3s ease;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 32px;
 }
 
-.bracket-match.can-vote {
-  border-color: var(--blue);
-  box-shadow: 0 0 30px var(--blue-glow);
-}
-
-.bracket-match.can-vote:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(59,130,246,0.2);
-}
-
-/* Players row */
-.match-players {
+.shiki-section-title {
+  font-size: 1.2em;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 16px;
   display: flex;
-  align-items: stretch;
-  min-height: 140px;
-}
-
-/* Player card */
-.player-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 20px;
-  position: relative;
-  transition: all 0.3s ease;
-  background: var(--bg-3);
+  gap: 8px;
 }
 
-.player-card:hover {
-  background: var(--bg-4);
+.shiki-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
 }
 
-.player-card.winner {
-  background: rgba(52, 211, 153, 0.08);
+.shiki-table th {
+  text-align: left;
+  padding: 12px 16px;
+  color: var(--text-3);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--border);
 }
 
-.player-card.loser {
-  opacity: 0.5;
+.shiki-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
 }
 
-/* Player image */
-.player-image-wrap {
-  width: 80px;
-  height: 80px;
+.shiki-table tr:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.shiki-table tr.top-1 {
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.shiki-table tr.top-2 {
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.shiki-table tr.top-3 {
+  background: rgba(180, 83, 9, 0.08);
+}
+
+.shiki-rank {
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--text-3);
+  width: 40px;
+}
+
+.shiki-table tr.top-1 .shiki-rank { color: #fbbf24; }
+.shiki-table tr.top-2 .shiki-rank { color: #94a3b8; }
+.shiki-table tr.top-3 .shiki-rank { color: #b45309; }
+
+.shiki-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.shiki-avatar-small {
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   overflow: hidden;
-  margin-bottom: 12px;
-  border: 3px solid var(--border-2);
   background: var(--bg-4);
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
 }
 
-.player-image-wrap img {
+.shiki-avatar-small img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.player-image-wrap.no-image {
-  font-size: 2em;
-}
-
-/* Player info */
-.player-info {
-  text-align: center;
-  z-index: 2;
-}
-
-.player-name {
+.shiki-pts {
+  font-weight: 800;
+  color: var(--accent);
   font-size: 16px;
+}
+
+.shiki-w { color: var(--green); font-weight: 600; }
+.shiki-l { color: var(--red); font-weight: 600; }
+
+/* ===== Round ===== */
+.shiki-round {
+  margin-bottom: 40px;
+  opacity: 0.6;
+  transition: opacity 0.3s;
+}
+
+.shiki-round.active {
+  opacity: 1;
+}
+
+.shiki-round.current {
+  opacity: 1;
+}
+
+.shiki-round-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.shiki-round-header.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.shiki-round-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.shiki-round-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+}
+
+.shiki-round-date {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.shiki-round-status {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+  background: rgba(52, 211, 153, 0.1);
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+.shiki-round-status.wait {
+  color: var(--text-3);
+  background: var(--bg-4);
+}
+
+/* ===== Match Card (Shikimori style) ===== */
+.shiki-match {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.shiki-match.can-vote {
+  border-color: var(--blue);
+}
+
+.shiki-match.can-vote:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(59, 130, 246, 0.15);
+}
+
+.shiki-match.finished {
+  opacity: 0.85;
+}
+
+.shiki-match-inner {
+  display: flex;
+  align-items: stretch;
+  min-height: 180px;
+}
+
+/* Player side */
+.shiki-player {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.shiki-player:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.shiki-player.winner {
+  background: rgba(52, 211, 153, 0.06);
+}
+
+.shiki-player.loser {
+  opacity: 0.5;
+}
+
+.shiki-player-img {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  overflow: hidden;
+  background: var(--bg-4);
+}
+
+.shiki-player-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.shiki-player:hover .shiki-player-img img {
+  transform: scale(1.05);
+}
+
+.shiki-player-img.no-img {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3em;
+}
+
+.shiki-player-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(transparent, var(--bg-3));
+  pointer-events: none;
+}
+
+.shiki-player-info {
+  padding: 12px 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.shiki-player-name {
+  font-size: 15px;
   font-weight: 700;
   color: var(--text);
   margin-bottom: 6px;
   word-break: break-word;
 }
 
-.player-votes {
-  font-size: 13px;
+.shiki-player-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.shiki-points {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.shiki-wl {
   color: var(--text-3);
-  font-weight: 500;
 }
 
-/* Vote bar at bottom of card */
-.vote-bar {
+.shiki-crown {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  height: 4px;
-  background: linear-gradient(90deg, var(--blue), #93c5fd);
-  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 2px;
+  top: 8px;
+  right: 8px;
+  font-size: 28px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  animation: float 3s ease-in-out infinite;
 }
 
-.player-card:nth-child(3) .vote-bar {
-  background: linear-gradient(90deg, var(--pink), #f9a8d4);
-}
-
-/* VS divider */
-.vs-divider {
+/* Center VS */
+.shiki-center {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0 16px;
+  padding: 20px;
   background: var(--bg-2);
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
-  min-width: 80px;
+  min-width: 120px;
+  position: relative;
 }
 
-.vs-text {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--accent);
-  letter-spacing: 2px;
-}
-
-.vs-score {
-  font-size: 14px;
-  color: var(--text-3);
-  margin-top: 4px;
-  font-weight: 600;
-}
-
-/* Winner badge */
-.winner-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+.shiki-vs {
   font-size: 24px;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-  animation: float 3s ease-in-out infinite;
+  font-weight: 900;
+  color: var(--accent);
+  letter-spacing: 4px;
+  margin-bottom: 8px;
 }
 
-/* Vote hint */
-.vote-hint {
-  text-align: center;
-  padding: 10px;
-  font-size: 12px;
-  color: var(--text-3);
-  background: var(--bg-2);
-  border-top: 1px solid var(--border);
+.shiki-vote-count {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  font-family: 'SF Mono', monospace;
+  margin-bottom: 12px;
 }
 
-.vote-hint.active {
+.shiki-vote-bar {
+  width: 80px;
+  height: 4px;
+  background: var(--border-2);
+  border-radius: 2px;
+  overflow: hidden;
+  display: flex;
+  margin-bottom: 12px;
+}
+
+.shiki-bar-left {
+  height: 100%;
+  background: linear-gradient(90deg, var(--blue), #93c5fd);
+  transition: width 0.6s ease;
+}
+
+.shiki-bar-right {
+  height: 100%;
+  background: linear-gradient(90deg, #f9a8d4, var(--pink));
+  transition: width 0.6s ease;
+}
+
+.shiki-vote-hint {
+  font-size: 11px;
   color: var(--blue);
   font-weight: 600;
+  text-align: center;
   animation: pulse 2s infinite;
 }
 
-/* Click animation */
-.player-card:active {
-  transform: scale(0.98);
+.shiki-voted-mark {
+  font-size: 11px;
+  color: var(--green);
+  font-weight: 600;
 }
 
-/* Responsive */
-@media (max-width: 600px) {
-  .match-players {
+/* ===== Champion ===== */
+.shiki-champion {
+  text-align: center;
+  padding: 40px;
+  background: linear-gradient(135deg, var(--bg-3) 0%, var(--bg-4) 100%);
+  border: 2px solid var(--accent);
+  border-radius: 24px;
+  margin-top: 40px;
+  position: relative;
+  overflow: hidden;
+}
+
+.shiki-champion::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.shiki-champion-title {
+  font-size: 1.3em;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.shiki-champion-card {
+  position: relative;
+}
+
+.shiki-champion-img {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin: 0 auto 16px;
+  border: 4px solid var(--accent);
+  box-shadow: 0 0 40px rgba(245, 158, 11, 0.2);
+  background: var(--bg-4);
+}
+
+.shiki-champion-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shiki-champion-name {
+  font-size: 1.8em;
+  font-weight: 800;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.shiki-champion-score {
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+/* ===== No matches ===== */
+.shiki-no-matches {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .shiki-match-inner {
     flex-direction: column;
+    min-height: auto;
   }
 
-  .vs-divider {
+  .shiki-center {
     flex-direction: row;
-    padding: 10px;
+    padding: 12px 20px;
     border-left: none;
     border-right: none;
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
+    gap: 16px;
   }
 
-  .vs-text {
-    margin-right: 10px;
+  .shiki-vs {
+    font-size: 18px;
+    margin-bottom: 0;
   }
 
-  .player-image-wrap {
-    width: 60px;
-    height: 60px;
+  .shiki-vote-count {
+    font-size: 16px;
+    margin-bottom: 0;
+  }
+
+  .shiki-vote-bar {
+    margin-bottom: 0;
+  }
+
+  .shiki-player-img {
+    height: 160px;
+  }
+
+  .shiki-standings {
+    padding: 16px;
+    overflow-x: auto;
+  }
+
+  .shiki-table {
+    min-width: 500px;
+  }
+
+  .shiki-table th,
+  .shiki-table td {
+    padding: 8px 12px;
   }
 }
 
-/* Loading state for bracket */
-.bracket-loading {
-  text-align: center;
-  padding: 60px;
-  color: var(--text-3);
-}
+@media (max-width: 480px) {
+  .shiki-player-img {
+    height: 120px;
+  }
 
-.bracket-loading .spinner {
-  margin-bottom: 20px;
+  .shiki-player-name {
+    font-size: 13px;
+  }
+
+  .shiki-center {
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .shiki-vs {
+    font-size: 14px;
+  }
+
+  .shiki-vote-count {
+    font-size: 14px;
+  }
 }
