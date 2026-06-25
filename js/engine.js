@@ -1,12 +1,12 @@
-/* Tournament Hub Core tournament engine (FIXED v2 — safe UUID, no crypto dependency) */
+/* ============================================================
+   Tournament Hub Core tournament engine (FIXED v3 — Shikimori-style mechanics)
+   ============================================================ */
 (function () {
 
-  // FIX: fallback для crypto.randomUUID (не работает в HTTP и старых браузерах)
   function generateId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       try { return crypto.randomUUID(); } catch (e) {}
     }
-    // Fallback: timestamp + random
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       const r = Math.random() * 16 | 0;
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -36,34 +36,97 @@
   function normalizePlayer(p) {
     if (!p) return null;
     if (typeof p === "string") {
-      return { id: generateId(), name: p, image: "", type: "character" };
+      return { id: generateId(), name: p, image: "", type: "character", elo: 1000, wins: 0, losses: 0 };
     }
     return {
       id: p.id || generateId(),
       name: p.name || p.title || "Без имени",
       image: p.image || p.url || "",
       type: p.type || "character",
-      description: p.description || ""
+      description: p.description || "",
+      elo: p.elo || 1000,
+      wins: p.wins || 0,
+      losses: p.losses || 0
     };
   }
 
+  /* ==========================================================
+     SHIKIMORI-STYLE: Система бай для нечётного числа участников
+     ========================================================== */
+  function addByes(players) {
+    const count = players.length;
+    // Находим ближайшую степень двойки СВЕРХУ
+    let target = 2;
+    while (target < count) target *= 2;
+    
+    const byesNeeded = target - count;
+    const result = [...players];
+    
+    for (let i = 0; i < byesNeeded; i++) {
+      result.push({
+        id: generateId(),
+        name: "BYE",
+        image: "",
+        type: "bye",
+        description: "Автоматический проход",
+        isBye: true,
+        elo: 0
+      });
+    }
+    
+    return result;
+  }
+
+  /* ==========================================================
+     SHIKIMORI-STYLE: ELO рейтинг
+     ========================================================== */
+  const K_FACTOR = 32;
+
+  function expectedScore(ratingA, ratingB) {
+    return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+  }
+
+  function calculateEloChange(winner, loser) {
+    const winnerRating = winner.elo || 1000;
+    const loserRating = loser.elo || 1000;
+    const expectedWinner = expectedScore(winnerRating, loserRating);
+    const expectedLoser = expectedScore(loserRating, winnerRating);
+
+    return {
+      winnerNew: Math.round(winnerRating + K_FACTOR * (1 - expectedWinner)),
+      loserNew: Math.round(loserRating + K_FACTOR * (0 - expectedLoser))
+    };
+  }
+
+  /* ==========================================================
+     SHIKIMORI-STYLE: Создание матчей с учётом ELO (seeding)
+     ========================================================== */
   function createMatches(players) {
     if (!players || players.length < 2) return [];
-    const shuffled = shuffle(players.map(normalizePlayer));
+    
+    // Добавляем бай если нужно
+    const withByes = addByes(players.map(normalizePlayer).filter(Boolean));
+    const shuffled = shuffle(withByes);
     const matches = [];
 
     for (let i = 0; i < shuffled.length; i += 2) {
       const player1 = shuffled[i] || null;
       const player2 = shuffled[i + 1] || null;
+      
+      // Если один из участников — BYE, другой автоматически побеждает
+      const isByeMatch = player1?.isBye || player2?.isBye;
+      
       matches.push({
         id: generateId(),
         player1,
         player2,
         votes1: 0,
         votes2: 0,
-        winner: null,
-        finished: false,
-        status: "pending"
+        winner: isByeMatch ? (player1?.isBye ? player2 : player1) : null,
+        finished: isByeMatch,
+        status: isByeMatch ? "done" : "pending",
+        isByeMatch: isByeMatch,
+        startedAt: new Date().toISOString()
       });
     }
 
@@ -72,9 +135,34 @@
 
   function getWinner(match) {
     if (!match) return null;
+    if (match.isByeMatch) return match.winner;
     if ((match.votes1 || 0) > (match.votes2 || 0)) return match.player1;
     if ((match.votes2 || 0) > (match.votes1 || 0)) return match.player2;
-    return null;
+    return null; // Ничья — требует тай-брейка
+  }
+
+  /* ==========================================================
+     SHIKIMORI-STYLE: Тай-брейк при ничьей
+     ========================================================== */
+  function resolveTieBreaker(match) {
+    if (!match) return null;
+    const v1 = match.votes1 || 0;
+    const v2 = match.votes2 || 0;
+    
+    if (v1 === v2) {
+      // Тай-брейк по ELO (выше рейтинг = победа)
+      const elo1 = match.player1?.elo || 1000;
+      const elo2 = match.player2?.elo || 1000;
+      
+      if (elo1 !== elo2) {
+        return elo1 > elo2 ? match.player1 : match.player2;
+      }
+      
+      // Если ELO равны — случайный выбор
+      return Math.random() > 0.5 ? match.player1 : match.player2;
+    }
+    
+    return getWinner(match);
   }
 
   function createBracket(subjects) {
@@ -91,7 +179,13 @@
         rounds: [],
         winner: null,
         completedAt: null,
-        config: { voteDurationHours: 24, minVotes: 1, allowGuest: true },
+        config: { 
+          voteDurationHours: 24, 
+          minVotes: 1, 
+          allowGuest: true,
+          useElo: true,
+          tieBreaker: 'elo' // 'elo', 'random', 'admin'
+        },
         _playerMap: {}
       };
     }
@@ -106,7 +200,7 @@
       endedAt: null
     }];
 
-    let remaining = initialMatches.length;
+    let remaining = initialMatches.filter(m => !m.isByeMatch).length;
     while (remaining > 1) {
       remaining = Math.ceil(remaining / 2);
       rounds.push({
@@ -130,14 +224,15 @@
       rounds,
       winner: null,
       completedAt: null,
-      config: { voteDurationHours: 24, minVotes: 1, allowGuest: true },
+      config: { 
+        voteDurationHours: 24, 
+        minVotes: 1, 
+        allowGuest: true,
+        useElo: true,
+        tieBreaker: 'elo'
+      },
       _playerMap: {}
     };
-
-    rounds[0].matches.forEach(m => {
-      if (m.player1) tournament._playerMap[m.player1.id] = m.player1.id;
-      if (m.player2) tournament._playerMap[m.player2.id] = m.player2.id;
-    });
 
     return tournament;
   }
@@ -151,13 +246,16 @@
     return (db.tournaments || []).find(t => t.status === "active") || null;
   }
 
+  /* ==========================================================
+     SHIKIMORI-STYLE: Финализация раунда с ELO-обновлением
+     ========================================================== */
   function finalizeRound(tournament, force) {
     if (!tournament) return { ok: false, err: "Нет турнира" };
 
     const currentRound = tournament.rounds?.[tournament.currentRound];
     if (!currentRound) return { ok: false, err: "Нет текущего раунда" };
 
-    const unfinished = currentRound.matches.filter(m => !m.finished && !getWinner(m));
+    const unfinished = currentRound.matches.filter(m => !m.finished && !m.isByeMatch && !getWinner(m));
     if (unfinished.length > 0 && !force) {
       return {
         ok: false,
@@ -168,14 +266,41 @@
     const winners = [];
     currentRound.matches.forEach(match => {
       if (match.finished) {
-        winners.push(match.winner || getWinner(match));
+        if (!match.isByeMatch && match.winner) {
+          // Обновляем ELO
+          const loser = match.winner.id === match.player1?.id ? match.player2 : match.player1;
+          if (tournament.config.useElo && match.winner.elo !== undefined && loser?.elo !== undefined) {
+            const changes = calculateEloChange(match.winner, loser);
+            match.winner.elo = changes.winnerNew;
+            match.winner.wins = (match.winner.wins || 0) + 1;
+            if (loser) {
+              loser.elo = changes.loserNew;
+              loser.losses = (loser.losses || 0) + 1;
+            }
+          }
+        }
+        winners.push(match.winner);
         return;
       }
-      const winner = getWinner(match);
+
+      const winner = resolveTieBreaker(match);
       if (winner) {
         match.winner = winner;
         match.finished = true;
         match.status = "done";
+        
+        // Обновляем ELO
+        if (!match.isByeMatch && tournament.config.useElo) {
+          const loser = winner.id === match.player1?.id ? match.player2 : match.player1;
+          if (winner.elo !== undefined && loser?.elo !== undefined) {
+            const changes = calculateEloChange(winner, loser);
+            winner.elo = changes.winnerNew;
+            winner.wins = (winner.wins || 0) + 1;
+            loser.elo = changes.loserNew;
+            loser.losses = (loser.losses || 0) + 1;
+          }
+        }
+        
         winners.push(winner);
       } else if (force) {
         match.winner = match.player1;
@@ -222,11 +347,13 @@
       if (t && Array.isArray(t.rounds)) {
         t.rounds.forEach(round => {
           (round.matches || []).forEach(match => {
-            match.votes1 = 0;
-            match.votes2 = 0;
-            match.winner = null;
-            match.finished = false;
-            match.status = "pending";
+            if (!match.isByeMatch) {
+              match.votes1 = 0;
+              match.votes2 = 0;
+              match.winner = null;
+              match.finished = false;
+              match.status = "pending";
+            }
           });
         });
       }
@@ -234,6 +361,9 @@
     return true;
   }
 
+  /* ==========================================================
+     SHIKIMORI-STYLE: Настройки турнира
+     ========================================================== */
   function saveVoteSettings() {
     const db = DB.getDB();
     const t = getActiveTournament(db);
@@ -246,17 +376,21 @@
     const dur = document.getElementById("voteDuration");
     const minVotes = document.getElementById("minVotes");
     const allowGuest = document.getElementById("allowGuest");
+    const useElo = document.getElementById("useElo");
+    const tieBreaker = document.getElementById("tieBreaker");
 
     if (dur) t.config.voteDurationHours = parseInt(dur.value, 10) || 24;
     if (minVotes) t.config.minVotes = parseInt(minVotes.value, 10) || 1;
     if (allowGuest) t.config.allowGuest = !!allowGuest.checked;
+    if (useElo) t.config.useElo = !!useElo.checked;
+    if (tieBreaker) t.config.tieBreaker = tieBreaker.value || 'elo';
 
     DB.saveDB(db);
-    toast("Настройки голосования сохранены");
+    toast("Настройки турнира сохранены");
     return true;
   }
 
-  window.TournamentEngine = { shuffle, createMatches, getWinner, roundTitle };
+  window.TournamentEngine = { shuffle, createMatches, getWinner, roundTitle, calculateEloChange, expectedScore };
   window.createBracket = createBracket;
   window.getActiveTournament = getActiveTournament;
   window.finalizeRound = finalizeRound;
