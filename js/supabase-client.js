@@ -1,24 +1,11 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v11 — isReady, correct APIs)
+   Tournament Hub — Supabase Client (FIXED v12 — Shikimori Edition)
    ============================================================ */
 (function () {
   'use strict';
   let realtimeChannels = [];
   let initDone = false;
   let supabaseInstance = null;
-
-  function getBasePath() {
-    const path = window.location.pathname;
-    const match = path.match(/^(.+?)\/(?:index\.html|[^/]+\.html)?$/);
-    if (match) { const base = match[1]; if (base && base !== '') return base; }
-    return window._supabaseConfig?.basePath || '';
-  }
-
-  function getBaseUrl() {
-    let url = window.location.origin + getBasePath();
-    if (url.endsWith('/')) url = url.slice(0, -1);
-    return url;
-  }
 
   function init() {
     if (initDone) return true;
@@ -31,7 +18,6 @@
     supabaseInstance = window.supabase.createClient(url, key, cfg.options || {});
     window._supabase = supabaseInstance;
     initDone = true;
-    // Set isReady on TH object
     if (!window.TH) window.TH = {};
     window.TH.isReady = true;
     console.log('✅ Supabase client initialized');
@@ -40,6 +26,7 @@
 
   function getClient() { if (!initDone) init(); return supabaseInstance; }
 
+  // ========== AUTH ==========
   async function signUp(email, password, metadata) {
     const client = getClient();
     return await client.auth.signUp({ email, password, options: { data: metadata || {} } });
@@ -52,8 +39,8 @@
 
   async function signInWithProvider(provider) {
     const client = getClient();
-    const redirectUrl = getBaseUrl() + '/login.html';
-    return await client.auth.signInWithOAuth({ provider: provider, options: { redirectTo: redirectUrl } });
+    const redirectUrl = window.location.origin + '/login.html';
+    return await client.auth.signInWithOAuth({ provider, options: { redirectTo: redirectUrl } });
   }
 
   async function signOut() {
@@ -68,23 +55,17 @@
     return data?.session || null;
   }
 
-  async function getProfile(userId) {
-    const client = getClient();
-    if (!userId) { const session = await getSession(); if (!session?.user) return null; userId = session.user.id; }
-    const { data } = await client.from('profiles').select('*').eq('id', userId).maybeSingle();
-    return data;
-  }
-
   async function getCurrentUser() {
     const client = getClient();
-    const { data } = await client.auth.getUser();
-    if (!data?.user) return null;
-    const profile = await getProfile(data.user.id);
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) return null;
+    const { data: profile } = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
     return {
-      id: data.user.id, email: data.user.email,
-      username: profile?.username || data.user.user_metadata?.username || 'User',
-      displayName: profile?.display_name || data.user.user_metadata?.display_name || 'User',
-      role: profile?.role || data.user.user_metadata?.role || 'user',
+      id: user.id,
+      email: user.email,
+      username: profile?.username || user.user_metadata?.username || 'User',
+      displayName: profile?.display_name || user.user_metadata?.display_name || 'User',
+      role: profile?.role || user.user_metadata?.role || 'user',
       fandomName: profile?.fandom_name || null,
       fandomVerified: profile?.fandom_verified || false,
       avatar: profile?.avatar || ''
@@ -100,19 +81,12 @@
     return data;
   }
 
-  async function upsertProfile(profileData) {
-    const client = getClient();
-    const { data, error } = await client.from('profiles').upsert(profileData).select().single();
-    if (error) throw error;
-    return data;
-  }
-
   function onAuthStateChange(callback) {
     const client = getClient();
     return client.auth.onAuthStateChange(async (event, session) => { await callback(event, session); });
   }
 
-  // --- TOURNAMENTS ---
+  // ========== TOURNAMENTS (with full nested data) ==========
   async function getTournaments() {
     const client = getClient();
     return await client.from('tournaments').select('*').order('created_at', { ascending: false });
@@ -120,14 +94,66 @@
 
   async function getTournament(id) {
     const client = getClient();
-    return await client.from('tournaments').select('*, rounds(*, matches(*))').eq('id', id).maybeSingle();
+    // Fetch tournament with all related data
+    const { data: tournament, error: tError } = await client
+      .from('tournaments')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (tError || !tournament) return { data: null, error: tError };
+
+    // Fetch rounds
+    const { data: rounds } = await client
+      .from('rounds')
+      .select('*')
+      .eq('tournament_id', id)
+      .order('round_number', { ascending: true });
+
+    // Fetch all matches for this tournament
+    const { data: allMatches } = await client
+      .from('matches')
+      .select('*')
+      .eq('tournament_id', id);
+
+    // Fetch all players for this tournament
+    const { data: allPlayers } = await client
+      .from('players')
+      .select('*')
+      .eq('tournament_id', id);
+
+    // Build nested structure
+    const playerMap = {};
+    (allPlayers || []).forEach(p => { playerMap[p.id] = p; });
+
+    tournament.rounds = (rounds || []).map(r => {
+      const roundMatches = (allMatches || []).filter(m => m.round_id === r.id);
+      return {
+        ...r,
+        isActive: r.is_active,
+        startedAt: r.started_at,
+        matches: roundMatches.map(m => ({
+          ...m,
+          player1: m.player1_id ? playerMap[m.player1_id] : null,
+          player2: m.player2_id ? playerMap[m.player2_id] : null,
+          winner: m.winner_id ? playerMap[m.winner_id] : null,
+          votes1: m.votes1 || 0,
+          votes2: m.votes2 || 0,
+          finished: m.finished || false
+        }))
+      };
+    });
+
+    tournament.players = allPlayers || [];
+    tournament.currentRound = tournament.current_round || 0;
+
+    return { data: tournament, error: null };
   }
 
-  // FIXED: accepts object, not positional args
   async function createTournament(tournamentData) {
     const client = getClient();
-    const { title, description, status, config } = tournamentData || {};
-    return await client.from('tournaments').insert({ title, description, status, config }).select().single();
+    const { title, description, status } = tournamentData || {};
+    return await client.from('tournaments').insert({ title, description, status }).select().single();
   }
 
   async function updateTournament(id, updates) {
@@ -137,10 +163,16 @@
 
   async function deleteTournament(id) {
     const client = getClient();
+    // Delete in correct order: matches -> rounds -> players -> tournament
+    await client.from('matches').delete().eq('tournament_id', id);
+    await client.from('rounds').delete().eq('tournament_id', id);
+    await client.from('players').delete().eq('tournament_id', id);
+    await client.from('votes').delete().eq('tournament_id', id);
+    await client.from('comments').delete().eq('tournament_id', id);
     return await client.from('tournaments').delete().eq('id', id);
   }
 
-  // --- PLAYERS & MATCHES ---
+  // ========== PLAYERS ==========
   async function getPlayers(tournamentId) {
     const client = getClient();
     return await client.from('players').select('*').eq('tournament_id', tournamentId);
@@ -151,6 +183,7 @@
     return await client.from('players').insert(playersArray).select();
   }
 
+  // ========== MATCHES ==========
   async function getMatches(roundId) {
     const client = getClient();
     return await client.from('matches').select('*').eq('round_id', roundId);
@@ -161,31 +194,85 @@
     return await client.from('matches').update(updates).eq('id', id).select().single();
   }
 
-  // --- VOTING ---
+  // ========== VOTING ==========
   async function castVote(matchId, playerIndex) {
     const client = getClient();
-    const { data: { user } } = await client.auth.getUser();
-    return await client.from('votes').insert({ match_id: matchId, user_id: user ? user.id : null, player_index: playerIndex, is_guest: !user });
+    const user = await getCurrentUser();
+
+    // Check if already voted
+    if (user) {
+      const { data: existing } = await client.from('votes')
+        .select('id')
+        .eq('match_id', matchId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (existing) throw new Error("Вы уже голосовали в этом матче!");
+    } else {
+      // For guests, check localStorage
+      const voted = JSON.parse(localStorage.getItem('th_voted_matches') || '[]');
+      if (voted.includes(matchId)) throw new Error("Вы уже голосовали!");
+    }
+
+    // Insert vote
+    const { error } = await client.from('votes').insert({
+      match_id: matchId,
+      user_id: user ? user.id : null,
+      player_index: playerIndex,
+      is_guest: !user
+    });
+
+    if (error) throw error;
+
+    // Update match vote count
+    const { data: match } = await client.from('matches').select('votes1,votes2').eq('id', matchId).single();
+    const updates = playerIndex === 1 
+      ? { votes1: (match.votes1 || 0) + 1 }
+      : { votes2: (match.votes2 || 0) + 1 };
+    await client.from('matches').update(updates).eq('id', matchId);
+
+    // Mark as voted locally
+    if (!user) {
+      const voted = JSON.parse(localStorage.getItem('th_voted_matches') || '[]');
+      voted.push(matchId);
+      localStorage.setItem('th_voted_matches', JSON.stringify(voted));
+    }
+
+    return { success: true };
   }
 
   async function hasVoted(matchId) {
     const client = getClient();
-    const { data: { user } } = await client.auth.getUser();
-    if (!user) return false;
-    const { data } = await client.from('votes').select('id').eq('match_id', matchId).eq('user_id', user.id).maybeSingle();
+    const user = await getCurrentUser();
+    if (!user) {
+      const voted = JSON.parse(localStorage.getItem('th_voted_matches') || '[]');
+      return voted.includes(matchId);
+    }
+    const { data } = await client.from('votes')
+      .select('id')
+      .eq('match_id', matchId)
+      .eq('user_id', user.id)
+      .maybeSingle();
     return !!data;
   }
 
-  // --- COMMENTS ---
+  // ========== COMMENTS ==========
   async function getComments(tournamentId) {
     const client = getClient();
-    return await client.from('comments').select('*').eq('tournament_id', tournamentId).order('created_at', { ascending: false });
+    return await client.from('comments')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('created_at', { ascending: false });
   }
 
   async function addComment(tournamentId, text) {
     const client = getClient();
     const user = await getCurrentUser();
-    return await client.from('comments').insert({ tournament_id: tournamentId, user_id: user?.id || null, author_name: user?.displayName || user?.username || 'Гость', text: text }).select().single();
+    return await client.from('comments').insert({
+      tournament_id: tournamentId,
+      user_id: user?.id || null,
+      author_name: user?.displayName || user?.username || 'Гость',
+      text: text
+    }).select().single();
   }
 
   async function deleteComment(id) {
@@ -193,19 +280,26 @@
     return await client.from('comments').delete().eq('id', id);
   }
 
-  // --- CHAT ---
+  // ========== CHAT ==========
   async function getChatMessages(limit) {
     const client = getClient();
-    return await client.from('chat_messages').select('*').order('created_at', { ascending: false }).limit(limit || 100);
+    return await client.from('chat_messages')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit || 100);
   }
 
   async function sendChatMessage(text) {
     const client = getClient();
     const user = await getCurrentUser();
-    return await client.from('chat_messages').insert({ user_id: user?.id || null, author_name: user?.displayName || user?.username || 'Аноним', text: text });
+    return await client.from('chat_messages').insert({
+      user_id: user?.id || null,
+      author_name: user?.displayName || user?.username || 'Аноним',
+      text: text
+    });
   }
 
-  // --- SETTINGS & ADMIN ---
+  // ========== SETTINGS & ADMIN ==========
   async function getSiteSettings() {
     const client = getClient();
     return await client.from('site_settings').select('*').eq('id', 'global').maybeSingle();
@@ -228,16 +322,22 @@
 
   async function getAdminLogs(limit) {
     const client = getClient();
-    return await client.from('admin_logs').select('*').order('created_at', { ascending: false }).limit(limit || 100);
+    return await client.from('admin_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit || 100);
   }
 
   async function logAction(action, details) {
     const client = getClient();
     const user = await getCurrentUser();
-    return await client.from('admin_logs').insert({ user_id: user?.id || null, action, details: details || {} });
+    return await client.from('admin_logs').insert({
+      user_id: user?.id || null,
+      action,
+      details: details || {}
+    });
   }
 
-  // NEW: getSiteStats
   async function getSiteStats() {
     try {
       const client = getClient();
@@ -248,31 +348,21 @@
     } catch (e) { return { data: { tournaments: 0, users: 0, matches: 0 } }; }
   }
 
-  // --- REALTIME ---
+  // ========== REALTIME ==========
   function subscribeToChat(callback) {
     const client = getClient();
-    const channel = client.channel('public-chat').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, payload => { callback(payload.new); }).subscribe();
-    realtimeChannels.push(channel);
-    return channel;
-  }
-
-  function subscribeToComments(tournamentId, callback) {
-    const client = getClient();
-    const channel = client.channel('comments-' + tournamentId).on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: 'tournament_id=eq.' + tournamentId }, payload => { callback(payload); }).subscribe();
+    const channel = client.channel('public-chat')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, payload => { callback(payload.new); })
+      .subscribe();
     realtimeChannels.push(channel);
     return channel;
   }
 
   function subscribeToMatches(tournamentId, callback) {
     const client = getClient();
-    const channel = client.channel('matches-' + tournamentId).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches' }, payload => { callback(payload.new); }).subscribe();
-    realtimeChannels.push(channel);
-    return channel;
-  }
-
-  function subscribeToVotes(callback) {
-    const client = getClient();
-    const channel = client.channel('global-votes').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'votes' }, payload => { callback(payload.new); }).subscribe();
+    const channel = client.channel('matches-' + tournamentId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: 'tournament_id=eq.' + tournamentId }, payload => { callback(payload.new); })
+      .subscribe();
     realtimeChannels.push(channel);
     return channel;
   }
@@ -289,13 +379,13 @@
   }
 
   window.TH = {
-    init, getClient, getBasePath, getBaseUrl, isReady: false,
-    signUp, signIn, signInWithProvider, signOut, getSession, getProfile, getCurrentUser, updateProfile, upsertProfile, onAuthStateChange,
+    init, getClient, isReady: false,
+    signUp, signIn, signInWithProvider, signOut, getSession, getCurrentUser, updateProfile, onAuthStateChange,
     getTournaments, getTournament, createTournament, updateTournament, deleteTournament,
     getPlayers, createPlayers, getMatches, updateMatch,
     castVote, hasVoted, getComments, addComment, deleteComment,
     getChatMessages, sendChatMessage, getSiteSettings, updateSiteSettings, getSiteStats,
-    subscribeToChat, subscribeToComments, subscribeToMatches, subscribeToVotes, unsubscribeAll,
+    subscribeToChat, subscribeToMatches, unsubscribeAll,
     isAdmin, getAllUsers, setUserRole, getAdminLogs, logAction
   };
 

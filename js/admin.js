@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Admin Panel (FIXED v5 — bracket, ELO, syntax)
+   Tournament Hub Admin Panel (FIXED v6 — Shikimori Edition)
    ============================================================ */
 (function () {
   'use strict';
@@ -66,6 +66,7 @@
     const raw = document.getElementById("tData").value;
     if (!name) { toast("Введите название турнира"); return; }
     if (!raw.trim()) { toast("Введите список участников"); return; }
+
     const typeMap = {
       'персонаж': 'character', 'персонажи': 'character', 'char': 'character',
       'статья': 'article', 'статьи': 'article', 'article': 'article',
@@ -77,6 +78,7 @@
       'босс': 'boss', 'боссы': 'boss', 'boss': 'boss',
       'другое': 'other', 'other': 'other'
     };
+
     const players = raw.split("\n").map(line => {
       line = line.trim();
       if (!line) return null;
@@ -87,13 +89,17 @@
       if (typeMatch) { playerType = typeMap[typeMatch[1].toLowerCase()] || 'other'; playerName = typeMatch[2]; }
       return { name: playerName, image_url: parts[1] || "", type: playerType, description: parts[2] || "" };
     }).filter(Boolean);
+
     if (players.length < 2) { toast("Минимум 2 участника"); return; }
+
     try {
       const { data: tournament, error } = await window.TH.createTournament({ title: name, description: desc, status: 'draft' });
       if (error) throw error;
-      const playersWithTournament = players.map((p, i) => ({ ...p, tournament_id: tournament.id, seed: i }));
+
+      const playersWithTournament = players.map((p, i) => ({ ...p, tournament_id: tournament.id, seed: i, elo: 1000 }));
       const { error: playersError } = await window.TH.createPlayers(playersWithTournament);
       if (playersError) throw playersError;
+
       toast("✅ Турнир создан: " + name);
       document.getElementById("tName").value = "";
       document.getElementById("tDesc").value = "";
@@ -110,24 +116,31 @@
     const t = await getActiveTournament();
     if (!t) { toast("Нет активного турнира. Создайте сначала."); return; }
     if (t.status !== "draft") { toast("Турнир уже запущен или завершён"); return; }
+
     try {
       const { data: players } = await window.TH.getPlayers(t.id);
+      if (!players || players.length < 2) { toast("Недостаточно участников"); return; }
+
       const bracket = window.createBracket(players || []);
+      if (!bracket || !bracket.rounds) { toast("Ошибка генерации сетки"); return; }
+
       for (let i = 0; i < bracket.rounds.length; i++) {
         const round = bracket.rounds[i];
         const { data: roundData } = await window.TH.getClient().from('rounds').insert({
           tournament_id: t.id, round_number: i, name: round.name, is_active: i === 0,
           started_at: i === 0 ? new Date().toISOString() : null
         }).select().single();
+
         if (round.matches && round.matches.length) {
           const matches = round.matches.map((m, idx) => ({
             round_id: roundData.id, tournament_id: t.id,
             player1_id: m.player1?.id || null, player2_id: m.player2?.id || null,
-            match_order: idx, status: 'pending'
+            match_order: idx, status: 'pending', votes1: 0, votes2: 0
           }));
           await window.TH.getClient().from('matches').insert(matches);
         }
       }
+
       await window.TH.updateTournament(t.id, { status: 'active', current_round: 0 });
       toast("🚀 Турнир запущен!");
       try { await window.TH.logAction('start_tournament', { id: t.id, title: t.title }); } catch (e) {}
@@ -140,55 +153,66 @@
     if (!t) { toast("Нет активного турнира"); return; }
     if (t.status !== "active") { toast("Турнир не активен"); return; }
     if (force && !confirm("Принудительно завершить раунд?")) return;
+
     try {
-      const { data: rounds } = await window.TH.getClient().from('rounds').select('*, matches:matches(*)').eq('tournament_id', t.id).eq('round_number', t.current_round);
+      const client = window.TH.getClient();
+      const { data: rounds } = await client.from('rounds')
+        .select('*, matches(*)')
+        .eq('tournament_id', t.id)
+        .eq('is_active', true);
+
       const currentRound = rounds?.[0];
       if (!currentRound) { toast("Нет текущего раунда"); return; }
+
       const winners = [];
       for (const match of (currentRound.matches || [])) {
         if (match.finished && match.winner_id) {
-          const { data: winner } = await window.TH.getClient().from('players').select('*').eq('id', match.winner_id).single();
-          if (winner) {
-            winners.push(winner);
-            try {
-              const loserId = winner.id === match.player1_id ? match.player2_id : match.player1_id;
-              if (winner.elo !== undefined && loserId) {
-                const { data: loser } = await window.TH.getClient().from('players').select('*').eq('id', loserId).single();
-                if (loser && loser.elo !== undefined) {
-                  const winnerChange = window.TournamentEngine.calculateEloChange(winner.elo, loser.elo, 1);
-                  const loserChange = window.TournamentEngine.calculateEloChange(loser.elo, winner.elo, 0);
-                  await window.TH.getClient().from('players').update({ elo: winner.elo + winnerChange, wins: (winner.wins || 0) + 1 }).eq('id', winner.id);
-                  await window.TH.getClient().from('players').update({ elo: loser.elo + loserChange, losses: (loser.losses || 0) + 1 }).eq('id', loser.id);
-                }
-              }
-            } catch (e) { console.warn('ELO update failed:', e); }
-          }
+          const { data: winner } = await client.from('players').select('*').eq('id', match.winner_id).single();
+          if (winner) winners.push(winner);
         } else if (force && match.player1_id) {
-          const { data: p1 } = await window.TH.getClient().from('players').select('*').eq('id', match.player1_id).single();
-          if (p1) winners.push(p1);
-          await window.TH.getClient().from('matches').update({ finished: true, winner_id: match.player1_id, status: 'done' }).eq('id', match.id);
+          // Force win for player1
+          const { data: p1 } = await client.from('players').select('*').eq('id', match.player1_id).single();
+          if (p1) {
+            winners.push(p1);
+            await client.from('matches').update({ finished: true, winner_id: match.player1_id, status: 'done' }).eq('id', match.id);
+          }
         }
       }
-      await window.TH.getClient().from('rounds').update({ is_active: false, ended_at: new Date().toISOString() }).eq('id', currentRound.id);
+
+      // Deactivate current round
+      await client.from('rounds').update({ is_active: false, ended_at: new Date().toISOString() }).eq('id', currentRound.id);
+
       if (winners.length < 2) {
-        await window.TH.updateTournament(t.id, { status: 'finished', completed_at: new Date().toISOString(), winner_id: winners[0]?.id || null });
+        // Tournament finished
+        await window.TH.updateTournament(t.id, { 
+          status: 'finished', 
+          completed_at: new Date().toISOString(), 
+          winner_id: winners[0]?.id || null 
+        });
         toast("🏆 Турнир завершён! Победитель: " + (winners[0]?.name || "?"));
       } else {
-        const { data: newRound } = await window.TH.getClient().from('rounds').insert({
-          tournament_id: t.id, round_number: t.current_round + 1,
+        // Create next round
+        const { data: newRound } = await client.from('rounds').insert({
+          tournament_id: t.id, round_number: (currentRound.round_number || 0) + 1,
           name: roundTitle(winners.length * 2), is_active: true, started_at: new Date().toISOString()
         }).select().single();
+
         const newMatches = [];
         for (let i = 0; i < winners.length; i += 2) {
-          newMatches.push({ round_id: newRound.id, tournament_id: t.id, player1_id: winners[i]?.id || null, player2_id: winners[i + 1]?.id || null, match_order: Math.floor(i / 2), status: 'pending' });
+          newMatches.push({ 
+            round_id: newRound.id, tournament_id: t.id, 
+            player1_id: winners[i]?.id || null, player2_id: winners[i + 1]?.id || null, 
+            match_order: Math.floor(i / 2), status: 'pending', votes1: 0, votes2: 0 
+          });
         }
-        await window.TH.getClient().from('matches').insert(newMatches);
-        await window.TH.updateTournament(t.id, { current_round: t.current_round + 1 });
+        await client.from('matches').insert(newMatches);
+        await window.TH.updateTournament(t.id, { current_round: (currentRound.round_number || 0) + 1 });
         toast("⏭ Раунд завершён, следующий начался");
       }
-      try { await window.TH.logAction('advance_round', { tournament_id: t.id, round: t.current_round }); } catch (e) {}
+
+      try { await window.TH.logAction('advance_round', { tournament_id: t.id, round: currentRound.round_number }); } catch (e) {}
       await refreshAll();
-    } catch (e) { toast("❌ " + e.message); }
+    } catch (e) { toast("❌ " + e.message); console.error(e); }
   }
 
   async function doResetVotes() {
@@ -196,8 +220,9 @@
     if (!t) { toast("Нет активного турнира"); return; }
     if (!confirm("Сбросить ВСЕ голоса в турнире?")) return;
     try {
-      await window.TH.getClient().from('votes').delete().eq('tournament_id', t.id);
-      await window.TH.getClient().from('matches').update({ votes1: 0, votes2: 0 }).eq('tournament_id', t.id);
+      const client = window.TH.getClient();
+      await client.from('votes').delete().eq('tournament_id', t.id);
+      await client.from('matches').update({ votes1: 0, votes2: 0 }).eq('tournament_id', t.id);
       toast("🔄 Голоса сброшены");
       try { await window.TH.logAction('reset_votes', { tournament_id: t.id }); } catch (e) {}
       await refreshAll();
@@ -251,7 +276,7 @@
   function removeParticipant(index) { editingParticipants.splice(index, 1); refreshParticipantRows(); }
 
   function addParticipantRow() {
-    editingParticipants.push({ id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(), name: "", image_url: "", type: "character", description: "" });
+    editingParticipants.push({ id: Date.now().toString(), name: "", image_url: "", type: "character", description: "" });
     refreshParticipantRows();
   }
 
@@ -262,7 +287,10 @@
     if (valid.length < 2) { toast("Минимум 2 участника с именем"); return; }
     try {
       await window.TH.getClient().from('players').delete().eq('tournament_id', t.id);
-      const toInsert = valid.map((p, i) => ({ tournament_id: t.id, name: p.name, image_url: p.image_url || p.image || '', type: p.type || 'character', description: p.description || '', seed: i }));
+      const toInsert = valid.map((p, i) => ({ 
+        tournament_id: t.id, name: p.name, image_url: p.image_url || p.image || '', 
+        type: p.type || 'character', description: p.description || '', seed: i, elo: 1000 
+      }));
       await window.TH.createPlayers(toInsert);
       document.getElementById("participantSaveStatus").innerHTML = "<span style='color:var(--green);'>✅ Сохранено (" + valid.length + " участников)</span>";
       try { await window.TH.logAction('update_players', { tournament_id: t.id, count: valid.length }); } catch (e) {}
@@ -274,12 +302,24 @@
     const t = await getActiveTournament();
     const container = document.getElementById("forceWinList");
     if (!t || t.status !== "active") { container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Нет активного раунда</p>`; return; }
-    const { data: rounds } = await window.TH.getClient().from('rounds').select('*, matches:matches(*, player1:player1_id(*), player2:player2_id(*))').eq('tournament_id', t.id).eq('is_active', true);
+
+    const client = window.TH.getClient();
+    const { data: rounds } = await client.from('rounds')
+      .select('*')
+      .eq('tournament_id', t.id)
+      .eq('is_active', true);
+
     const round = rounds?.[0];
     if (!round) { container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Нет текущего раунда</p>`; return; }
-    const pending = (round.matches || []).filter(m => !m.finished);
-    if (!pending.length) { container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Все матчи завершены</p>`; return; }
-    container.innerHTML = pending.map(m => `
+
+    const { data: matches } = await client.from('matches')
+      .select('*, player1:player1_id(*), player2:player2_id(*)')
+      .eq('round_id', round.id)
+      .eq('finished', false);
+
+    if (!matches || !matches.length) { container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Все матчи завершены</p>`; return; }
+
+    container.innerHTML = matches.map(m => `
       <div class="match-admin" style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border-radius:10px;margin-bottom:8px;">
         <span style="flex:1;">${escapeHTML(m.player1?.name || "?")} <span style="color:var(--accent);">${m.votes1 || 0}:${m.votes2 || 0}</span> ${escapeHTML(m.player2?.name || "?")}</span>
         <button class="btn-primary" style="padding:6px 12px;font-size:12px;" onclick="Admin.forceWin('${m.id}', '${m.player1_id}', 1)">P1 Win</button>
@@ -328,7 +368,8 @@
 
   async function renderModeration() {
     try {
-      const { data: comments } = await window.TH.getClient().from('comments').select('*').order('created_at', { ascending: false }).limit(50);
+      const client = window.TH.getClient();
+      const { data: comments } = await client.from('comments').select('*').order('created_at', { ascending: false }).limit(50);
       const cList = document.getElementById("modCommentsList");
       if (!comments || !comments.length) cList.innerHTML = `<p style="color:var(--text-3);">Нет комментариев</p>`;
       else cList.innerHTML = comments.map(c => `
@@ -337,6 +378,7 @@
           <div style="font-size:13px;color:var(--text-2);margin-bottom:8px;">${escapeHTML(c.text)}</div>
           <button class="btn-danger" style="padding:4px 10px;font-size:11px;" onclick="Admin.deleteComment('${c.id}')">🗑 Удалить</button>
         </div>`).join("");
+
       const { data: chat } = await window.TH.getChatMessages(10);
       const chatPreview = document.getElementById("modChatPreview");
       if (!chat || !chat.length) chatPreview.innerHTML = `<p style="color:var(--text-3);">Нет сообщений</p>`;
@@ -352,8 +394,12 @@
 
   async function doClearChat() {
     if (!confirm("Очистить ВЕСЬ чат?")) return;
-    try { await window.TH.getClient().from('chat_messages').delete().neq('id', '0'); toast("💬 Чат очищен"); try { await window.TH.logAction('clear_chat'); } catch (e) {} await renderModeration(); }
-    catch (e) { toast("❌ " + e.message); }
+    try { 
+      await window.TH.getClient().from('chat_messages').delete().neq('id', '0'); 
+      toast("💬 Чат очищен"); 
+      try { await window.TH.logAction('clear_chat'); } catch (e) {} 
+      await renderModeration(); 
+    } catch (e) { toast("❌ " + e.message); }
   }
 
   async function loadSettings() {
@@ -380,7 +426,10 @@
       document.getElementById("settingsStatus").innerHTML = "<span style='color:var(--green);'>✅ Настройки сохранены</span>";
       try { await window.TH.logAction('update_settings'); } catch (e) {}
       const logoEl = document.getElementById("siteLogoLink");
-      if (logoEl) { const { data } = await window.TH.getSiteSettings(); logoEl.textContent = (data?.site_logo || "🏆") + " " + (data?.site_name || "Tournament Hub"); }
+      if (logoEl) { 
+        const { data } = await window.TH.getSiteSettings(); 
+        logoEl.textContent = (data?.site_logo || "🏆") + " " + (data?.site_name || "Tournament Hub"); 
+      }
     } catch (e) { toast("❌ " + e.message); }
   }
 
@@ -455,7 +504,10 @@
     if (!confirm("ВЫ УВЕРЕНЫ? Это удалит ВСЕ локальные данные!")) return;
     if (prompt('Введите "DELETE" для подтверждения:') !== "DELETE") return;
     const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); if (key && (key.startsWith('th_') || key === 'tournament_hub_db')) keysToRemove.push(key); }
+    for (let i = 0; i < localStorage.length; i++) { 
+      const key = localStorage.key(i); 
+      if (key && (key.startsWith('th_') || key === 'tournament_hub_db')) keysToRemove.push(key); 
+    }
     keysToRemove.forEach(k => localStorage.removeItem(k));
     toast("💥 Данные удалены. Перезагрузка...");
     setTimeout(() => location.reload(), 1500);
@@ -477,8 +529,9 @@
     const el = document.getElementById("activeTournamentInfo");
     if (!t) { el.innerHTML = "Нет активного турнира. Создайте новый выше."; return; }
     const { data: players } = await window.TH.getPlayers(t.id);
-    const { data: rounds } = await window.TH.getClient().from('rounds').select('*').eq('tournament_id', t.id);
-    el.innerHTML = `<b>${escapeHTML(t.title)}</b> (${t.status}) — ${(players || []).length} участников, ${(rounds || []).length} раундов, текущий раунд: ${(t.current_round || 0) + 1}`;
+    const client = window.TH.getClient();
+    const { data: rounds } = await client.from('rounds').select('*').eq('tournament_id', t.id);
+    el.innerHTML = `<b>${escapeHTML(t.title)}</b> (${t.status}) — ${(players || []).length} участников, ${(rounds || []).length} раундов, текущий: ${(t.current_round || 0) + 1}`;
   }
 
   async function refreshTournamentList() {
@@ -488,16 +541,19 @@
       if (!tournaments || !tournaments.length) { el.innerHTML = "Нет турниров"; return; }
       el.innerHTML = tournaments.map(t => `
         <div style="margin-bottom:8px;padding:10px;background:var(--bg);border-radius:10px;display:flex;justify-content:space-between;align-items:center;">
-          <div><b>${escapeHTML(t.title)}</b> <span style="color:var(--text-3);font-size:12px;">${t.status}</span><div style="font-size:12px;color:var(--text-3);">${(t.players || []).length} участников</div></div>
-          <div style="display:flex;gap:6px;"><a href="bracket.html?id=${encodeURIComponent(t.id)}" target="_blank" class="btn-secondary" style="padding:6px 12px;font-size:12px;">Сетка</a><button class="btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="Admin.setActive('${t.id}')">Активировать</button></div>
+          <div><b>${escapeHTML(t.title)}</b> <span style="color:var(--text-3);font-size:12px;">${t.status}</span></div>
+          <div style="display:flex;gap:6px;">
+            <a href="bracket.html?id=${encodeURIComponent(t.id)}" target="_blank" class="btn-secondary" style="padding:6px 12px;font-size:12px;">Сетка</a>
+            <button class="btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="Admin.setActive('${t.id}')">Активировать</button>
+          </div>
         </div>`).join("");
     } catch (e) { console.warn('Tournament list error', e); }
   }
 
   async function setActive(id) {
     localStorage.setItem('th_active_tournament', id);
-    DB.updateDB(db => { db.activeTournamentId = id; });
-    try { if (window.TH) await window.TH.updateSiteSettings({ active_tournament_id: id }); } catch (e) {}
+    if (window.DB) window.DB.updateDB(db => { db.activeTournamentId = id; });
+    try { await window.TH.updateSiteSettings({ active_tournament_id: id }); } catch (e) {}
     toast("✅ Турнир активирован");
     await refreshAll();
   }

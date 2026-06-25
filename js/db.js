@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Data Bridge Layer (FIXED v10 — isReady, toast, sync)
+   Tournament Hub — Data Bridge Layer (FIXED v11 — Clean Bridge)
    ============================================================ */
 (function () {
   'use strict';
@@ -39,6 +39,14 @@
   }
 
   async function getCurrentUser() {
+    // Prefer Supabase user
+    if (window.TH && window.TH.getCurrentUser) {
+      try {
+        const user = await window.TH.getCurrentUser();
+        if (user) return user;
+      } catch (e) {}
+    }
+    // Fallback to local
     try {
       const localUser = localStorage.getItem(USER_KEY);
       return localUser ? JSON.parse(localUser) : null;
@@ -71,12 +79,6 @@
       const serverUser = await window.TH.getCurrentUser();
       if (serverUser) await setCurrentUser(serverUser);
       else await setCurrentUser(null);
-      const { data: tournaments, error: tErr } = await window.TH.getTournaments();
-      if (!tErr && tournaments) {
-        let dbData = getDB();
-        dbData.tournaments = tournaments;
-        saveDB(dbData);
-      }
     } catch (e) { console.warn("Supabase sync unavailable:", e); }
   }
 
