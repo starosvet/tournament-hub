@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Authentication (FIXED v2 — OAuth + async)
+   Tournament Hub Authentication (FIXED v3 — async isAdmin, no duplicates)
    ============================================================ */
 
 (function () {
@@ -14,16 +14,6 @@
       out |= 0;
     }
     return String(out);
-  }
-
-  function escapeHTML(text) {
-    if (text == null) return "";
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
   }
 
   /* ==========================================================
@@ -75,9 +65,8 @@
       if (error) return { success: false, error: "Неверный email или пароль" };
 
       if (data?.user) {
-        // FIX: ждём синхронизации профиля
         await DB.syncSupabaseUser();
-        const user = DB.getCurrentUser();
+        const user = await DB.getCurrentUser();
         if (user) {
           if (user.role === 'admin') localStorage.setItem("th_admin", "yes");
           return { success: true, user };
@@ -102,7 +91,28 @@
     location.reload();
   }
 
-  function isAdmin() {
+  // FIX: isAdmin теперь async и проверяет Supabase
+  async function isAdmin() {
+    // Быстрая проверка localStorage
+    if (localStorage.getItem("th_admin") === "yes") return true;
+    
+    // Проверка через Supabase
+    if (window.TH) {
+      try {
+        const profile = await window.TH.getProfile();
+        if (profile?.role === 'admin') {
+          localStorage.setItem("th_admin", "yes");
+          return true;
+        }
+      } catch (e) {
+        console.warn('Supabase admin check failed', e);
+      }
+    }
+    return false;
+  }
+
+  // Синхронная версия для onclick (проверяет только localStorage)
+  function isAdminSync() {
     return localStorage.getItem("th_admin") === "yes";
   }
 
@@ -116,7 +126,7 @@
      VOTING
      ========================================================== */
   async function canUserVote(matchId) {
-    const user = DB.getCurrentUser();
+    const user = await DB.getCurrentUser();
     if (!user) return false;
     try {
       return !(await window.TH.hasVoted(matchId));
@@ -127,7 +137,7 @@
   }
 
   async function markVote(matchId, tournamentId, playerNumber) {
-    const user = DB.getCurrentUser();
+    const user = await DB.getCurrentUser();
     if (!user) return;
     try {
       const { error } = await window.TH.castVote(matchId, tournamentId, playerNumber);
@@ -150,7 +160,6 @@
     const box = document.getElementById("navUser") || document.getElementById("user-area");
     if (!box) return;
 
-    // FIX: async getCurrentUser теперь через Promise
     DB.getCurrentUser().then(user => {
       if (user) {
         const avatar = user.avatar ? `<img src="${escapeHTML(user.avatar)}" class="avatar" style="width:32px;height:32px;border-radius:50%;object-fit:cover;margin-right:8px;">` : '';
@@ -182,47 +191,7 @@
   }
 
   /* ==========================================================
-     INIT (FIXED: правильный async/await)
-     ========================================================== */
-  async function initAuth() {
-    if (!window.TH) return;
-
-    // FIX: ждём готовности DOM и Supabase
-    await new Promise(resolve => {
-      if (document.readyState === 'complete') resolve();
-      else window.addEventListener('load', resolve);
-    });
-
-    const session = await window.TH.getSession();
-    if (session) {
-      await DB.syncSupabaseUser();
-      const user = await DB.getCurrentUser();
-      if (user?.role === 'admin') localStorage.setItem("th_admin", "yes");
-    }
-    renderNavUser();
-    checkFandomAutoAdmin();
-  }
-
-  window.Auth = {
-    register, login, logout, isAdmin, adminLogin,
-    canUserVote, markVote, renderNavUser, checkFandomAutoAdmin, initAuth,
-       unlinkFandom  // <-- добавлено
-  };
-
-  window.escapeHTML = escapeHTML;
-  window.escapeHtml = escapeHTML;
-  window.loginAdmin = adminLogin;
-  window.initAuth = initAuth;
-
-  // FIX: запускаем initAuth после полной загрузки
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => initAuth());
-  } else {
-    initAuth();
-  }
-   
- /* ==========================================================
-     FANDOM UNLINK (для админов или по запросу)
+     FANDOM UNLINK
      ========================================================== */
   async function unlinkFandom() {
     try {
@@ -242,5 +211,42 @@
       return { success: false, error: e.message };
     }
   }
-   
+
+  /* ==========================================================
+     INIT
+     ========================================================== */
+  async function initAuth() {
+    if (!window.TH) return;
+
+    await new Promise(resolve => {
+      if (document.readyState === 'complete') resolve();
+      else window.addEventListener('load', resolve);
+    });
+
+    const session = await window.TH.getSession();
+    if (session) {
+      await DB.syncSupabaseUser();
+      const user = await DB.getCurrentUser();
+      if (user?.role === 'admin') localStorage.setItem("th_admin", "yes");
+    }
+    renderNavUser();
+    checkFandomAutoAdmin();
+  }
+
+  /* ==========================================================
+     EXPORT
+     ========================================================== */
+  window.Auth = {
+    register, login, logout, isAdmin, isAdminSync, adminLogin,
+    canUserVote, markVote, renderNavUser, checkFandomAutoAdmin, initAuth,
+    unlinkFandom
+  };
+
+  window.initAuth = initAuth;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => initAuth());
+  } else {
+    initAuth();
+  }
 })();
