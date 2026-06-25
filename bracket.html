@@ -5,102 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Сетка | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/db.js"></script>
     <script src="js/engine.js"></script>
     <script src="js/tournament.js"></script>
-    <script type="module">
-  import { supabase, getUser, getFingerprint } from './js/supabase.js'
-
-  // --- Голосование ---
-  async function doVote(matchId, playerNum) {
-    const fp = getFingerprint()
-    const { data, error } = await supabase.rpc('vote', {
-      p_match_id: matchId,
-      p_player_num: playerNum,
-      p_fingerprint: fp
-    })
-    
-    if (data === true) {
-      console.log('Голос засчитан!')
-      // Счётчик обновится сам через Realtime
-    } else {
-      alert('Уже голосовали или турнир не активен')
-    }
-  }
-
-  // --- Подписка на изменения матча (live-голоса) ---
-  function watchMatch(matchId) {
-    supabase
-      .channel('match-' + matchId)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'matches',
-        filter: 'id=eq.' + matchId
-      }, (payload) => {
-        // payload.new.votes1, payload.new.votes2 — обнови UI
-        document.getElementById('votes-' + matchId + '-1').textContent = payload.new.votes1
-        document.getElementById('votes-' + matchId + '-2').textContent = payload.new.votes2
-      })
-      .subscribe()
-  }
-
-  // --- Загрузка турнира ---
-  async function loadTournament(id) {
-    const { data } = await supabase
-      .from('tournaments')
-      .select(`
-        *,
-        players(*),
-        rounds(*, matches(*, player1:player1_id(*), player2:player2_id(*)))
-      `)
-      .eq('id', id)
-      .single()
-    
-    return data
-  }
-
-  // --- Чат: отправка ---
-  async function sendChat(text) {
-    const user = await getUser()
-    if (!user) { alert('Войдите'); return }
-    
-    await supabase.from('chat_messages').insert({
-      user_id: user.id,
-      username: user.user_metadata?.username || user.email,
-      text: text.trim()
-    })
-  }
-
-  // --- Чат: подписка ---
-  supabase
-    .channel('chat')
-    .on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'chat_messages'
-    }, (payload) => {
-      appendMessage(payload.new) // твоя функция рендера
-    })
-    .subscribe()
-
-  // --- Комментарии ---
-  async function addComment(tournamentId, text) {
-    const user = await getUser()
-    if (!user) return
-    
-    await supabase.from('comments').insert({
-      tournament_id: tournamentId,
-      user_id: user.id,
-      username: user.user_metadata?.username || user.email,
-      text: text.trim()
-    })
-  }
-
-  // Экспортируем в глобальную область для onclick в HTML
-  window.doVote = doVote
-  window.sendChat = sendChat
-  window.addComment = addComment
-</script>
+    <script src="js/bracket.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/comments.js"></script>
     <script src="js/render-bracket.js"></script>
@@ -150,7 +61,7 @@
     </footer>
 
     <script>
-        function postComment() {
+        async function postComment() {
             const text = document.getElementById("commentText").value;
             const params = new URLSearchParams(window.location.search);
             const tid = params.get("id");
@@ -161,19 +72,25 @@
                 return;
             }
 
-            Comments.addComment(tid, text);
+            const result = await Comments.addComment(tid, text);
+            if (result.error) {
+                alert(result.error.message || "Ошибка отправки");
+                return;
+            }
+
             document.getElementById("commentText").value = "";
-            loadComments();
+            await loadComments();
         }
 
-        function loadComments() {
+        async function loadComments() {
             const params = new URLSearchParams(window.location.search);
             const tid = params.get("id");
             if (!tid) return;
-            Comments.renderComments(tid, document.getElementById("comments-list"));
+            await Comments.renderComments(tid, document.getElementById("comments-list"));
+            Comments.subscribeToComments(tid, document.getElementById("comments-list"));
         }
 
-        document.addEventListener("DOMContentLoaded", function() {
+        document.addEventListener("DOMContentLoaded", async function() {
             Auth.renderNavUser();
             Auth.checkFandomAutoAdmin();
             const navAdmin = document.getElementById("navAdmin");
@@ -181,11 +98,11 @@
 
             // Рендерим сетку
             if (typeof RenderBracket !== "undefined" && RenderBracket.renderBracket) {
-                RenderBracket.renderBracket();
+                await RenderBracket.renderBracket();
             }
 
             // Загружаем комментарии
-            loadComments();
+            await loadComments();
         });
     </script>
 </body>
