@@ -1,24 +1,13 @@
 /* ============================================================
-   Tournament Hub Comments system (Supabase + Realtime)
+   Tournament Hub Comments system (FIXED v2 — async user)
    ============================================================ */
 
 (function () {
   'use strict';
 
-  function escapeHTML(text) {
-    if (text === null || text === undefined) return "";
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
   /* ==========================================================
      ЗАГРУЗКА КОММЕНТАРИЕВ
      ========================================================== */
-
   async function getComments(tournamentId) {
     if (window.TH) {
       try {
@@ -29,7 +18,6 @@
       }
     }
 
-    // Fallback
     const db = DB.getDB();
     return (db.comments || [])
       .filter(c => c.tournamentId === tournamentId)
@@ -39,9 +27,9 @@
   /* ==========================================================
      ДОБАВЛЕНИЕ КОММЕНТАРИЯ
      ========================================================== */
-
   async function addComment(tournamentId, text) {
-    const user = DB.getCurrentUser();
+    // FIX: await для async getCurrentUser
+    const user = await DB.getCurrentUser();
     if (!user) return { error: new Error('Требуется авторизация') };
 
     const clean = String(text || "").trim();
@@ -57,7 +45,6 @@
       }
     }
 
-    // Fallback
     const comment = {
       id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
       tournamentId,
@@ -78,9 +65,8 @@
   /* ==========================================================
      УДАЛЕНИЕ КОММЕНТАРИЯ
      ========================================================== */
-
   async function deleteComment(id) {
-    const user = DB.getCurrentUser();
+    const user = await DB.getCurrentUser();
     if (!user) return false;
 
     if (window.TH) {
@@ -92,7 +78,6 @@
       }
     }
 
-    // Fallback
     let removed = false;
     DB.updateDB(db => {
       db.comments = (db.comments || []).filter(c => {
@@ -109,7 +94,6 @@
   /* ==========================================================
      РЕНДЕР
      ========================================================== */
-
   async function renderComments(tournamentId, container) {
     if (!container) return;
 
@@ -145,7 +129,6 @@
   /* ==========================================================
      REALTIME ПОДПИСКА
      ========================================================== */
-
   function subscribeToComments(tournamentId, container) {
     if (!window.TH) return;
 
@@ -156,7 +139,7 @@
         schema: 'public',
         table: 'comments',
         filter: 'tournament_id=eq.' + tournamentId
-      }, (payload) => {
+      }, () => {
         renderComments(tournamentId, container);
       })
       .subscribe();
@@ -165,7 +148,6 @@
   /* ==========================================================
      ЭКСПОРТ
      ========================================================== */
-
   window.Comments = {
     getComments,
     addComment,
@@ -173,6 +155,4 @@
     renderComments,
     subscribeToComments
   };
-
-  window.escapeHTML = window.escapeHTML || escapeHTML;
 })();
