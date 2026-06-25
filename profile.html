@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Профиль | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
 </head>
 <body>
@@ -50,7 +54,7 @@
             return String(str || "").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
 
-        function loadProfile() {
+        async function loadProfile() {
             const user = DB.getCurrentUser();
             const box = document.getElementById("profileContent");
 
@@ -62,12 +66,16 @@
                 return;
             }
 
-            const isAdmin = Auth.isAdmin();
+            const isAdmin = await window.TH.isAdmin();
 
             box.innerHTML = `
                 <div style="margin-bottom:24px;">
                     <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Никнейм</label>
                     <div style="font-size:1.3em;font-weight:700;">${escapeHTML(user.username)}</div>
+                </div>
+                <div style="margin-bottom:24px;">
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Email</label>
+                    <div style="font-size:1.1em;">${escapeHTML(user.email || '—')}</div>
                 </div>
                 <div style="margin-bottom:24px;">
                     <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Отображаемое имя</label>
@@ -82,36 +90,39 @@
                     <div style="font-size:1.1em;text-transform:capitalize;">${isAdmin ? "👑 Администратор" : (user.role || "user")}</div>
                 </div>
                 <button class="btn-primary" onclick="saveProfile()">💾 Сохранить</button>
-                <button class="btn-danger" style="margin-left:12px;" onclick="Auth.logout();location.reload();">🚪 Выйти</button>
+                <button class="btn-danger" style="margin-left:12px;" onclick="Auth.logout();">🚪 Выйти</button>
             `;
         }
 
-        function saveProfile() {
+        async function saveProfile() {
             const user = DB.getCurrentUser();
             if (!user) return;
 
             const newName = document.getElementById("displayName").value.trim();
             if (!newName) return;
 
-            DB.updateDB(db => {
-                const u = db.users.find(x => x.id === user.id);
-                if (u) {
-                    u.displayName = newName;
-                    user.displayName = newName;
-                }
-            });
+            try {
+                await window.TH.updateProfile({
+                    display_name: newName
+                });
 
-            // ИСПРАВЛЕНО: toast вместо alert()
-            if (typeof toast === "function") {
+                // Обновляем локально
+                user.displayName = newName;
+                DB.setCurrentUser(user);
+
                 toast("Сохранено!");
-            } else {
-                console.log("Сохранено!");
+                Auth.renderNavUser();
+            } catch (e) {
+                toast("Ошибка: " + e.message);
             }
-            Auth.renderNavUser();
         }
 
-        document.addEventListener("DOMContentLoaded", function() {
-            loadProfile();
+        document.addEventListener("DOMContentLoaded", async function() {
+            if (window.TH) {
+                window.TH.init();
+                await DB.syncSupabaseUser();
+            }
+            await loadProfile();
             Auth.renderNavUser();
             Auth.checkFandomAutoAdmin();
             const navAdmin = document.getElementById("navAdmin");
