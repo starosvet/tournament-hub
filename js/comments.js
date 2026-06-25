@@ -6,7 +6,7 @@
   'use strict';
 
   const subscribedTournaments = new Set();
-  const activeChannels = new Map();  // FIX: храним каналы для отписки
+  const activeChannels = new Map();
 
   /* ==========================================================
      ЗАГРУЗКА КОММЕНТАРИЕВ
@@ -17,7 +17,7 @@
         const { data } = await window.TH.getComments(tournamentId);
         if (data) return data;
       } catch (e) {
-        console.warn('Supabase comments failed');
+        console.warn('Supabase comments failed, using localStorage fallback');
       }
     }
 
@@ -40,102 +40,110 @@
     if (window.TH) {
       try {
         const { data, error } = await window.TH.addComment(tournamentId, clean);
-        if (error) throw error;
+        if (error) return { error };
         return { data };
       } catch (e) {
-        console.warn('Supabase comment failed, using localStorage');
+        console.warn('Supabase addComment failed, fallback to local');
       }
     }
 
-    const comment = {
-      id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(),
+    const db = DB.getDB();
+    const newComment = {
+      id: 'comm-' + Math.random().toString(36).substr(2, 9),
       tournamentId,
       userId: user.id,
-      username: user.displayName || user.username || "Гость",
+      username: user.username || user.display_name,
       text: clean,
       createdAt: Date.now()
     };
-
-    DB.updateDB(db => {
-      if (!Array.isArray(db.comments)) db.comments = [];
-      db.comments.push(comment);
-    });
-
-    return { data: comment };
+    db.comments = db.comments || [];
+    db.comments.push(newComment);
+    DB.saveDB(db);
+    return { data: newComment };
   }
 
   /* ==========================================================
      УДАЛЕНИЕ КОММЕНТАРИЯ
      ========================================================== */
-  async function deleteComment(id) {
-    const user = await DB.getCurrentUser();
-    if (!user) return false;
-
+  async function deleteComment(commentId) {
     if (window.TH) {
       try {
-        await window.TH.deleteComment(id);
-        return true;
+        const { error } = await window.TH.deleteComment(commentId);
+        if (error) return { error };
+        return { success: true };
       } catch (e) {
-        console.warn('Supabase delete failed');
+        return { error: e };
       }
     }
+    
+    const db = DB.getDB();
+    db.comments = (db.comments || []).filter(c => c.id !== commentId);
+    DB.saveDB(db);
+    return { success: true };
+  }
 
-    let removed = false;
-    DB.updateDB(db => {
-      db.comments = (db.comments || []).filter(c => {
-        if (c.id === id && c.userId === user.id) {
-          removed = true;
-          return false;
-        }
-        return true;
-      });
-    });
-    return removed;
+  function escapeHTML(text) {
+    if (!text) return "";
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   /* ==========================================================
-     РЕНДЕР
+     ОТРЕНДЕРИТЬ КОММЕНТАРИИ В БЛОК UI
      ========================================================== */
   async function renderComments(tournamentId, container) {
     if (!container) return;
-
+    
     const comments = await getComments(tournamentId);
-
-    if (!comments || !comments.length) {
-      container.innerHTML = `
-        <div class="empty-state" style="padding:40px;">
-          <h3>Комментариев пока нет</h3>
-          <p>Будьте первым.</p>
-        </div>
-      `;
+    const currentUser = await DB.getCurrentUser();
+    const isAdmin = window.Auth && Auth.isAdminSync && Auth.isAdminSync();
+    
+    if (comments.length === 0) {
+      container.innerHTML = '<p style="color:var(--text-3); text-align:center; padding:20px;">Нет комментариев. Будьте первым!</p>';
       return;
     }
-
+    
     container.innerHTML = comments.map(c => {
-      const date = c.created_at
-        ? new Date(c.created_at).toLocaleString("ru-RU")
-        : new Date(c.createdAt).toLocaleString("ru-RU");
-
+      const dateStr = new Date(c.createdAt || c.created_at).toLocaleString("ru-RU");
+      const canDelete = isAdmin || (currentUser && (currentUser.id === c.userId || currentUser.id === c.user_id));
+      
       return `
-        <article class="comment-card">
-          <div class="comment-meta">
-            <strong>${escapeHTML(c.username)}</strong>
-            <span>${date}</span>
+        <div class="comment-card chat-message" id="comment-${c.id}">
+          <div class="comment-meta" style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+            <strong>${escapeHTML(c.username || c.user_name || "Аноним")}</strong>
+            <span style="color:var(--text-3); font-size:12px;">${dateStr}</span>
+            ${canDelete ? `<button class="btn-text" style="color:var(--red); margin-left:auto; font-size:12px; cursor:pointer; background:none; border:none;" onclick="Comments.handleDelete('${c.id}', '${tournamentId}')">❌</button>` : ''}
           </div>
-          <div class="comment-text">${escapeHTML(c.text)}</div>
-        </article>
+          <div class="comment-text">${escapeHTML(c.text || c.content)}</div>
+        </div>
       `;
-    }).join("");
+    }).join('');
   }
 
+  window.Comments = window.Comments || {};
+  
+  window.Comments.handleDelete = async function(commentId, tournamentId) {
+    if (!confirm("Удалить этот комментарий?")) return;
+    const result = await deleteComment(commentId);
+    if (result.error) {
+      alert("Ошибка при удалении: " + (result.error.message || result.error));
+    } else {
+      const container = document.getElementById("comments-list");
+      if (container) renderComments(tournamentId, container);
+    }
+  };
+
   /* ==========================================================
-     REALTIME ПОДПИСКА (FIXED: unsubscribe + dedup)
+     ПОДПИСКА НА ИЗМЕНЕНИЯ (REALTIME БЕЗ УТЕЧЕК)
      ========================================================== */
   function subscribeToComments(tournamentId, container) {
     if (!window.TH) return;
     if (subscribedTournaments.has(tournamentId)) return;
 
-    // FIX: отписываемся от старого канала если есть
     if (activeChannels.has(tournamentId)) {
       try {
         const oldChannel = activeChannels.get(tournamentId);
@@ -160,7 +168,6 @@
     activeChannels.set(tournamentId, channel);
   }
 
-  // FIX: функция отписки
   function unsubscribeFromComments(tournamentId) {
     if (activeChannels.has(tournamentId)) {
       try {
@@ -172,10 +179,8 @@
     }
   }
 
-  /* ==========================================================
-     ЭКСПОРТ
-     ========================================================== */
   window.Comments = {
+    ...window.Comments,
     getComments,
     addComment,
     deleteComment,
