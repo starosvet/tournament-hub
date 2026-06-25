@@ -5,7 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Supabase SDK — загружаем синхронно ПЕРВЫМ -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- КРИТИЧЕСКИЙ ФИКС: Инициализация Supabase ДО всех остальных скриптов -->
+    <script>
+        (function() {
+            'use strict';
+            const SUPABASE_URL = 'https://fpabooteqfahhzobcpnh.supabase.co';
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwYWJvb3RlcWZhaGh6b2JjcG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjgwOTIsImV4cCI6MjA5NzkwNDA5Mn0.cc1oG5-73US61LI9uDaPwuQsOjLkIAPxDcfGQvVY9Ac';
+
+            // Создаём клиент СРАЗУ, пока хэш ещё в URL
+            if (typeof window.supabase !== 'undefined') {
+                window._supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                    auth: {
+                        autoRefreshToken: true,
+                        persistSession: true,
+                        detectSessionInUrl: true
+                    }
+                });
+                console.log('✅ Supabase initialized inline');
+            } else {
+                console.error('❌ Supabase library not loaded!');
+            }
+        })();
+    </script>
     <script src="js/supabase-client.js"></script>
     <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
@@ -136,24 +159,20 @@
             }
         }
 
-        // FIX: Проверяем OAuth callback — ждём полной инициализации Supabase
+        // FIX: Обработка OAuth callback — проверяем сессию сразу
         async function handleOAuthReturn() {
-            // Ждём, пока db.js полностью инициализируется
+            // Ждём инициализации из supabase-client.js
             let attempts = 0;
-            const maxAttempts = 20;
-
-            while (attempts < maxAttempts) {
-                if (window.TH && window._supabase) {
-                    break;
-                }
+            while (attempts < 30) {
+                if (window.TH && window._supabase) break;
                 await new Promise(r => setTimeout(r, 100));
                 attempts++;
             }
 
-            // Проверяем сессию
+            // Проверяем сессию (Supabase уже должен был обработать хэш inline)
             const session = await window.TH.getSession();
             if (session?.user) {
-                console.log('✅ OAuth session found, syncing user...');
+                console.log('✅ OAuth session found');
                 await DB.syncSupabaseUser();
 
                 // Очищаем хэш
@@ -161,14 +180,13 @@
                     window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
                 }
 
-                // Редирект на главную
                 location.href = "index.html";
                 return true;
             }
 
-            // Если хэш есть, но сессии нет — возможно ещё обрабатывается
+            // Если хэш всё ещё есть — пробуем ещё раз через секунду
             if (window.location.hash && window.location.hash.includes('access_token')) {
-                console.log('⏳ OAuth hash present, waiting for processing...');
+                console.log('⏳ Hash still present, retrying...');
                 await new Promise(r => setTimeout(r, 1000));
 
                 const retrySession = await window.TH.getSession();
@@ -180,6 +198,10 @@
                     location.href = "index.html";
                     return true;
                 }
+
+                // Если всё ещё нет сессии — показываем ошибку
+                console.error('❌ Failed to establish session from OAuth hash');
+                document.getElementById("loginError").textContent = "Ошибка авторизации. Попробуйте войти через email.";
             }
 
             return false;
@@ -208,7 +230,6 @@
             const navAdmin = document.getElementById("navAdmin");
             if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
 
-            // FIX: Обрабатываем OAuth return
             await handleOAuthReturn();
         });
     </script>
