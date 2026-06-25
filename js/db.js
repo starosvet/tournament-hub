@@ -1,12 +1,11 @@
 /* ============================================================
-   Tournament Hub — Database Layer (FIXED v6 — async fixes, single toast)
+   Tournament Hub — Database Layer (FIXED v7 — upsert profile, no init loops)
    ============================================================ */
 
 (function () {
   'use strict';
 
   const STORAGE_KEY = "tournament_hub_db";
-  const USE_SUPABASE = true;
 
   const defaultDB = {
     users: [], tournaments: [], matches: [], comments: [], subjects: [],
@@ -100,7 +99,7 @@
      SUPABASE SYNC
      ========================================================== */
   async function syncFromSupabase() {
-    if (!window.TH || !USE_SUPABASE) return false;
+    if (!window.TH) return false;
 
     try {
       const { data: settings } = await window.TH.getSiteSettings();
@@ -156,25 +155,36 @@
   }
 
   /* ==========================================================
-     USER (FIXED: async/await везде)
+     USER (FIXED: upsert profile, proper name resolution)
      ========================================================== */
   async function getCurrentUser() {
-    if (window.TH && USE_SUPABASE) {
+    if (window.TH) {
       try {
         const session = await window.TH.getSession();
         if (session?.user) {
+          // Пробуем получить профиль из Supabase (там актуальные данные)
+          let profile = null;
+          try {
+            profile = await window.TH.getProfile();
+          } catch (e) {
+            // Профиля может не быть — нормально для новых пользователей
+          }
+
           const meta = session.user.user_metadata || {};
+          const emailName = session.user.email?.split('@')[0] || 'user';
+
+          // Приоритет: профиль из БД > metadata > email prefix
           return {
             id: session.user.id,
-            username: meta.username || meta.name || session.user.email?.split('@')[0] || 'user',
-            displayName: meta.display_name || meta.username || meta.name || session.user.email?.split('@')[0] || 'user',
+            username: profile?.username || meta.username || meta.name || emailName,
+            displayName: profile?.display_name || meta.display_name || meta.name || meta.username || emailName,
             email: session.user.email,
-            role: meta.role || localStorage.getItem("th_user_role") || 'user',
-            votes: parseInt(localStorage.getItem("th_user_votes") || '0'),
+            role: profile?.role || meta.role || localStorage.getItem("th_user_role") || 'user',
+            votes: profile?.votes_count || parseInt(localStorage.getItem("th_user_votes") || '0'),
             authType: meta.provider === 'google' ? 'google' : 'supabase',
-            avatar: meta.avatar_url || meta.picture || '',
-            fandomName: meta.fandom_name || null,
-            fandomVerified: meta.fandom_verified || false
+            avatar: profile?.avatar_url || meta.avatar_url || meta.picture || '',
+            fandomName: profile?.fandom_name || meta.fandom_name || null,
+            fandomVerified: profile?.fandom_verified || meta.fandom_verified || false
           };
         }
       } catch (e) {
@@ -182,6 +192,7 @@
       }
     }
 
+    // Fallback на localStorage
     const id = localStorage.getItem("th_user_id");
     if (id) {
       return {
@@ -198,26 +209,6 @@
       };
     }
 
-    const oldId = localStorage.getItem("th_user");
-    if (!oldId) return null;
-    const db = loadDB();
-    const legacyUser = db.users.find(u => u.id === oldId) || null;
-    if (legacyUser) {
-      const migrated = {
-        id: legacyUser.id,
-        username: legacyUser.username || 'user',
-        displayName: legacyUser.displayName || legacyUser.username || 'user',
-        email: legacyUser.email || '',
-        role: legacyUser.role || 'user',
-        votes: legacyUser.votes || 0,
-        authType: legacyUser.authType || 'local',
-        avatar: legacyUser.avatar || '',
-        fandomName: legacyUser.fandomName || null,
-        fandomVerified: false
-      };
-      setCurrentUser(migrated);
-      return migrated;
-    }
     return null;
   }
 
@@ -237,14 +228,11 @@
     localStorage.setItem("th_user_name", user.displayName || user.username || '');
     localStorage.setItem("th_user_role", user.role || 'user');
     localStorage.setItem("th_user_votes", String(user.votes || 0));
-
-    if (user.authType !== 'supabase' && user.authType !== 'google') {
-      localStorage.setItem("th_user", user.id);
-    }
   }
 
+  // FIX #1: Используем upsertProfile вместо updateProfile
   async function syncSupabaseUser() {
-    if (!window.TH || !USE_SUPABASE) return;
+    if (!window.TH) return;
 
     try {
       const session = await window.TH.getSession();
@@ -253,40 +241,33 @@
         return;
       }
 
-      let profile = null;
-      try {
-        profile = await window.TH.getProfile();
-      } catch (e) {
-        console.log('Profile not found, will create');
+      const meta = session.user.user_metadata || {};
+      const emailName = session.user.email?.split('@')[0] || 'user';
+
+      // Гарантированно создаём/обновляем профиль в Supabase
+      const { data: profile, error: upsertError } = await window.TH.upsertProfile({
+        username: meta.username || meta.name || emailName,
+        display_name: meta.display_name || meta.name || meta.username || emailName,
+        avatar_url: meta.avatar_url || meta.picture || '',
+        role: meta.role || 'user'
+      });
+
+      if (upsertError) {
+        console.warn('Profile upsert failed:', upsertError);
       }
 
-      const meta = session.user.user_metadata || {};
       const baseUser = {
         id: session.user.id,
         email: session.user.email,
-        username: meta.username || meta.name || session.user.email?.split('@')[0] || 'user',
-        displayName: meta.display_name || meta.username || meta.name || session.user.email?.split('@')[0] || 'user',
+        username: profile?.username || meta.username || meta.name || emailName,
+        displayName: profile?.display_name || meta.display_name || meta.name || meta.username || emailName,
         role: profile?.role || meta.role || 'user',
-        votes: profile?.votes_count || parseInt(localStorage.getItem("th_user_votes") || '0'),
+        votes: profile?.votes_count || 0,
         authType: meta.provider === 'google' ? 'google' : 'supabase',
         avatar: profile?.avatar_url || meta.avatar_url || meta.picture || '',
         fandomName: profile?.fandom_name || meta.fandom_name || null,
         fandomVerified: profile?.fandom_verified || meta.fandom_verified || false
       };
-
-      if (!profile) {
-        try {
-          await window.TH.updateProfile({
-            username: baseUser.username,
-            display_name: baseUser.displayName,
-            role: baseUser.role,
-            votes_count: baseUser.votes,
-            avatar_url: baseUser.avatar
-          });
-        } catch (e) {
-          console.warn('Failed to create profile', e);
-        }
-      }
 
       setCurrentUser(baseUser);
 
@@ -302,7 +283,7 @@
      MIGRATION
      ========================================================== */
   async function migrateToSupabase() {
-    if (!window.TH || !USE_SUPABASE) {
+    if (!window.TH) {
       return { success: false, error: "Supabase не доступен" };
     }
 
@@ -409,7 +390,7 @@
   }
 
   /* ==========================================================
-     TOAST (единственная копия)
+     TOAST
      ========================================================== */
   function toast(message) {
     const existing = document.getElementById("th-toast");
@@ -426,22 +407,23 @@
      INIT
      ========================================================== */
   async function init() {
-    if (window.TH && USE_SUPABASE) {
-      window.TH.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          await syncSupabaseUser();
-          cleanupLegacyData();
-        } else if (event === 'SIGNED_OUT') {
-          setCurrentUser(null);
-          localStorage.removeItem("th_admin");
-        }
-        window.dispatchEvent(new CustomEvent("th-user-changed"));
-        if (typeof Auth !== 'undefined' && Auth.renderNavUser) Auth.renderNavUser();
-      });
+    if (!window.TH) return;
 
-      await syncSupabaseUser();
-      await syncFromSupabase();
-    }
+    // FIX #2: НЕ вызываем window.TH.init() — клиент инициализируется лениво
+    window.TH.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        await syncSupabaseUser();
+        cleanupLegacyData();
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        localStorage.removeItem("th_admin");
+      }
+      window.dispatchEvent(new CustomEvent("th-user-changed"));
+      if (typeof Auth !== 'undefined' && Auth.renderNavUser) Auth.renderNavUser();
+    });
+
+    await syncSupabaseUser();
+    await syncFromSupabase();
   }
 
   /* ==========================================================
