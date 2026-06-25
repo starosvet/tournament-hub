@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Database Layer (FIXED v7 — upsert profile, no init loops)
+   Tournament Hub — Database Layer (FIXED v8 — clean init, no loops, proper upsert)
    ============================================================ */
 
 (function () {
@@ -91,7 +91,7 @@
     const db = loadDB();
     callback(db);
     saveDB(db);
-    window.dispatchEvent(new CustomEvent("th-db-changed", { detail: { source: "updateDB" } }));
+    // FIX: убран dispatchEvent — вызывал циклические ререндеры
     return db;
   }
 
@@ -155,25 +155,24 @@
   }
 
   /* ==========================================================
-     USER (FIXED: upsert profile, proper name resolution)
+     USER (FIXED: используем upsertProfile из supabase-client)
      ========================================================== */
   async function getCurrentUser() {
     if (window.TH) {
       try {
         const session = await window.TH.getSession();
         if (session?.user) {
-          // Пробуем получить профиль из Supabase (там актуальные данные)
+          // Пробуем получить профиль из Supabase
           let profile = null;
           try {
             profile = await window.TH.getProfile();
           } catch (e) {
-            // Профиля может не быть — нормально для новых пользователей
+            // Профиля может не быть — нормально
           }
 
           const meta = session.user.user_metadata || {};
           const emailName = session.user.email?.split('@')[0] || 'user';
 
-          // Приоритет: профиль из БД > metadata > email prefix
           return {
             id: session.user.id,
             username: profile?.username || meta.username || meta.name || emailName,
@@ -230,7 +229,7 @@
     localStorage.setItem("th_user_votes", String(user.votes || 0));
   }
 
-  // FIX #1: Используем upsertProfile вместо updateProfile
+  // FIX: используем upsertProfile из supabase-client (теперь он есть!)
   async function syncSupabaseUser() {
     if (!window.TH) return;
 
@@ -244,7 +243,7 @@
       const meta = session.user.user_metadata || {};
       const emailName = session.user.email?.split('@')[0] || 'user';
 
-      // Гарантированно создаём/обновляем профиль в Supabase
+      // FIX: upsertProfile создаёт профиль если его нет, обновляет если есть
       const { data: profile, error: upsertError } = await window.TH.upsertProfile({
         username: meta.username || meta.name || emailName,
         display_name: meta.display_name || meta.name || meta.username || emailName,
@@ -404,12 +403,14 @@
   }
 
   /* ==========================================================
-     INIT
+     INIT (FIXED: явный вызов, не при DOMContentLoaded)
      ========================================================== */
   async function init() {
     if (!window.TH) return;
 
-    // FIX #2: НЕ вызываем window.TH.init() — клиент инициализируется лениво
+    // FIX: init() теперь вызывается явно из supabase-client после создания window.TH
+    // Не привязываемся к DOMContentLoaded — db.js загружается после supabase-client.js
+
     window.TH.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         await syncSupabaseUser();
@@ -418,7 +419,7 @@
         setCurrentUser(null);
         localStorage.removeItem("th_admin");
       }
-      window.dispatchEvent(new CustomEvent("th-user-changed"));
+      // FIX: убран dispatchEvent — вызывал лишние ререндеры
       if (typeof Auth !== 'undefined' && Auth.renderNavUser) Auth.renderNavUser();
     });
 
@@ -443,24 +444,11 @@
   window.setCurrentUser = setCurrentUser;
   window.toast = toast;
 
-  window.addEventListener("storage", function(e) {
-    if (e.key === STORAGE_KEY) {
-      window.dispatchEvent(new CustomEvent("th-db-changed", { detail: e.newValue }));
-    }
-    if (e.key === "th_user") {
-      window.dispatchEvent(new CustomEvent("th-user-changed", { detail: e.newValue }));
-    }
-  });
+  // FIX: убраны слушатели storage — вызывали циклические обновления
+  // FIX: убран dispatchEvent th-db-changed
 
-  window.addEventListener("th-db-changed", function() {
-    if (typeof Render !== "undefined" && Render.initRender) Render.initRender();
-    if (typeof RenderBracket !== "undefined" && RenderBracket.renderBracket) RenderBracket.renderBracket();
-    if (typeof Auth !== "undefined" && Auth.renderNavUser) Auth.renderNavUser();
-  });
+  // FIX: init() теперь вызывается из supabase-client.js после window.TH создан
+  // Не автозапускаем при загрузке — контролируем порядок инициализации
+  window.DB._init = init;
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
 })();
