@@ -51,16 +51,13 @@
     </div>
 
     <footer>
-        <p>Tournament Hub — турнирный движок для вики</p>
+        <p id="footerText">Tournament Hub — турнирный движок для вики</p>
     </footer>
 
     <script>
         document.addEventListener("DOMContentLoaded", async function() {
-            // Инициализируем Supabase
-            if (window.TH) {
-                window.TH.init();
-                await DB.syncSupabaseUser();
-            }
+            // Supabase инициализируется в db.js автоматически
+            // Не дублируем init() здесь!
 
             Auth.checkFandomAutoAdmin();
             const navAdmin = document.getElementById("navAdmin");
