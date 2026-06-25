@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v5 — single init, no duplicates)
+   Tournament Hub — Supabase Client (FIXED v6 — OAuth path, upsert profile, no crashes)
    ============================================================ */
 
 (function () {
@@ -8,10 +8,9 @@
   let realtimeChannels = [];
 
   /* ==========================================================
-     ИНИЦИАЛИЗАЦИЯ (единственная точка создания клиента)
+     ИНИЦИАЛИЗАЦИЯ
      ========================================================== */
   function init() {
-    // Если клиент уже создан — не трогаем
     if (window._supabase) {
       console.log('✅ Using existing Supabase client');
       return true;
@@ -22,7 +21,6 @@
       return false;
     }
 
-    // Используем конфиг из oauth-init.js или создаём с нуля
     const cfg = window._supabaseConfig || {};
     const url = cfg.url || 'https://fpabooteqfahhzobcpnh.supabase.co';
     const key = cfg.key || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwYWJvb3RlcWZhaGh6b2JjcG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjgwOTIsImV4cCI6MjA5NzkwNDA5Mn0.cc1oG5-73US61LI9uDaPwuQsOjLkIAPxDcfGQvVY9Ac';
@@ -36,7 +34,7 @@
     };
 
     window._supabase = window.supabase.createClient(url, key, options);
-    console.log('✅ Supabase initialized from client');
+    console.log('✅ Supabase initialized');
     return true;
   }
 
@@ -61,12 +59,18 @@
     return { data, error };
   }
 
+  // FIX #1: Автоопределение пути к login.html (работает и в корне, и в /tournament-hub/)
   async function signInWithProvider(provider) {
+    // Определяем базовый путь: если URL содержит /tournament-hub/, используем его
+    const path = window.location.pathname;
+    const basePath = path.includes('/tournament-hub/') ? '/tournament-hub' : '';
+    const redirectTo = window.location.origin + basePath + '/login.html';
+
+    console.log('🔐 OAuth redirect to:', redirectTo);
+
     const { data, error } = await getClient().auth.signInWithOAuth({
       provider,
-      options: {
-        redirectTo: window.location.origin + '/login.html'
-      }
+      options: { redirectTo }
     });
     return { data, error };
   }
@@ -87,18 +91,65 @@
     return session;
   }
 
+  // FIX #3: Не падает, если профиля нет
   async function getProfile() {
     const user = await getCurrentUser();
     if (!user) return null;
-    const { data } = await getClient().from('profiles').select('*').eq('id', user.id).single();
+    const { data } = await getClient()
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle();
     return data;
   }
 
-  async function updateProfile(updates) {
+  // FIX #2: Upsert — создаёт профиль, если его нет (критично для Google!)
+  async function upsertProfile(updates) {
     const user = await getCurrentUser();
     if (!user) return { error: new Error('Not authenticated') };
-    const { data, error } = await getClient().from('profiles').update(updates).eq('id', user.id).select().single();
-    return { data, error };
+
+    const { data: existing } = await getClient()
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const meta = user.user_metadata || {};
+    const defaults = {
+      id: user.id,
+      username: meta.username || meta.name || user.email?.split('@')[0] || 'user',
+      display_name: meta.display_name || meta.name || meta.username || user.email?.split('@')[0] || 'user',
+      avatar_url: meta.avatar_url || meta.picture || '',
+      role: 'user',
+      votes_count: 0,
+      fandom_name: null,
+      fandom_verified: false
+    };
+
+    let result;
+    if (existing) {
+      // Обновляем существующий
+      result = await getClient()
+        .from('profiles')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', user.id)
+        .select()
+        .single();
+    } else {
+      // Создаём новый
+      result = await getClient()
+        .from('profiles')
+        .insert({ ...defaults, ...updates, created_at: new Date().toISOString() })
+        .select()
+        .single();
+    }
+
+    return result;
+  }
+
+  // Для обратной совместимости — делегирует на upsert
+  async function updateProfile(updates) {
+    return upsertProfile(updates);
   }
 
   function onAuthStateChange(callback) {
@@ -290,7 +341,15 @@
   /* ==========================================================
      ADMIN
      ========================================================== */
+  // FIX #5: Проверяем и metadata, и таблицу profiles
   async function isAdmin() {
+    const user = await getCurrentUser();
+    if (!user) return false;
+
+    // Быстрая проверка в metadata (для Google-входа, пока профиль не синхронизировался)
+    if (user.user_metadata?.role === 'admin') return true;
+
+    // Проверка в таблице profiles
     const profile = await getProfile();
     return profile?.role === 'admin';
   }
@@ -322,7 +381,7 @@
   window.TH = {
     init, getClient,
     signUp, signIn, signInWithProvider, signOut,
-    getCurrentUser, getSession, getProfile, updateProfile, onAuthStateChange,
+    getCurrentUser, getSession, getProfile, upsertProfile, updateProfile, onAuthStateChange,
     getTournaments, getTournament, createTournament, updateTournament, deleteTournament,
     getPlayers, createPlayers,
     getMatches, updateMatch,
