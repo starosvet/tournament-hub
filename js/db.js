@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Database Layer (FIXED v3 — Supabase primary, localStorage cache)
+   Tournament Hub — Database Layer (FIXED v4 — OAuth callback fix)
    ============================================================ */
 
 (function () {
@@ -59,7 +59,7 @@
   }
 
   /* ==========================================================
-     LOCALSTORAGE — ТОЛЬКО КЭШ / ЗАПАСКА
+     LOCALSTORAGE
      ========================================================== */
   function loadDB() {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -88,8 +88,6 @@
     return loadDB();
   }
 
-  // FIX: updateDB теперь ТОЛЬКО для локальных операций (offline mode)
-  // При наличии Supabase — данные идут туда
   function updateDB(callback) {
     const db = loadDB();
     callback(db);
@@ -99,13 +97,12 @@
   }
 
   /* ==========================================================
-     SUPABASE SYNC — ОСНОВНОЙ ИСТОЧНИК
+     SUPABASE SYNC
      ========================================================== */
   async function syncFromSupabase() {
     if (!window.TH || !USE_SUPABASE) return false;
 
     try {
-      // Настройки
       const { data: settings } = await window.TH.getSiteSettings();
       if (settings) {
         updateDB(db => {
@@ -117,7 +114,6 @@
         });
       }
 
-      // Турниры
       const { data: tournaments } = await window.TH.getTournaments();
       if (tournaments) {
         updateDB(db => {
@@ -160,10 +156,10 @@
   }
 
   /* ==========================================================
-     USER — ПРИОРИТЕТ SUPABASE
+     USER
      ========================================================== */
   async function getCurrentUser() {
-    // ПРИОРИТЕТ 1: Supabase session (async)
+    // ПРИОРИТЕТ 1: Supabase session
     if (window.TH && USE_SUPABASE) {
       try {
         const session = await window.TH.getSession();
@@ -187,7 +183,7 @@
       }
     }
 
-    // ПРИОРИТЕТ 2: localStorage cache (быстрый доступ)
+    // ПРИОРИТЕТ 2: localStorage cache
     const id = localStorage.getItem("th_user_id");
     if (id) {
       return {
@@ -204,13 +200,12 @@
       };
     }
 
-    // ПРИОРИТЕТ 3: Старый формат (legacy)
+    // ПРИОРИТЕТ 3: Legacy
     const oldId = localStorage.getItem("th_user");
     if (!oldId) return null;
     const db = loadDB();
     const legacyUser = db.users.find(u => u.id === oldId) || null;
     if (legacyUser) {
-      // Мигрируем в новый формат
       const migrated = {
         id: legacyUser.id,
         username: legacyUser.username || 'user',
@@ -240,7 +235,6 @@
       return;
     }
 
-    // Сохраняем в localStorage для быстрого доступа (кэш)
     localStorage.setItem("th_user_id", user.id);
     localStorage.setItem("th_user_email", user.email || '');
     localStorage.setItem("th_user_name", user.displayName || user.username || '');
@@ -252,7 +246,6 @@
     }
   }
 
-  // FIX: syncSupabaseUser — создание профиля при первом входе
   async function syncSupabaseUser() {
     if (!window.TH || !USE_SUPABASE) return;
 
@@ -263,7 +256,6 @@
         return;
       }
 
-      // Пробуем получить профиль
       let profile = null;
       try {
         profile = await window.TH.getProfile();
@@ -285,7 +277,6 @@
         fandomVerified: profile?.fandom_verified || meta.fandom_verified || false
       };
 
-      // Если профиля нет — создаём (для Google OAuth)
       if (!profile) {
         try {
           await window.TH.updateProfile({
@@ -304,7 +295,6 @@
 
       if (baseUser.role === 'admin') localStorage.setItem("th_admin", "yes");
 
-      // Очищаем старые данные при успешном входе через Supabase
       cleanupLegacyData();
     } catch (e) {
       console.warn('Supabase user sync failed', e);
@@ -312,7 +302,7 @@
   }
 
   /* ==========================================================
-     MIGRATION — ПЕРЕНОС ЛОКАЛЬНЫХ ДАННЫХ В SUPABASE
+     MIGRATION
      ========================================================== */
   async function migrateToSupabase() {
     if (!window.TH || !USE_SUPABASE) {
@@ -323,7 +313,6 @@
     const results = { tournaments: 0, users: 0, errors: [] };
 
     try {
-      // Мигрируем настройки
       if (db.settings) {
         await window.TH.updateSiteSettings({
           site_name: db.settings.siteName,
@@ -334,7 +323,6 @@
         });
       }
 
-      // Мигрируем турниры
       for (const t of (db.tournaments || [])) {
         try {
           if (!t.title) continue;
@@ -342,14 +330,13 @@
           const { data: newTournament } = await window.TH.createTournament({
             title: t.title,
             description: t.description || '',
-            status: t.status === 'active' ? 'draft' : t.status, // Активные не мигрируем — нужен ручной запуск
+            status: t.status === 'active' ? 'draft' : t.status,
             current_round: t.currentRound || 0
           });
 
           if (newTournament) {
             results.tournaments++;
 
-            // Мигрируем участников
             if (t.players?.length) {
               const players = t.players.map((p, i) => ({
                 tournament_id: newTournament.id,
@@ -367,7 +354,6 @@
         }
       }
 
-      // Помечаем как мигрированное
       updateDB(db => {
         db._migratedToSupabase = new Date().toISOString();
         db._migrationResults = results;
@@ -397,10 +383,9 @@
   }
 
   /* ==========================================================
-     CLEANUP — ОЧИСТКА СТАРЫХ ДАННЫХ
+     CLEANUP
      ========================================================== */
   function cleanupLegacyData() {
-    // Удаляем старые ключи, оставляем только необходимые
     const keysToKeep = [
       'th_user_id', 'th_user_email', 'th_user_name', 'th_user_role', 'th_user_votes',
       'th_admin', 'th_fandom_pending', 'tournament_hub_db'
@@ -413,9 +398,8 @@
       }
     });
 
-    // Очищаем старых пользователей из localStorage DB (оставляем только как историю)
     updateDB(db => {
-      db.users = []; // Пользователи теперь только в Supabase
+      db.users = [];
     });
   }
 
@@ -442,14 +426,37 @@
   }
 
   /* ==========================================================
-     INIT
+     INIT (FIXED: жёсткая обработка OAuth хэша)
      ========================================================== */
   async function init() {
     if (window.TH && USE_SUPABASE) {
       window.TH.init();
 
-      // Ждём обработки OAuth callback
-      await new Promise(r => setTimeout(r, 500));
+      // FIX: Ждём, пока Supabase обработает detectSessionInUrl
+      await new Promise(r => setTimeout(r, 300));
+
+      // FIX: Если хэш всё ещё есть — принудительно обрабатываем
+      if (window.location.hash && window.location.hash.includes('access_token')) {
+        console.log('🔧 OAuth hash detected, forcing session extraction...');
+        try {
+          // Supabase должен был уже обработать, но на всякий случай ждём ещё
+          await new Promise(r => setTimeout(r, 500));
+
+          // Проверяем, установилась ли сессия
+          const session = await window.TH.getSession();
+          if (!session) {
+            console.warn('⚠️ Session not found after OAuth redirect, hash still present');
+          } else {
+            console.log('✅ OAuth session established');
+            // Очищаем хэш вручную, если Supabase не сделал это
+            if (window.history.replaceState) {
+              window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+            }
+          }
+        } catch (e) {
+          console.error('OAuth processing error:', e);
+        }
+      }
 
       // Подписка на изменения авторизации
       window.TH.onAuthStateChange(async (event, session) => {
