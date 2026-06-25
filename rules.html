@@ -97,7 +97,7 @@
         // FIX: ждём инициализации TH
         let attempts = 0;
         const waitForInit = setInterval(() => {
-            if (window.TH && window.TH.init) {
+            if (window.TH && window.TH.isReady) {
                 clearInterval(waitForInit);
                 
                 if (window.TH) {
