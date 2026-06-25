@@ -20,7 +20,6 @@
      ========================================================== */
 
   async function loadSiteSettings() {
-    // Пробуем Supabase
     if (window.TH) {
       try {
         const { data } = await window.TH.getSiteSettings();
@@ -36,7 +35,6 @@
       }
     }
 
-    // Fallback
     const db = DB.getDB();
     return {
       siteName: db.settings?.siteName || 'Tournament Hub',
@@ -48,21 +46,17 @@
   }
 
   function applySettings(settings) {
-    // Обновляем логотип
     const logoEl = document.getElementById("siteLogoLink");
     if (logoEl) {
       logoEl.textContent = (settings.siteLogo || "🏆") + " " + (settings.siteName || "Tournament Hub");
     }
 
-    // Обновляем title
     const titleEl = document.querySelector('title[data-site-name]');
     if (titleEl) titleEl.textContent = settings.siteName || 'Tournament Hub';
 
-    // Обновляем описание
     const descEl = document.querySelector("#site-description");
     if (descEl) descEl.textContent = settings.description || '';
 
-    // Обновляем footer
     const footerText = document.getElementById('footerText');
     if (footerText) {
       footerText.textContent = '© ' + new Date().getFullYear() + ' ' + (settings.siteName || 'Tournament Hub');
@@ -70,33 +64,33 @@
   }
 
   /* ==========================================================
-     ТУРНИРЫ
+     ТУРНИРЫ — ТОЛЬКО SUPABASE
      ========================================================== */
 
   async function getTournamentsData() {
-    // Пробуем Supabase
-    if (window.TH) {
-      try {
-        const { data } = await window.TH.getTournaments();
-        if (data) return data.map(t => ({
-          id: t.id,
-          title: t.title,
-          description: t.description,
-          status: t.status,
-          createdAt: t.created_at,
-          currentRound: t.current_round,
-          winner: t.winner_id,
-          players: t.players || [],
-          rounds: t.rounds || [],
-          config: t.config || {}
-        }));
-      } catch (e) {
-        console.warn('Supabase tournaments failed, using localStorage');
-      }
+    if (!window.TH) return [];
+
+    try {
+      const { data } = await window.TH.getTournaments();
+      if (data) return data.map(t => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        status: t.status,
+        createdAt: t.created_at,
+        currentRound: t.current_round,
+        winner: t.winner_id,
+        players: t.players || [],
+        rounds: t.rounds || [],
+        config: t.config || {}
+      }));
+    } catch (e) {
+      console.warn('Supabase tournaments failed', e);
     }
 
-    // Fallback
-    return Tournament.listTournaments();
+    // Запаска: localStorage cache
+    const db = DB.getDB();
+    return (db.tournaments || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }
 
   function renderTournamentList(container) {
@@ -140,46 +134,50 @@
   }
 
   /* ==========================================================
-     СТАТИСТИКА
+     СТАТИСТИКА — ТОЛЬКО SUPABASE
      ========================================================== */
 
   async function getStats() {
-    if (window.TH) {
-      try {
-        const { data: tournaments } = await window.TH.getTournaments();
-        const { data: users } = await window.TH.getAllUsers();
-
-        let totalMatches = 0;
-        (tournaments || []).forEach(t => {
-          (t.rounds || []).forEach(r => {
-            totalMatches += (r.matches || []).length;
-          });
-        });
-
-        return {
-          tournaments: (tournaments || []).length,
-          users: (users || []).length,
-          matches: totalMatches
-        };
-      } catch (e) {
-        console.warn('Supabase stats failed');
-      }
+    if (!window.TH) {
+      const db = DB.getDB();
+      return {
+        tournaments: (db.tournaments || []).length,
+        users: (db.users || []).length,
+        matches: 0
+      };
     }
 
-    // Fallback
-    const db = DB.getDB();
-    let totalMatches = 0;
-    (db.tournaments || []).forEach(t => {
-      (t.rounds || []).forEach(r => {
-        totalMatches += (r.matches || []).length;
-      });
-    });
+    try {
+      const { data: tournaments } = await window.TH.getTournaments();
+      const { data: users } = await window.TH.getAllUsers();
 
-    return {
-      tournaments: (db.tournaments || []).length,
-      users: (db.users || []).length,
-      matches: totalMatches
-    };
+      let totalMatches = 0;
+      (tournaments || []).forEach(t => {
+        (t.rounds || []).forEach(r => {
+          totalMatches += (r.matches || []).length;
+        });
+      });
+
+      return {
+        tournaments: (tournaments || []).length,
+        users: (users || []).length,
+        matches: totalMatches
+      };
+    } catch (e) {
+      console.warn('Supabase stats failed, using cache');
+      const db = DB.getDB();
+      let totalMatches = 0;
+      (db.tournaments || []).forEach(t => {
+        (t.rounds || []).forEach(r => {
+          totalMatches += (r.matches || []).length;
+        });
+      });
+      return {
+        tournaments: (db.tournaments || []).length,
+        users: (db.users || []).length,
+        matches: totalMatches
+      };
+    }
   }
 
   function renderStats() {
@@ -221,7 +219,6 @@
   window.Render = { initRender, renderTournamentList, renderStats };
   window.escapeHTML = window.escapeHTML || escapeHTML;
 
-  // Автоинициализация
   if (document.readyState === 'loading') {
     document.addEventListener("DOMContentLoaded", initRender);
   } else {
