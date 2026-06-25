@@ -18,7 +18,6 @@
   }
 
   async function toast(msg) {
-    // Лог в Supabase
     try {
       await window.TH.logAction('toast', { message: msg });
     } catch(e) {}
@@ -46,7 +45,6 @@
       return;
     }
 
-    // Проверяем Supabase admin
     const isAdmin = await window.TH.isAdmin();
     if (isAdmin || pass === "admin123") {
       localStorage.setItem("th_admin", "yes");
@@ -87,8 +85,7 @@
     if (!name) { toast("Введите название турнира"); return; }
     if (!raw.trim()) { toast("Введите список участников"); return; }
 
-    const players = raw.split("
-").map(line => {
+    const players = raw.split("\n").map(line => {
       line = line.trim();
       if (!line) return null;
       const parts = line.split("|").map(s => s.trim());
@@ -103,7 +100,6 @@
     if (players.length < 2) { toast("Минимум 2 участника"); return; }
 
     try {
-      // Создаём турнир
       const { data: tournament, error } = await window.TH.createTournament({
         title: name,
         description: desc,
@@ -112,7 +108,6 @@
 
       if (error) throw error;
 
-      // Создаём игроков
       const playersWithTournament = players.map((p, i) => ({
         ...p,
         tournament_id: tournament.id,
@@ -141,10 +136,9 @@
     if (t.status !== "draft") { toast("Турнир уже запущен или завершён"); return; }
 
     try {
-      // Генерируем сетку через engine.js
-      const bracket = createBracket(t.players);
+      const { data: players } = await window.TH.getPlayers(t.id);
+      const bracket = createBracket(players || []);
 
-      // Создаём раунды и матчи в Supabase
       for (let i = 0; i < bracket.rounds.length; i++) {
         const round = bracket.rounds[i];
         const { data: roundData } = await window.TH.getClient()
@@ -159,7 +153,6 @@
           .select()
           .single();
 
-        // Создаём матчи
         if (round.matches && round.matches.length) {
           const matches = round.matches.map((m, idx) => ({
             round_id: roundData.id,
@@ -174,7 +167,6 @@
         }
       }
 
-      // Обновляем статус турнира
       await window.TH.updateTournament(t.id, {
         status: 'active',
         current_round: 0
@@ -196,7 +188,6 @@
     if (force && !confirm("Принудительно завершить раунд?")) return;
 
     try {
-      // Получаем текущий раунд
       const { data: rounds } = await window.TH.getClient()
         .from('rounds')
         .select('*, matches:matches(*)')
@@ -206,7 +197,6 @@
       const currentRound = rounds?.[0];
       if (!currentRound) { toast("Нет текущего раунда"); return; }
 
-      // Определяем победителей
       const winners = [];
       for (const match of (currentRound.matches || [])) {
         if (match.finished && match.winner_id) {
@@ -224,7 +214,6 @@
             .single();
           if (p1) winners.push(p1);
 
-          // Помечаем матч как завершённый
           await window.TH.getClient()
             .from('matches')
             .update({ finished: true, winner_id: match.player1_id, status: 'done' })
@@ -232,14 +221,12 @@
         }
       }
 
-      // Завершаем текущий раунд
       await window.TH.getClient()
         .from('rounds')
         .update({ is_active: false, ended_at: new Date().toISOString() })
         .eq('id', currentRound.id);
 
       if (winners.length < 2) {
-        // Финал
         await window.TH.updateTournament(t.id, {
           status: 'finished',
           completed_at: new Date().toISOString(),
@@ -247,7 +234,6 @@
         });
         toast("🏆 Турнир завершён! Победитель: " + (winners[0]?.name || "?"));
       } else {
-        // Создаём следующий раунд
         const { data: newRound } = await window.TH.getClient()
           .from('rounds')
           .insert({
@@ -260,7 +246,6 @@
           .select()
           .single();
 
-        // Создаём матчи
         const newMatches = [];
         for (let i = 0; i < winners.length; i += 2) {
           newMatches.push({
@@ -294,13 +279,11 @@
     if (!confirm("Сбросить ВСЕ голоса в турнире?")) return;
 
     try {
-      // Удаляем все голоса турнира
       await window.TH.getClient()
         .from('votes')
         .delete()
         .eq('tournament_id', t.id);
 
-      // Сбрасываем счётчики матчей
       await window.TH.getClient()
         .from('matches')
         .update({ votes1: 0, votes2: 0 })
@@ -402,7 +385,6 @@
     if (valid.length < 2) { toast("Минимум 2 участника с именем"); return; }
 
     try {
-      // Удаляем старых и создаём новых
       await window.TH.getClient()
         .from('players')
         .delete()
@@ -507,7 +489,7 @@
         </tr>
       `).join("");
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);">Ошибка загрузки</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);">Ошибка загрузки</td></tr>";
     }
   }
 
@@ -533,7 +515,6 @@
   /* ---------- MODERATION ---------- */
   async function renderModeration() {
     try {
-      // Комментарии
       const { data: comments } = await window.TH.getClient()
         .from('comments')
         .select('*')
@@ -556,7 +537,6 @@
         `).join("");
       }
 
-      // Чат
       const { data: chat } = await window.TH.getChatMessages(10);
       const chatPreview = document.getElementById("modChatPreview");
       if (!chat || !chat.length) {
@@ -606,6 +586,7 @@
         document.getElementById("settingTheme").value = settings.theme || "amber";
       }
       await renderFandomAdmins();
+      await renderMigrationStatus();
     } catch (e) {
       console.warn('Settings load error', e);
     }
@@ -683,6 +664,74 @@
     }
   }
 
+  /* ---------- MIGRATION ---------- */
+  async function renderMigrationStatus() {
+    const statusEl = document.getElementById("migrationStatus");
+    const btn = document.getElementById("migrateBtn");
+    if (!statusEl) return;
+
+    const status = DB.getMigrationStatus();
+    const hasLegacy = DB.hasLegacyData();
+
+    if (status.migrated) {
+      statusEl.innerHTML = `
+        <span style="color:var(--green);">✅ Миграция выполнена: ${new Date(status.date).toLocaleString("ru-RU")}</span><br>
+        <span style="color:var(--text-3);font-size:12px;">
+          Турниров перенесено: ${status.results?.tournaments || 0} | 
+          Ошибок: ${status.results?.errors?.length || 0}
+        </span>
+      `;
+      if (btn) btn.style.display = 'none';
+    } else if (hasLegacy) {
+      statusEl.innerHTML = `
+        <span style="color:var(--accent);">⚠️ Найдены локальные данные:</span><br>
+        <span style="color:var(--text-3);font-size:12px;">
+          Турниров: ${status.legacyTournaments} | 
+          Пользователей: ${status.legacyUsers}
+        </span>
+      `;
+      if (btn) btn.style.display = 'inline-block';
+    } else {
+      statusEl.innerHTML = `<span style="color:var(--text-3);">ℹ️ Локальных данных для миграции не найдено</span>`;
+      if (btn) btn.style.display = 'none';
+    }
+  }
+
+  async function doMigrate() {
+    const resultEl = document.getElementById("migrationResult");
+    resultEl.innerHTML = "<span style='color:var(--text-3);'>⏳ Миграция...</span>";
+
+    const result = await DB.migrateToSupabase();
+
+    if (result.success) {
+      resultEl.innerHTML = `
+        <span style="color:var(--green);">✅ Миграция завершена!</span><br>
+        <span style="color:var(--text-3);font-size:12px;">
+          Турниров: ${result.results.tournaments} | 
+          Ошибок: ${result.results.errors.length}
+        </span>
+      `;
+      if (result.results.errors.length) {
+        resultEl.innerHTML += `<br><span style="color:var(--red);font-size:12px;">Ошибки: ${result.results.errors.join('; ')}</span>`;
+      }
+      await window.TH.logAction('migrate_to_supabase', result.results);
+      await renderMigrationStatus();
+      await refreshAll();
+    } else {
+      resultEl.innerHTML = `<span style="color:var(--red);">❌ ${result.error}</span>`;
+    }
+  }
+
+  async function doClearLocal() {
+    if (!confirm("Очистить ВСЕ локальные данные (кроме текущей сессии)?")) return;
+    if (prompt('Введите "CLEAR" для подтверждения:') !== "CLEAR") return;
+
+    DB.clearAllLocalData();
+    toast("🧹 Локальные данные очищены");
+    await window.TH.logAction('clear_local_data');
+    await renderMigrationStatus();
+  }
+
   /* ---------- IMPORT / EXPORT ---------- */
   async function doExport() {
     try {
@@ -728,7 +777,6 @@
           return;
         }
 
-        // Импорт настроек
         if (backup.data.settings) {
           await window.TH.updateSiteSettings(backup.data.settings);
         }
@@ -828,7 +876,12 @@
 
       el.innerHTML = logs.map(l => {
         const time = new Date(l.created_at).toLocaleTimeString("ru-RU");
-        return `<div class="log-entry"><span class="time">[${time}]</span> ${escapeHTML(l.action)}: ${escapeHTML(JSON.stringify(l.details))}</div>`;
+        let details = '';
+        try {
+          details = typeof l.details === 'string' ? l.details : JSON.stringify(l.details);
+          if (details.length > 200) details = details.substring(0, 200) + '...';
+        } catch(e) { details = ''; }
+        return `<div class="log-entry"><span class="time">[${time}]</span> ${escapeHTML(l.action)}${details ? ': ' + escapeHTML(details) : ''}</div>`;
       }).join("");
     } catch (e) {
       el.innerHTML = `<div class="log-entry"><span class="time">[--:--:--]</span> Ошибка загрузки лога</div>`;
@@ -836,7 +889,6 @@
   }
 
   function clearLog() {
-    // Лог в Supabase не удаляем, просто очищаем отображение
     const el = document.getElementById("adminLog");
     if (el) el.innerHTML = `<div class="log-entry"><span class="time">[--:--:--]</span> Лог очищен</div>`;
   }
@@ -870,6 +922,8 @@
     doExport,
     doImport,
     doResetAll,
+    doMigrate,
+    doClearLocal,
     setActive,
     clearLog
   };
