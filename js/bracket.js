@@ -1,5 +1,5 @@
 /*
- Tournament Hub — Bracket Controller (исправленный)
+ Tournament Hub — Bracket Controller (FIXED v3 — async vote, proper DB updates)
  Работает с nested-структурой: tournament.rounds[].matches[]
 */
 
@@ -46,10 +46,14 @@
         return null;
     }
 
-    function vote(matchId, player) {
-        if (!Auth.canUserVote(matchId)) return false;
+    // FIX #1: async vote с правильной проверкой canUserVote
+    async function vote(matchId, player) {
+        const canVote = await Auth.canUserVote(matchId);
+        if (!canVote) {
+            toast("Вы уже голосовали в этом матче");
+            return false;
+        }
 
-        // ИСПРАВЛЕНО: используем DB.updateDB вместо прямой мутации + saveDB
         let success = false;
         let targetTournamentId = null;
 
@@ -74,9 +78,8 @@
 
         if (!success) return false;
 
-        Auth.markVote(matchId);
+        await Auth.markVote(matchId);
 
-        // Перерендерим сетку если функция доступна и это текущий турнир
         if (typeof RenderBracket !== "undefined" && RenderBracket.renderBracket) {
             const urlParams = new URLSearchParams(window.location.search);
             const currentTid = urlParams.get("id");
@@ -94,11 +97,9 @@
         const v2 = match.votes2 || 0;
         if (v1 > v2) return match.player1;
         if (v2 > v1) return match.player2;
-        // Ничья — player1 проходит (или можно добавить random)
         return match.player1;
     }
 
-    // ИСПРАВЛЕНО: finishMatch теперь через updateDB и проверяет финал
     function finishMatch(matchId) {
         let result = null;
         let tournamentId = null;
@@ -120,7 +121,6 @@
                     result = winner;
                     tournamentId = t.id;
 
-                    // Проверяем, все ли матчи текущего раунда finished
                     const currentRound = t.rounds[t.currentRound || 0];
                     if (currentRound) {
                         const allFinished = (currentRound.matches || []).every(m => m.finished);
@@ -132,7 +132,6 @@
             }
         });
 
-        // Если это был финальный матч — завершаем турнир через advanceRound
         if (isFinal && tournamentId) {
             Tournament.advanceRound(tournamentId);
         }
