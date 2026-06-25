@@ -1,9 +1,8 @@
 /* ============================================================
-   Tournament Hub — Data Bridge Layer (FIXED v9 — multi-page sync & storage)
+   Tournament Hub — Data Bridge Layer (FIXED v10 — isReady, toast, sync)
    ============================================================ */
 (function () {
   'use strict';
-
   const STORAGE_KEY = "tournament_hub_data";
   const USER_KEY = "tournament_hub_user";
 
@@ -19,39 +18,31 @@
 
   function escapeHTML(text) {
     if (!text) return "";
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+    return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
   function getDB() {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
       return data ? JSON.parse(data) : defaultDB;
-    } catch (e) {
-      console.warn("Ошибка чтения локальной БД, сброс на дефолт:", e);
-      return defaultDB;
-    }
+    } catch (e) { return defaultDB; }
   }
 
   function saveDB(data) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch (e) {
-      console.error("Критическая ошибка записи локальной БД:", e);
-    }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { console.error("DB save error:", e); }
+  }
+
+  function updateDB(fn) {
+    const db = getDB();
+    fn(db);
+    saveDB(db);
   }
 
   async function getCurrentUser() {
     try {
       const localUser = localStorage.getItem(USER_KEY);
       return localUser ? JSON.parse(localUser) : null;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   async function setCurrentUser(userObj) {
@@ -63,9 +54,7 @@
         localStorage.removeItem(USER_KEY);
         localStorage.removeItem("th_user");
       }
-    } catch (e) {
-      console.error("Ошибка сохранения состояния пользователя:", e);
-    }
+    } catch (e) { console.error("User save error:", e); }
   }
 
   function clearAllLocalData() {
@@ -76,69 +65,52 @@
     localStorage.removeItem("th_supabase_auth");
   }
 
-  // --- СИНХРОНИЗАЦИЯ С СЕРВЕРОМ SUPABASE ---
   async function syncWithSupabase() {
     if (!window.TH || typeof window.TH.getClient !== 'function') return;
-
     try {
-      // 1. Синхронизируем текущего пользователя
       const serverUser = await window.TH.getCurrentUser();
-      if (serverUser) {
-        await setCurrentUser(serverUser);
-      } else {
-        await setCurrentUser(null);
-      }
-
-      // 2. Выкачиваем актуальные турниры
+      if (serverUser) await setCurrentUser(serverUser);
+      else await setCurrentUser(null);
       const { data: tournaments, error: tErr } = await window.TH.getTournaments();
       if (!tErr && tournaments) {
         let dbData = getDB();
         dbData.tournaments = tournaments;
         saveDB(dbData);
       }
-    } catch (e) {
-      console.warn("Supabase синхронизация недоступна, работаем в автономном режиме кэша:", e);
-    }
+    } catch (e) { console.warn("Supabase sync unavailable:", e); }
   }
 
-  // Автоматический запуск синхронизации при готовности ядра
+  // Global toast
+  window.toast = function(msg) {
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 300); }, 3000);
+  };
+
   document.addEventListener("DOMContentLoaded", function () {
     let checkTicks = 0;
     const bridgeInit = setInterval(async () => {
       if (window.TH && typeof window.TH.onAuthStateChange === 'function') {
         clearInterval(bridgeInit);
-        
-        // Подписываемся на динамические изменения сессии
         window.TH.onAuthStateChange(async (event, session) => {
           if (session?.user) {
             const freshUser = await window.TH.getCurrentUser();
             await setCurrentUser(freshUser);
-          } else {
-            await setCurrentUser(null);
-          }
-          if (window.Auth && typeof window.Auth.renderNavUser === 'function') {
-            window.Auth.renderNavUser();
-          }
+          } else await setCurrentUser(null);
+          if (window.Auth && typeof window.Auth.renderNavUser === 'function') window.Auth.renderNavUser();
         });
-
         await syncWithSupabase();
-        if (window.Auth && typeof window.Auth.renderNavUser === 'function') {
-          window.Auth.renderNavUser();
-        }
+        if (window.Auth && typeof window.Auth.renderNavUser === 'function') window.Auth.renderNavUser();
       }
       checkTicks++;
       if (checkTicks > 40) clearInterval(bridgeInit);
     }, 50);
   });
 
-  // Экспорт модуля в глобальное окно браузера
   window.DB = {
-    getDB,
-    saveDB,
-    getCurrentUser,
-    setCurrentUser,
-    clearAllLocalData,
-    syncWithSupabase,
-    escapeHTML
+    getDB, saveDB, updateDB, getCurrentUser, setCurrentUser,
+    clearAllLocalData, syncWithSupabase, escapeHTML
   };
 })();

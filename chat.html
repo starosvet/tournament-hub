@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Чат | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/oauth-init.js"></script>
     <script src="js/supabase-client.js"></script>
@@ -29,7 +28,6 @@
             <div class="nav-user" id="navUser"></div>
         </div>
     </header>
-
     <div class="container">
         <div class="grid-2">
             <div>
@@ -39,48 +37,31 @@
                 </div>
                 <div style="display:flex;gap:10px;margin-top:12px;">
                     <input type="text" id="chat-input" placeholder="Написать сообщение..." style="flex:1;padding:12px 16px;background:var(--bg);border:1px solid var(--border-2);border-radius:10px;color:var(--text);">
-                    <button class="btn-primary" onclick="sendChat()">Отправить</button>
+                    <button class="btn-primary" onclick="window.sendChat()">Отправить</button>
                 </div>
-                <p id="chat-login-msg" style="color:var(--text-3);font-size:13px;margin-top:8px;">
-                    <a href="login.html">🔐 Войдите</a>, чтобы писать в чат
-                </p>
+                <p id="chat-login-msg" style="color:var(--text-3);font-size:13px;margin-top:8px;"><a href="login.html">🔐 Войдите</a>, чтобы писать в чат</p>
             </div>
-
             <div>
                 <h2 class="section-title">👥 Онлайн</h2>
-                <div class="card" style="padding:20px;">
-                    <p style="color:var(--text-3);font-size:14px;">Локальный чат — онлайн статус недоступен</p>
-                </div>
-
+                <div class="card" style="padding:20px;"><p style="color:var(--text-3);font-size:14px;">Локальный чат — онлайн статус недоступен</p></div>
                 <h2 class="section-title" style="margin-top:24px;">📊 Статистика чата</h2>
-                <div class="card" style="padding:20px;" id="chat-stats">
-                    <p style="color:var(--text-3);">Загрузка...</p>
-                </div>
+                <div class="card" style="padding:20px;" id="chat-stats"><p style="color:var(--text-3);">Загрузка...</p></div>
             </div>
         </div>
     </div>
-
-    <footer>
-        <p>Tournament Hub</p>
-    </footer>
-
-    <!-- FIX: единый inline script для nav -->
+    <footer><p>Tournament Hub</p></footer>
     <script>
     document.addEventListener("DOMContentLoaded", async function() {
         let attempts = 0;
         const waitForInit = setInterval(() => {
             if (window.TH && window.TH.isReady) {
                 clearInterval(waitForInit);
-
                 const navAdmin = document.getElementById("navAdmin");
-                if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) {
-                    navAdmin.classList.remove("hidden");
-                }
-
-                Auth.renderNavUser();
+                if (navAdmin && window.Auth && window.Auth.isAdminSync && window.Auth.isAdminSync()) navAdmin.classList.remove("hidden");
+                if (window.Auth && window.Auth.renderNavUser) window.Auth.renderNavUser();
             }
             attempts++;
-            if (attempts > 30) clearInterval(waitForInit);
+            if (attempts > 60) clearInterval(waitForInit);
         }, 100);
     });
     </script>

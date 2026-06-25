@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Сетка | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/oauth-init.js"></script>
     <script src="js/supabase-client.js"></script>
@@ -33,18 +32,10 @@
             <div class="nav-user" id="navUser"></div>
         </div>
     </header>
-
     <div class="container">
-        <div class="bracket-header" id="bracket-header">
-            <h1>🏆 Турнирная сетка</h1>
-        </div>
+        <div class="bracket-header" id="bracket-header"><h1>🏆 Турнирная сетка</h1></div>
         <p class="bracket-sub" id="bracket-sub">Выберите турнир на главной</p>
-
-        <div id="bracket-container">
-            <div class="skeleton" style="height:400px;border-radius:20px;"></div>
-        </div>
-
-        <!-- Комментарии -->
+        <div id="bracket-container"><div class="skeleton" style="height:400px;border-radius:20px;"></div></div>
         <div style="margin-top:48px;">
             <h2 class="section-title">💬 Комментарии</h2>
             <div id="comments-box" style="background:var(--bg-3);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
@@ -56,61 +47,37 @@
             </div>
         </div>
     </div>
-
-    <footer>
-        <p>Tournament Hub</p>
-    </footer>
-
-    <!-- FIX: единый inline script без дублирования -->
+    <footer><p>Tournament Hub</p></footer>
     <script>
     async function postBracketComment() {
         const text = document.getElementById("commentText").value;
-        const params = new URLSearchParams(window.location.search);
-        const tid = params.get("id");
+        const tid = new URLSearchParams(window.location.search).get("id");
         if (!tid) return;
-
         const user = await DB.getCurrentUser();
-        if (!user) {
-            alert("Войдите, чтобы оставлять комментарии");
-            return;
-        }
-
+        if (!user) { alert("Войдите, чтобы оставлять комментарии"); return; }
         const result = await Comments.addComment(tid, text);
-        if (result.error) {
-            alert(result.error.message || "Ошибка отправки");
-            return;
-        }
-
+        if (result.error) { alert(result.error.message || "Ошибка отправки"); return; }
         document.getElementById("commentText").value = "";
         await loadBracketComments();
     }
-
     async function loadBracketComments() {
-        const params = new URLSearchParams(window.location.search);
-        const tid = params.get("id");
+        const tid = new URLSearchParams(window.location.search).get("id");
         if (!tid) return;
         await Comments.renderComments(tid, document.getElementById("comments-list"));
         Comments.subscribeToComments(tid, document.getElementById("comments-list"));
     }
-
     document.addEventListener("DOMContentLoaded", async function() {
-        // FIX: ждём инициализации TH из db.js
         let attempts = 0;
         const waitForInit = setInterval(() => {
             if (window.TH && window.TH.isReady) {
                 clearInterval(waitForInit);
-
                 const navAdmin = document.getElementById("navAdmin");
-                if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) {
-                    navAdmin.classList.remove("hidden");
-                }
-
-                Auth.renderNavUser();
+                if (navAdmin && window.Auth && window.Auth.isAdminSync && window.Auth.isAdminSync()) navAdmin.classList.remove("hidden");
+                if (window.Auth && window.Auth.renderNavUser) window.Auth.renderNavUser();
                 loadBracketComments();
-                // renderBracket вызывается сам из render-bracket.js
             }
             attempts++;
-            if (attempts > 30) clearInterval(waitForInit);
+            if (attempts > 60) clearInterval(waitForInit);
         }, 100);
     });
     </script>

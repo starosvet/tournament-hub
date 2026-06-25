@@ -1,9 +1,8 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v10 — persistent sessions, correct paths)
+   Tournament Hub — Supabase Client (FIXED v11 — isReady, correct APIs)
    ============================================================ */
 (function () {
   'use strict';
-
   let realtimeChannels = [];
   let initDone = false;
   let supabaseInstance = null;
@@ -11,63 +10,39 @@
   function getBasePath() {
     const path = window.location.pathname;
     const match = path.match(/^(.+?)\/(?:index\.html|[^/]+\.html)?$/);
-    if (match) {
-      const base = match[1];
-      if (base && base !== '') return base;
-    }
+    if (match) { const base = match[1]; if (base && base !== '') return base; }
     return window._supabaseConfig?.basePath || '';
   }
 
   function getBaseUrl() {
     let url = window.location.origin + getBasePath();
-    if (url.endsWith('/')) {
-      url = url.slice(0, -1);
-    }
+    if (url.endsWith('/')) url = url.slice(0, -1);
     return url;
   }
 
   function init() {
     if (initDone) return true;
-    if (window._supabase) {
-      supabaseInstance = window._supabase;
-      initDone = true;
-      return true;
-    }
-
-    if (typeof window.supabase === 'undefined') {
-      console.error('❌ Supabase SDK library not found in window global scope!');
-      return false;
-    }
-
+    if (window._supabase) { supabaseInstance = window._supabase; initDone = true; window.TH = window.TH || {}; window.TH.isReady = true; return true; }
+    if (typeof window.supabase === 'undefined') { console.error('❌ Supabase SDK not found'); return false; }
     const cfg = window._supabaseConfig || {};
     const url = cfg.url || 'https://fpabooteqfahhzobcpnh.supabase.co';
     const key = cfg.key || '';
-
-    if (!key) {
-      console.error('❌ Supabase Anonymous Key is missing inside configuration.');
-      return false;
-    }
-
+    if (!key) { console.error('❌ Supabase key missing'); return false; }
     supabaseInstance = window.supabase.createClient(url, key, cfg.options || {});
     window._supabase = supabaseInstance;
     initDone = true;
-    console.log('✅ Supabase client initialized context');
+    // Set isReady on TH object
+    if (!window.TH) window.TH = {};
+    window.TH.isReady = true;
+    console.log('✅ Supabase client initialized');
     return true;
   }
 
-  function getClient() {
-    if (!initDone) init();
-    return supabaseInstance;
-  }
+  function getClient() { if (!initDone) init(); return supabaseInstance; }
 
-  // --- АУТЕНТИФИКАЦИЯ И ПРОФИЛИ ---
   async function signUp(email, password, metadata) {
     const client = getClient();
-    return await client.auth.signUp({
-      email,
-      password,
-      options: { data: metadata || {} }
-    });
+    return await client.auth.signUp({ email, password, options: { data: metadata || {} } });
   }
 
   async function signIn(email, password) {
@@ -78,10 +53,7 @@
   async function signInWithProvider(provider) {
     const client = getClient();
     const redirectUrl = getBaseUrl() + '/login.html';
-    return await client.auth.signInWithOAuth({
-      provider: provider,
-      options: { redirectTo: redirectUrl }
-    });
+    return await client.auth.signInWithOAuth({ provider: provider, options: { redirectTo: redirectUrl } });
   }
 
   async function signOut() {
@@ -92,18 +64,14 @@
 
   async function getSession() {
     const client = getClient();
-    const { data, error } = await client.auth.getSession();
+    const { data } = await client.auth.getSession();
     return data?.session || null;
   }
 
   async function getProfile(userId) {
     const client = getClient();
-    if (!userId) {
-      const session = await getSession();
-      if (!session?.user) return null;
-      userId = session.user.id;
-    }
-    const { data, error } = await client.from('profiles').select('*').eq('id', userId).maybeSingle();
+    if (!userId) { const session = await getSession(); if (!session?.user) return null; userId = session.user.id; }
+    const { data } = await client.from('profiles').select('*').eq('id', userId).maybeSingle();
     return data;
   }
 
@@ -111,11 +79,9 @@
     const client = getClient();
     const { data } = await client.auth.getUser();
     if (!data?.user) return null;
-    
     const profile = await getProfile(data.user.id);
     return {
-      id: data.user.id,
-      email: data.user.email,
+      id: data.user.id, email: data.user.email,
       username: profile?.username || data.user.user_metadata?.username || 'User',
       displayName: profile?.display_name || data.user.user_metadata?.display_name || 'User',
       role: profile?.role || data.user.user_metadata?.role || 'user',
@@ -129,7 +95,6 @@
     const client = getClient();
     const { data: { user } } = await client.auth.getUser();
     if (!user) throw new Error("Пользователь не авторизован");
-    
     const { data, error } = await client.from('profiles').update(profileData).eq('id', user.id).select().single();
     if (error) throw error;
     return data;
@@ -144,12 +109,10 @@
 
   function onAuthStateChange(callback) {
     const client = getClient();
-    return client.auth.onAuthStateChange(async (event, session) => {
-      await callback(event, session);
-    });
+    return client.auth.onAuthStateChange(async (event, session) => { await callback(event, session); });
   }
 
-  // --- ТУРНИРЫ ---
+  // --- TOURNAMENTS ---
   async function getTournaments() {
     const client = getClient();
     return await client.from('tournaments').select('*').order('created_at', { ascending: false });
@@ -160,8 +123,10 @@
     return await client.from('tournaments').select('*, rounds(*, matches(*))').eq('id', id).maybeSingle();
   }
 
-  async function createTournament(title, description, status, config) {
+  // FIXED: accepts object, not positional args
+  async function createTournament(tournamentData) {
     const client = getClient();
+    const { title, description, status, config } = tournamentData || {};
     return await client.from('tournaments').insert({ title, description, status, config }).select().single();
   }
 
@@ -175,7 +140,7 @@
     return await client.from('tournaments').delete().eq('id', id);
   }
 
-  // --- УЧАСТНИКИ И МАТЧИ ---
+  // --- PLAYERS & MATCHES ---
   async function getPlayers(tournamentId) {
     const client = getClient();
     return await client.from('players').select('*').eq('tournament_id', tournamentId);
@@ -196,16 +161,11 @@
     return await client.from('matches').update(updates).eq('id', id).select().single();
   }
 
-  // --- ГОЛОСОВАНИЕ ---
+  // --- VOTING ---
   async function castVote(matchId, playerIndex) {
     const client = getClient();
     const { data: { user } } = await client.auth.getUser();
-    return await client.from('votes').insert({
-      match_id: matchId,
-      user_id: user ? user.id : null,
-      player_index: playerIndex,
-      is_guest: !user
-    });
+    return await client.from('votes').insert({ match_id: matchId, user_id: user ? user.id : null, player_index: playerIndex, is_guest: !user });
   }
 
   async function hasVoted(matchId) {
@@ -216,7 +176,7 @@
     return !!data;
   }
 
-  // --- КОММЕНТАРИИ ---
+  // --- COMMENTS ---
   async function getComments(tournamentId) {
     const client = getClient();
     return await client.from('comments').select('*').eq('tournament_id', tournamentId).order('created_at', { ascending: false });
@@ -225,12 +185,7 @@
   async function addComment(tournamentId, text) {
     const client = getClient();
     const user = await getCurrentUser();
-    return await client.from('comments').insert({
-      tournament_id: tournamentId,
-      user_id: user?.id || null,
-      author_name: user?.displayName || user?.username || 'Гость',
-      text: text
-    }).select().single();
+    return await client.from('comments').insert({ tournament_id: tournamentId, user_id: user?.id || null, author_name: user?.displayName || user?.username || 'Гость', text: text }).select().single();
   }
 
   async function deleteComment(id) {
@@ -238,23 +193,19 @@
     return await client.from('comments').delete().eq('id', id);
   }
 
-  // --- ЧАТ ---
-  async function getChatMessages(limit = 100) {
+  // --- CHAT ---
+  async function getChatMessages(limit) {
     const client = getClient();
-    return await client.from('chat_messages').select('*').order('created_at', { ascending: false }).limit(limit);
+    return await client.from('chat_messages').select('*').order('created_at', { ascending: false }).limit(limit || 100);
   }
 
   async function sendChatMessage(text) {
     const client = getClient();
     const user = await getCurrentUser();
-    return await client.from('chat_messages').insert({
-      user_id: user?.id || null,
-      author_name: user?.displayName || user?.username || 'Аноним',
-      text: text
-    });
+    return await client.from('chat_messages').insert({ user_id: user?.id || null, author_name: user?.displayName || user?.username || 'Аноним', text: text });
   }
 
-  // --- СИСТЕМНЫЕ НАСТРОЙКИ И АДМИНКА ---
+  // --- SETTINGS & ADMIN ---
   async function getSiteSettings() {
     const client = getClient();
     return await client.from('site_settings').select('*').eq('id', 'global').maybeSingle();
@@ -275,71 +226,60 @@
     return await client.from('profiles').update({ role }).eq('id', userId);
   }
 
-  async function getAdminLogs(limit = 100) {
+  async function getAdminLogs(limit) {
     const client = getClient();
-    return await client.from('admin_logs').select('*').order('created_at', { ascending: false }).limit(limit);
+    return await client.from('admin_logs').select('*').order('created_at', { ascending: false }).limit(limit || 100);
   }
 
   async function logAction(action, details) {
     const client = getClient();
     const user = await getCurrentUser();
-    return await client.from('admin_logs').insert({
-      user_id: user?.id || null,
-      action,
-      details: details || {}
-    });
+    return await client.from('admin_logs').insert({ user_id: user?.id || null, action, details: details || {} });
   }
 
-  // --- REALTIME ШИНЫ (РЕАКТИВНОСТЬ) ---
+  // NEW: getSiteStats
+  async function getSiteStats() {
+    try {
+      const client = getClient();
+      const { data: tournaments } = await client.from('tournaments').select('id');
+      const { data: users } = await client.from('profiles').select('id');
+      const { data: matches } = await client.from('matches').select('id');
+      return { data: { tournaments: (tournaments || []).length, users: (users || []).length, matches: (matches || []).length } };
+    } catch (e) { return { data: { tournaments: 0, users: 0, matches: 0 } }; }
+  }
+
+  // --- REALTIME ---
   function subscribeToChat(callback) {
     const client = getClient();
-    const channel = client.channel('public-chat')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, payload => {
-        callback(payload.new);
-      })
-      .subscribe();
+    const channel = client.channel('public-chat').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, payload => { callback(payload.new); }).subscribe();
     realtimeChannels.push(channel);
     return channel;
   }
 
   function subscribeToComments(tournamentId, callback) {
     const client = getClient();
-    const channel = client.channel(`comments-${tournamentId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: `tournament_id=eq.${tournamentId}` }, payload => {
-        callback(payload);
-      })
-      .subscribe();
+    const channel = client.channel('comments-' + tournamentId).on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: 'tournament_id=eq.' + tournamentId }, payload => { callback(payload); }).subscribe();
     realtimeChannels.push(channel);
     return channel;
   }
 
   function subscribeToMatches(tournamentId, callback) {
     const client = getClient();
-    const channel = client.channel(`matches-${tournamentId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches' }, payload => {
-        callback(payload.new);
-      })
-      .subscribe();
+    const channel = client.channel('matches-' + tournamentId).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches' }, payload => { callback(payload.new); }).subscribe();
     realtimeChannels.push(channel);
     return channel;
   }
 
   function subscribeToVotes(callback) {
     const client = getClient();
-    const channel = client.channel('global-votes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'votes' }, payload => {
-        callback(payload.new);
-      })
-      .subscribe();
+    const channel = client.channel('global-votes').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'votes' }, payload => { callback(payload.new); }).subscribe();
     realtimeChannels.push(channel);
     return channel;
   }
 
   function unsubscribeAll() {
     const client = getClient();
-    realtimeChannels.forEach(ch => {
-      try { client.removeChannel(ch); } catch(e) {}
-    });
+    realtimeChannels.forEach(ch => { try { client.removeChannel(ch); } catch(e) {} });
     realtimeChannels = [];
   }
 
@@ -348,14 +288,13 @@
     return user?.role === 'admin' || localStorage.getItem('th_admin') === 'yes';
   }
 
-  // Экспорт API в глобальную область видимости
   window.TH = {
-    init, getClient, getBasePath, getBaseUrl,
+    init, getClient, getBasePath, getBaseUrl, isReady: false,
     signUp, signIn, signInWithProvider, signOut, getSession, getProfile, getCurrentUser, updateProfile, upsertProfile, onAuthStateChange,
     getTournaments, getTournament, createTournament, updateTournament, deleteTournament,
     getPlayers, createPlayers, getMatches, updateMatch,
     castVote, hasVoted, getComments, addComment, deleteComment,
-    getChatMessages, sendChatMessage, getSiteSettings, updateSiteSettings,
+    getChatMessages, sendChatMessage, getSiteSettings, updateSiteSettings, getSiteStats,
     subscribeToChat, subscribeToComments, subscribeToMatches, subscribeToVotes, unsubscribeAll,
     isAdmin, getAllUsers, setUserRole, getAdminLogs, logAction
   };

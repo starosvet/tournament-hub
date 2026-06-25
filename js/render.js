@@ -1,90 +1,47 @@
 /* ============================================================
-   Tournament Hub Main Renderer (FIXED v4 — proper init, no duplicates, safe calls)
+   Tournament Hub Main Renderer (FIXED v5)
    ============================================================ */
-
 (function () {
   'use strict';
-
   let initDone = false;
 
-  /* ==========================================================
-     НАСТРОЙКИ САЙТА
-     ========================================================== */
   async function loadSiteSettings() {
     if (window.TH) {
       try {
         const { data } = await window.TH.getSiteSettings();
-        if (data) return {
-          siteName: data.site_name || 'Tournament Hub',
-          description: data.description || '',
-          siteLogo: data.site_logo || '🏆',
-          theme: data.theme || 'amber',
-          accent: data.accent || 'amber'
-        };
-      } catch (e) {
-        console.warn('Supabase settings failed, using localStorage');
-      }
+        if (data) return { siteName: data.site_name || 'Tournament Hub', description: data.description || '', siteLogo: data.site_logo || '🏆', theme: data.theme || 'amber', accent: data.accent || 'amber' };
+      } catch (e) { console.warn('Supabase settings failed'); }
     }
-
     const db = DB.getDB();
-    return {
-      siteName: db.settings?.siteName || 'Tournament Hub',
-      description: db.settings?.description || '',
-      siteLogo: db.settings?.siteLogo || '🏆',
-      theme: db.settings?.theme || 'amber',
-      accent: db.settings?.accent || 'amber'
-    };
+    return { siteName: db.settings?.siteName || 'Tournament Hub', description: db.settings?.description || '', siteLogo: db.settings?.siteLogo || '🏆', theme: db.settings?.theme || 'amber', accent: db.settings?.accent || 'amber' };
   }
 
   function applySettings(settings) {
     const logoEl = document.getElementById("siteLogoLink");
-    if (logoEl) {
-      logoEl.textContent = (settings.siteLogo || "🏆") + " " + (settings.siteName || "Tournament Hub");
-    }
-
+    if (logoEl) logoEl.textContent = (settings.siteLogo || "🏆") + " " + (settings.siteName || "Tournament Hub");
     const titleEl = document.querySelector('title[data-site-name]');
-    if (titleEl) {
-      titleEl.textContent = settings.siteName || "Tournament Hub";
-    }
+    if (titleEl) titleEl.textContent = settings.siteName || "Tournament Hub";
+    const descEl = document.getElementById("site-description");
+    if (descEl && settings.description) descEl.textContent = settings.description;
   }
 
   function escapeHTML(text) {
     if (!text) return "";
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+    return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
-  /* ==========================================================
-     ОТРЕНДЕРИТЬ СПИСОК ТУРНИРОВ
-     ========================================================== */
   async function renderTournamentList(container) {
     if (!container) return;
     container.innerHTML = '<div class="spinner"></div>';
-    
     try {
       let tournaments = [];
-      if (window.TH) {
-        const { data } = await window.TH.getTournaments();
-        if (data) tournaments = data;
-      } else {
-        tournaments = DB.getDB().tournaments || [];
-      }
-      
-      if (tournaments.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-3); text-align:center; padding:20px;">Нет активных турниров</p>';
-        return;
-      }
-      
+      if (window.TH) { const { data } = await window.TH.getTournaments(); if (data) tournaments = data; }
+      else tournaments = DB.getDB().tournaments || [];
+      if (tournaments.length === 0) { container.innerHTML = '<p style="color:var(--text-3); text-align:center; padding:20px;">Нет активных турниров</p>'; return; }
       container.innerHTML = tournaments.map(t => {
-        let statusText = 'Черновик';
-        let statusClass = 'status-draft';
+        let statusText = 'Черновик', statusClass = 'status-draft';
         if (t.status === 'active') { statusText = 'Активен'; statusClass = 'status-active'; }
         if (t.status === 'finished') { statusText = 'Завершен'; statusClass = 'status-finished'; }
-        
         return `
           <div class="card tournament-card page-enter" onclick="window.location.href='bracket.html?id=${t.id}'">
             <div class="tournament-card-header" style="display:flex; justify-content:space-between; align-items:center;">
@@ -92,88 +49,46 @@
               <span class="badge ${statusClass}">${statusText}</span>
             </div>
             <p style="color:var(--text-2); margin-top:8px; font-size:14px;">${escapeHTML(t.description || 'Без описания')}</p>
-            <div class="tournament-card-meta" style="margin-top:12px; font-size:12px; color:var(--text-3);">
-              <span>Участников: ${t.players ? t.players.length : 0}</span>
-            </div>
-          </div>
-        `;
+            <div class="tournament-card-meta" style="margin-top:12px; font-size:12px; color:var(--text-3);"><span>Участников: ${t.players ? t.players.length : 0}</span></div>
+          </div>`;
       }).join('');
-    } catch (e) {
-      console.error('renderTournamentList error:', e);
-      container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки списка турниров</p>';
-    }
+    } catch (e) { console.error('renderTournamentList error:', e); container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки</p>'; }
   }
 
-  /* ==========================================================
-     ОТРЕНДЕРИТЬ СТАТИСТИКУ
-     ========================================================== */
   function renderStats() {
     const el = document.getElementById("stats");
     if (!el) return;
-
     let statsPromise;
-    if (window.TH && window.TH.getSiteStats) {
-      statsPromise = window.TH.getSiteStats().then(res => res.data);
-    } else {
+    if (window.TH && window.TH.getSiteStats) statsPromise = window.TH.getSiteStats().then(res => res.data);
+    else {
       const db = DB.getDB();
-      statsPromise = Promise.resolve({
-        tournaments: (db.tournaments || []).length,
-        users: (db.users || []).length,
-        matches: (db.matches || []).length
-      });
+      statsPromise = Promise.resolve({ tournaments: (db.tournaments || []).length, users: (db.users || []).length, matches: (db.matches || []).length });
     }
-
     statsPromise.then(stats => {
       if (!stats) return;
       el.innerHTML = `
         <div class="stats-grid">
-          <div class="stat-card">
-            <strong>${stats.tournaments}</strong>
-            <span>Турниры</span>
-          </div>
-          <div class="stat-card">
-            <strong>${stats.users}</strong>
-            <span>Пользователи</span>
-          </div>
-          <div class="stat-card">
-            <strong>${stats.matches}</strong>
-            <span>Матчи</span>
-          </div>
-        </div>
-      `;
-    }).catch(e => {
-      console.error('renderStats error:', e);
-    });
+          <div class="stat-card"><strong>${stats.tournaments}</strong><span>Турниры</span></div>
+          <div class="stat-card"><strong>${stats.users}</strong><span>Пользователи</span></div>
+          <div class="stat-card"><strong>${stats.matches}</strong><span>Матчи</span></div>
+        </div>`;
+    }).catch(e => console.error('renderStats error:', e));
   }
 
-  /* ==========================================================
-     ГЛАВНАЯ ИНИЦИАЛИЗАЦИЯ
-     ========================================================== */
   async function initRender() {
     if (initDone) return;
     initDone = true;
-
     let attempts = 0;
-    while (!window.TH && attempts < 50) {
-      await new Promise(r => setTimeout(r, 100));
-      attempts++;
-    }
-
+    while (!window.TH && attempts < 50) { await new Promise(r => setTimeout(r, 100)); attempts++; }
     const settings = await loadSiteSettings();
     applySettings(settings);
     renderStats();
     renderTournamentList(document.querySelector("#tournament-list"));
-
-    if (window.Auth && Auth.renderNavUser) Auth.renderNavUser();
+    if (window.Auth && window.Auth.renderNavUser) window.Auth.renderNavUser();
   }
 
   window.Render = { initRender, renderTournamentList, renderStats };
 
-  if (document.readyState === 'loading') {
-    document.addEventListener("DOMContentLoaded", () => {
-      setTimeout(initRender, 200);
-    });
-  } else {
-    setTimeout(initRender, 200);
-  }
+  if (document.readyState === 'loading') document.addEventListener("DOMContentLoaded", () => setTimeout(initRender, 200));
+  else setTimeout(initRender, 200);
 })();
