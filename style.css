@@ -1895,3 +1895,215 @@ footer {
     opacity: 0.3;
   }
 }
+
+
+/* =========================================================
+   SHIKIMORI-STYLE BRACKET ADDON
+   Добавьте это в конец вашего style.css
+   ========================================================= */
+
+/* Match container — Shikimori style: two big cards with VS in middle */
+.bracket-match {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 0;
+  margin-bottom: 20px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.bracket-match.can-vote {
+  border-color: var(--blue);
+  box-shadow: 0 0 30px var(--blue-glow);
+}
+
+.bracket-match.can-vote:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(59,130,246,0.2);
+}
+
+/* Players row */
+.match-players {
+  display: flex;
+  align-items: stretch;
+  min-height: 140px;
+}
+
+/* Player card */
+.player-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  transition: all 0.3s ease;
+  background: var(--bg-3);
+}
+
+.player-card:hover {
+  background: var(--bg-4);
+}
+
+.player-card.winner {
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.player-card.loser {
+  opacity: 0.5;
+}
+
+/* Player image */
+.player-image-wrap {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-bottom: 12px;
+  border: 3px solid var(--border-2);
+  background: var(--bg-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.player-image-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.player-image-wrap.no-image {
+  font-size: 2em;
+}
+
+/* Player info */
+.player-info {
+  text-align: center;
+  z-index: 2;
+}
+
+.player-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+
+.player-votes {
+  font-size: 13px;
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+/* Vote bar at bottom of card */
+.vote-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--blue), #93c5fd);
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 2px;
+}
+
+.player-card:nth-child(3) .vote-bar {
+  background: linear-gradient(90deg, var(--pink), #f9a8d4);
+}
+
+/* VS divider */
+.vs-divider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  background: var(--bg-2);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  min-width: 80px;
+}
+
+.vs-text {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 2px;
+}
+
+.vs-score {
+  font-size: 14px;
+  color: var(--text-3);
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+/* Winner badge */
+.winner-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 24px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Vote hint */
+.vote-hint {
+  text-align: center;
+  padding: 10px;
+  font-size: 12px;
+  color: var(--text-3);
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+}
+
+.vote-hint.active {
+  color: var(--blue);
+  font-weight: 600;
+  animation: pulse 2s infinite;
+}
+
+/* Click animation */
+.player-card:active {
+  transform: scale(0.98);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .match-players {
+    flex-direction: column;
+  }
+
+  .vs-divider {
+    flex-direction: row;
+    padding: 10px;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .vs-text {
+    margin-right: 10px;
+  }
+
+  .player-image-wrap {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+/* Loading state for bracket */
+.bracket-loading {
+  text-align: center;
+  padding: 60px;
+  color: var(--text-3);
+}
+
+.bracket-loading .spinner {
+  margin-bottom: 20px;
+}
