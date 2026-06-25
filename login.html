@@ -5,8 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Supabase CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/db.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/fandom-auth.js"></script>
 </head>
 <body>
     <header>
@@ -26,30 +30,50 @@
     </header>
 
     <div class="container">
+        <!-- EMAIL/PASSWORD АВТОРИЗАЦИЯ -->
         <div class="login-box page-enter" style="margin-bottom:24px;">
-            <h2>🔐 Вход</h2>
-            <p>Email и пароль</p>
+            <h2>🔐 Вход по email</h2>
+            <p>Безопасная авторизация через Supabase</p>
+
             <div id="loginForm">
                 <label>Email</label>
-                <input type="email" id="loginEmail" placeholder="you@example.com">
+                <input type="email" id="loginEmail" placeholder="your@email.com">
+
                 <label>Пароль</label>
                 <input type="password" id="loginPassword" placeholder="••••••••">
-                <label>Имя пользователя (при регистрации)</label>
-                <input type="text" id="loginUsername" placeholder="username">
-                <button class="btn-primary" style="width:100%;margin-top:20px;" id="btnLogin">🔐 Войти</button>
-                <button class="btn-secondary" style="width:100%;margin-top:12px;" id="btnRegister">📝 Регистрация</button>
-                <div class="error" id="loginError" style="color:var(--red);margin-top:16px;text-align:center;"></div>
+
+                <label id="usernameLabel" style="display:none;">Никнейм</label>
+                <input type="text" id="loginUsername" placeholder="username" style="display:none;">
+
+                <button class="btn-primary" style="width:100%;margin-top:20px;" onclick="doLogin()" id="loginBtn">🔐 Войти</button>
+                <button class="btn-secondary" style="width:100%;margin-top:12px;" onclick="toggleRegister()" id="toggleBtn">📝 Создать аккаунт</button>
+
+                <div class="error" id="loginError" style="color:var(--red);margin-top:16px;text-align:center;font-size:14px;"></div>
             </div>
+
+            <div style="margin-top:24px;text-align:center;">
+                <p style="color:var(--text-3);font-size:13px;margin-bottom:12px;">Или войдите через:</p>
+                <button class="btn-secondary" onclick="loginWithGoogle()" style="width:100%;">
+                    🔍 Google
+                </button>
+            </div>
+
+            <p style="margin-top:24px;color:var(--text-3);font-size:13px;text-align:center;">
+                Ваши данные хранятся в Supabase. Безопасность на высшем уровне.
+            </p>
         </div>
 
+        <!-- FANDOM АВТОРИЗАЦИЯ -->
         <div class="login-box page-enter" id="fandomBox">
             <h2>🌐 Вход через Fandom Wiki</h2>
             <p>chickengun-fanon.fandom.com/ru</p>
+
             <div id="fandomStep1">
                 <label>Ваш ник на Fandom</label>
                 <input type="text" id="fandomName" placeholder="Например: Melanthe Weber">
-                <button class="btn-primary" style="width:100%;margin-top:16px;" id="btnFandomStart">📨 Получить код</button>
+                <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="startFandomLogin()">📨 Получить код</button>
             </div>
+
             <div id="fandomStep2" style="display:none;">
                 <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:12px;padding:16px;margin:16px 0;text-align:center;">
                     <div style="font-size:12px;color:var(--text-3);margin-bottom:8px;">Ваш код подтверждения</div>
@@ -57,269 +81,159 @@
                 </div>
                 <ol style="color:var(--text-2);font-size:14px;line-height:1.8;padding-left:20px;">
                     <li>Зайдите в свой профиль на <a href="https://chickengun-fanon.fandom.com/ru/wiki/Участник:" target="_blank" style="color:var(--accent);">вики</a></li>
-                    <li>Сделайте любую правку</li>
+                    <li>Сделайте любую правку (например, добавьте пробел)</li>
                     <li>В описании правки вставьте код выше</li>
                     <li>Сохраните правку</li>
                 </ol>
-                <button class="btn-primary" style="width:100%;margin-top:16px;" id="btnFandomCheck">✅ Я сделал правку</button>
-                <button class="btn-secondary" style="width:100%;margin-top:8px;" id="btnFandomCancel">❌ Отмена</button>
+                <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="checkFandomLogin()">✅ Я сделал правку</button>
+                <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="cancelFandomLogin()">❌ Отмена</button>
                 <div id="fandomStatus" style="margin-top:12px;text-align:center;font-size:13px;"></div>
-                <div id="fandomError" style="color:var(--red);margin-top:16px;text-align:center;font-size:13px;"></div>
+                <div id="fandomProgress" style="margin-top:8px;text-align:center;font-size:12px;color:var(--text-3);"></div>
             </div>
+
+            <div id="fandomError" style="color:var(--red);margin-top:16px;text-align:center;font-size:13px;"></div>
         </div>
     </div>
 
-    <footer><p>Tournament Hub</p></footer>
+    <footer>
+        <p>Tournament Hub</p>
+    </footer>
 
-    <!-- ВСЕ СКРИПТЫ В КОНЦЕ BODY -->
     <script>
-        // ═══ КОНФИГ: ЗАМЕНИ НА СВОИ ═══
-const SUPABASE_URL = 'https://fpabooteqfahhzobcpnh.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwYWJvb3RlcWZhaGh6b2JjcG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjgwOTIsImV4cCI6MjA5NzkwNDA5Mn0.cc1oG5-73US61LI9uDaPwuQsOjLkIAPxDcfGQvVY9Ac'
+        let isRegisterMode = false;
 
-        // Проверка что CDN загрузился
-        if (typeof supabase === 'undefined') {
-            document.body.innerHTML = '<div style="color:red;text-align:center;padding:50px;">Ошибка: не загрузился Supabase. Проверь интернет.</div>';
-            throw new Error('Supabase CDN not loaded');
+        function toggleRegister() {
+            isRegisterMode = !isRegisterMode;
+            const usernameLabel = document.getElementById("usernameLabel");
+            const usernameInput = document.getElementById("loginUsername");
+            const loginBtn = document.getElementById("loginBtn");
+            const toggleBtn = document.getElementById("toggleBtn");
+
+            if (isRegisterMode) {
+                usernameLabel.style.display = "block";
+                usernameInput.style.display = "block";
+                usernameInput.required = true;
+                loginBtn.textContent = "📝 Зарегистрироваться";
+                toggleBtn.textContent = "🔐 Уже есть аккаунт";
+            } else {
+                usernameLabel.style.display = "none";
+                usernameInput.style.display = "none";
+                usernameInput.required = false;
+                loginBtn.textContent = "🔐 Войти";
+                toggleBtn.textContent = "📝 Создать аккаунт";
+            }
+            document.getElementById("loginError").textContent = "";
         }
 
-        var sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        // ═══ TOAST ═══
-        function toast(msg, dur) {
-            var ex = document.getElementById('th-toast');
-            if (ex) ex.remove();
-            var el = document.createElement('div');
-            el.id = 'th-toast';
-            el.textContent = msg;
-            el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:12px 16px;border-radius:12px;background:rgba(17,24,39,0.95);color:#fff;font:14px/1.4 system-ui,sans-serif;z-index:99999;max-width:min(92vw,680px);box-shadow:0 10px 30px rgba(0,0,0,.28);';
-            document.body.appendChild(el);
-            setTimeout(function(){ if(el.isConnected) el.remove(); }, dur || 2200);
-        }
-
-        // ═══ AUTH ═══
         async function doLogin() {
-            var email = document.getElementById('loginEmail').value.trim();
-            var password = document.getElementById('loginPassword').value;
-            var err = document.getElementById('loginError');
-            err.textContent = '';
-            err.style.color = 'var(--red)';
+            const email = document.getElementById("loginEmail").value.trim();
+            const password = document.getElementById("loginPassword").value;
+            const username = document.getElementById("loginUsername").value.trim();
+            const err = document.getElementById("loginError");
+            err.textContent = "";
 
-            if (!email || !password) {
-                err.textContent = 'Введите email и пароль';
-                return;
-            }
-
-            try {
-                var result = await sb.auth.signInWithPassword({ email: email, password: password });
-                if (result.error) {
-                    err.textContent = result.error.message;
+            if (isRegisterMode) {
+                // Регистрация
+                if (!username) {
+                    err.textContent = "Введите никнейм";
                     return;
                 }
-                toast('Вход выполнен!');
-                setTimeout(function(){ location.href = 'index.html'; }, 800);
-            } catch(e) {
-                err.textContent = 'Ошибка: ' + e.message;
-            }
-        }
-
-        async function doRegister() {
-            var email = document.getElementById('loginEmail').value.trim();
-            var password = document.getElementById('loginPassword').value;
-            var username = document.getElementById('loginUsername').value.trim();
-            var err = document.getElementById('loginError');
-            err.textContent = '';
-            err.style.color = 'var(--red)';
-
-            if (!email || !password) {
-                err.textContent = 'Введите email и пароль';
-                return;
-            }
-            if (password.length < 6) {
-                err.textContent = 'Пароль минимум 6 символов';
-                return;
-            }
-
-            try {
-                var result = await sb.auth.signUp({
-                    email: email,
-                    password: password,
-                    options: { data: { username: username || email.split('@')[0] } }
-                });
-                if (result.error) {
-                    err.textContent = result.error.message;
-                    return;
+                const result = await Auth.register(username, password, email);
+                if (result.success) {
+                    location.href = "index.html";
+                } else {
+                    err.textContent = result.error || "Ошибка регистрации";
                 }
-                err.style.color = 'var(--green)';
-                err.textContent = 'Регистрация успешна!';
-                setTimeout(function(){ location.href = 'index.html'; }, 1500);
-            } catch(e) {
-                err.textContent = 'Ошибка: ' + e.message;
+            } else {
+                // Вход
+                const result = await Auth.login(email, password);
+                if (result.success) {
+                    location.href = "index.html";
+                } else {
+                    err.textContent = result.error || "Ошибка входа";
+                }
             }
         }
 
-        // ═══ FANDOM ═══
-        var FANDOM_CODE_KEY = 'th_fandom_pending';
-
-        function generateCode() {
-            var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-            var code = 'TH-';
-            for (var i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
-            return code;
+        async function loginWithGoogle() {
+            try {
+                const { error } = await window.TH.signInWithProvider('google');
+                if (error) {
+                    document.getElementById("loginError").textContent = error.message;
+                }
+            } catch (e) {
+                document.getElementById("loginError").textContent = "Ошибка входа через Google";
+            }
         }
 
+        document.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") doLogin();
+        });
+
+        /* ---------- fandom авторизация ---------- */
         function startFandomLogin() {
-            var name = document.getElementById('fandomName').value.trim();
-            var err = document.getElementById('fandomError');
-            if (err) err.textContent = '';
-            if (!name) {
-                if (err) err.textContent = 'Введите имя пользователя';
+            const name = document.getElementById("fandomName").value.trim();
+            const err = document.getElementById("fandomError");
+            err.textContent = "";
+
+            const result = FandomAuth.startFandomAuth(name);
+            if (!result.ok) {
+                err.textContent = result.error;
                 return;
             }
-            var code = generateCode();
-            localStorage.setItem(FANDOM_CODE_KEY, JSON.stringify({ code: code, fandomName: name, createdAt: Date.now() }));
-            document.getElementById('fandomStep1').style.display = 'none';
-            document.getElementById('fandomStep2').style.display = 'block';
-            document.getElementById('fandomCode').textContent = code;
+
+            document.getElementById("fandomStep1").style.display = "none";
+            document.getElementById("fandomStep2").style.display = "block";
+            document.getElementById("fandomCode").textContent = result.code;
         }
 
         function cancelFandomLogin() {
-            localStorage.removeItem(FANDOM_CODE_KEY);
-            document.getElementById('fandomStep1').style.display = 'block';
-            document.getElementById('fandomStep2').style.display = 'none';
-            var st = document.getElementById('fandomStatus');
-            var er = document.getElementById('fandomError');
-            if (st) st.textContent = '';
-            if (er) er.textContent = '';
+            FandomAuth.clearPendingAuth();
+            document.getElementById("fandomStep1").style.display = "block";
+            document.getElementById("fandomStep2").style.display = "none";
+            document.getElementById("fandomStatus").textContent = "";
+            document.getElementById("fandomProgress").textContent = "";
+            document.getElementById("fandomError").textContent = "";
         }
 
-        async function verifyFandomCode(fandomName, code) {
-            var url = 'https://chickengun-fanon.fandom.com/ru/api.php?action=query&list=recentchanges&rcuser=' + encodeURIComponent(fandomName) + '&rclimit=20&rcprop=comment|timestamp|user&format=json&origin=*';
-            try {
-                var res = await fetch(url);
-                if (!res.ok) return { ok: false, error: 'Ошибка связи с Fandom' };
-                var data = await res.json();
-                var changes = data.query?.recentchanges || [];
-                var regex = new RegExp('(^|\\s)' + code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)');
-                for (var i = 0; i < changes.length; i++) {
-                    if (regex.test(changes[i].comment || '')) return { ok: true, fandomName: changes[i].user };
-                }
-                return { ok: false, error: 'Код не найден в правках' };
-            } catch(e) {
-                return { ok: false, error: 'Ошибка сети' };
-            }
-        }
+        function checkFandomLogin() {
+            const status = document.getElementById("fandomStatus");
+            const progress = document.getElementById("fandomProgress");
+            const err = document.getElementById("fandomError");
+            status.textContent = "⏳ Проверяем правки...";
+            err.textContent = "";
 
-        async function checkFandomLogin() {
-            var status = document.getElementById('fandomStatus');
-            var err = document.getElementById('fandomError');
-            var pendingRaw = localStorage.getItem(FANDOM_CODE_KEY);
-            var pending = pendingRaw ? JSON.parse(pendingRaw) : null;
+            FandomAuth.pollFandomAuth(
+                function(result) {
+                    status.textContent = "✅ Код подтверждён!";
+                    progress.textContent = "";
 
-            if (!pending || Date.now() - pending.createdAt > 600000) {
-                if (err) err.textContent = 'Код устарел. Начните заново.';
-                return;
-            }
-
-            if (status) status.textContent = '⏳ Проверяем...';
-            if (err) err.textContent = '';
-
-            var verify = await verifyFandomCode(pending.fandomName, pending.code);
-            if (!verify.ok) {
-                if (status) status.textContent = '';
-                if (err) err.textContent = verify.error;
-                return;
-            }
-
-            if (status) status.textContent = '✅ Код найден! Входим...';
-
-            var email = 'fandom_' + verify.fandomName.replace(/\s+/g, '_').toLowerCase() + '@tournament.local';
-            var password = crypto.randomUUID();
-
-            try {
-                var result = await sb.auth.signUp({
-                    email: email,
-                    password: password,
-                    options: { data: { username: verify.fandomName, fandom_name: verify.fandomName, auth_type: 'fandom' } }
-                });
-
-                if (result.error && (result.error.message.includes('already') || result.error.code === 'user_already_exists')) {
-                    var savedPass = localStorage.getItem('th_fandom_pass_' + verify.fandomName);
-                    if (savedPass) {
-                        result = await sb.auth.signInWithPassword({ email: email, password: savedPass });
+                    const complete = FandomAuth.completeFandomAuth(result.fandomName);
+                    if (complete.ok) {
+                        setTimeout(() => {
+                            location.href = "index.html";
+                        }, 800);
                     } else {
-                        if (err) err.textContent = 'Аккаунт существует, но пароль утерян.';
-                        return;
+                        err.textContent = complete.error || "Ошибка создания пользователя";
                     }
+                },
+                function(errorMsg) {
+                    status.textContent = "";
+                    progress.textContent = "";
+                    err.textContent = errorMsg;
+                },
+                function(current, max) {
+                    progress.textContent = "Проверка " + current + "/" + max;
                 }
-
-                if (result.error) {
-                    if (err) err.textContent = result.error.message;
-                    return;
-                }
-
-                localStorage.setItem('th_fandom_pass_' + verify.fandomName, password);
-                localStorage.removeItem(FANDOM_CODE_KEY);
-                toast('Вход через Fandom выполнен!');
-                setTimeout(function(){ location.href = 'index.html'; }, 800);
-            } catch(e) {
-                if (err) err.textContent = 'Ошибка: ' + e.message;
-            }
+            );
         }
 
-        // ═══ EVENT LISTENERS ═══
-        document.getElementById('btnLogin').addEventListener('click', doLogin);
-        document.getElementById('btnRegister').addEventListener('click', doRegister);
-        document.getElementById('btnFandomStart').addEventListener('click', startFandomLogin);
-        document.getElementById('btnFandomCheck').addEventListener('click', checkFandomLogin);
-        document.getElementById('btnFandomCancel').addEventListener('click', cancelFandomLogin);
-
-        document.getElementById('loginPassword').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') doLogin();
+        document.addEventListener("DOMContentLoaded", function() {
+            Auth.renderNavUser();
+            Auth.checkFandomAutoAdmin();
+            const navAdmin = document.getElementById("navAdmin");
+            if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
         });
-
-        // ═══ NAV ═══
-        async function renderNav() {
-            var box = document.getElementById('navUser');
-            if (!box) return;
-            try {
-                var result = await sb.auth.getUser();
-                var user = result.data.user;
-                if (user) {
-                    var name = user.user_metadata?.username || user.email?.split('@')[0] || 'Пользователь';
-                    box.innerHTML = '<span style="color:var(--text-3);font-size:13px;">' + name + '</span>' +
-                        '<button type="button" class="btn-secondary" style="margin-left:10px;padding:8px 12px;font-size:12px;" onclick="doLogout()">Выйти</button>';
-                } else {
-                    box.innerHTML = '<a href="login.html" style="color:var(--text-3);font-size:13px;">Войти</a>';
-                }
-            } catch(e) {
-                box.innerHTML = '<a href="login.html" style="color:var(--text-3);font-size:13px;">Войти</a>';
-            }
-        }
-
-        window.doLogout = async function() {
-            await sb.auth.signOut();
-            localStorage.removeItem('th_admin');
-            location.reload();
-        };
-
-        async function checkAdmin() {
-            try {
-                var result = await sb.auth.getUser();
-                var user = result.data.user;
-                var navAdmin = document.getElementById('navAdmin');
-                if (!navAdmin || !user) return;
-                var isAdmin = user.app_metadata?.role === 'admin' || user.user_metadata?.role === 'admin';
-                if (isAdmin) {
-                    navAdmin.classList.remove('hidden');
-                    localStorage.setItem('th_admin', 'yes');
-                }
-            } catch(e) {}
-        }
-
-        // Запуск
-        renderNav();
-        checkAdmin();
     </script>
 </body>
 </html>
