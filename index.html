@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-site-name>Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/db.js"></script>
     <script src="js/engine.js"></script>
     <script src="js/tournament.js"></script>
     <script src="js/bracket.js"></script>
@@ -51,7 +55,13 @@
     </footer>
 
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
+        document.addEventListener("DOMContentLoaded", async function() {
+            // Инициализируем Supabase
+            if (window.TH) {
+                window.TH.init();
+                await DB.syncSupabaseUser();
+            }
+
             Auth.checkFandomAutoAdmin();
             const navAdmin = document.getElementById("navAdmin");
             if (navAdmin && Auth.isAdmin()) {
