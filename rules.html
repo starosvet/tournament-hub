@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/oauth-init.js"></script>
     <script src="js/supabase-client.js"></script>
     <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
@@ -91,18 +92,31 @@
         <p>Tournament Hub</p>
     </footer>
 
-   <script>
+    <script>
     document.addEventListener("DOMContentLoaded", async function() {
-        if (window.TH) {
-            window.TH.init();
-            await DB.syncSupabaseUser();
-        }
-        Auth.renderNavUser();
-        Auth.checkFandomAutoAdmin();
-        // FIX: Используем isAdminSync
-        const navAdmin = document.getElementById("navAdmin");
-        if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) navAdmin.classList.remove("hidden");
+        // FIX: ждём инициализации TH
+        let attempts = 0;
+        const waitForInit = setInterval(() => {
+            if (window.TH && window.TH.init) {
+                clearInterval(waitForInit);
+                
+                if (window.TH) {
+                    window.TH.init();
+                    DB.syncSupabaseUser().catch(() => {});
+                }
+                
+                Auth.renderNavUser();
+                Auth.checkFandomAutoAdmin();
+                
+                const navAdmin = document.getElementById("navAdmin");
+                if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) {
+                    navAdmin.classList.remove("hidden");
+                }
+            }
+            attempts++;
+            if (attempts > 30) clearInterval(waitForInit);
+        }, 100);
     });
-</script>
+    </script>
 </body>
 </html>
