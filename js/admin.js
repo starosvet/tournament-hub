@@ -94,15 +94,42 @@
     if (!name) { toast("Введите название турнира"); return; }
     if (!raw.trim()) { toast("Введите список участников"); return; }
 
+    // Расширенные типы для вики-проекта
+    const typeMap = {
+      'персонаж': 'character', 'персонажи': 'character', 'char': 'character',
+      'статья': 'article', 'статьи': 'article', 'article': 'article',
+      'арт': 'art', 'арты': 'art', 'art': 'art', 'изображение': 'art', 'image': 'art',
+      'оружие': 'weapon', 'weapon': 'weapon', 'оружия': 'weapon',
+      'локация': 'location', 'локации': 'location', 'location': 'location',
+      'скин': 'skin', 'скины': 'skin', 'skin': 'skin',
+      'машина': 'vehicle', 'машины': 'vehicle', 'vehicle': 'vehicle',
+      'босс': 'boss', 'боссы': 'boss', 'boss': 'boss',
+      'другое': 'other', 'other': 'other'
+    };
+
     const players = raw.split("\n").map(line => {
       line = line.trim();
       if (!line) return null;
+      
       const parts = line.split("|").map(s => s.trim());
+      const namePart = parts[0] || line;
+      
+      // Проверяем, указан ли тип в начале: [тип] Имя
+      let playerType = 'character';
+      let playerName = namePart;
+      
+      const typeMatch = namePart.match(/^\[(.*?)\]\s*(.+)$/);
+      if (typeMatch) {
+        const detectedType = typeMap[typeMatch[1].toLowerCase()] || 'other';
+        playerType = detectedType;
+        playerName = typeMatch[2];
+      }
+
       return {
-        name: parts[0] || line,
+        name: playerName,
         image_url: parts[1] || "",
-        type: "character",
-        description: ""
+        type: playerType,
+        description: parts[2] || ""
       };
     }).filter(Boolean);
 
