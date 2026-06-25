@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v2 — OAuth callback)
+   Tournament Hub — Supabase Client (FIXED v3 — OAuth callback)
    ============================================================ */
 
 (function () {
@@ -10,7 +10,6 @@
 
   let supabase = null;
   let realtimeChannels = [];
-  let oauthCallbackHandled = false;
 
   /* ==========================================================
      ИНИЦИАЛИЗАЦИЯ
@@ -20,7 +19,7 @@
       console.error('❌ Supabase library not loaded!');
       return false;
     }
-    if (supabase) return true; // уже инициализирован
+    if (supabase) return true;
 
     supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
@@ -73,7 +72,6 @@
     return { error };
   }
 
-  // FIX: Используем getSession вместо getUser — getUser требует свежий токен
   async function getCurrentUser() {
     const { data: { session } } = await getClient().auth.getSession();
     return session?.user || null;
