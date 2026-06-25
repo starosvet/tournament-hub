@@ -57,13 +57,23 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", async function() {
-            Auth.checkFandomAutoAdmin();
-            // FIX: Используем isAdminSync
-            const navAdmin = document.getElementById("navAdmin");
-            if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) {
-                navAdmin.classList.remove("hidden");
-            }
-            Auth.renderNavUser();
+            // 🔧 FIX: Ждём инициализации TH из db.js
+            let attempts = 0;
+            const waitForInit = setInterval(() => {
+                if (window.TH && window.TH.init) {
+                    clearInterval(waitForInit);
+                    
+                    // Показываем админ-ссылку если админ
+                    const navAdmin = document.getElementById("navAdmin");
+                    if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) {
+                        navAdmin.classList.remove("hidden");
+                    }
+                    
+                    Auth.renderNavUser();
+                }
+                attempts++;
+                if (attempts > 30) clearInterval(waitForInit);
+            }, 100);
         });
     </script>
 </body>
