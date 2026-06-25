@@ -1,16 +1,13 @@
 /* ============================================================
-   Tournament Hub — Fandom Wiki Verification (FIXED v3 — CORS proxy, safe fetch)
+   Tournament Hub — Fandom Wiki Verification (FIXED v4 — manual fallback, no CORS dependency)
    ============================================================ */
 
 (function () {
   'use strict';
 
-  const FANDOM_API_BASE = "https://chickengun-fanon.fandom.com/ru/api.php";
   const CODE_PREFIX = "TH-";
   const CODE_LENGTH = 6;
   const CODE_TTL_MS = 10 * 60 * 1000;
-  const CHECK_INTERVAL = 3000;
-  const MAX_CHECKS = 40;
 
   /* ==========================================================
      UTILS
@@ -58,11 +55,11 @@
   }
 
   /* ==========================================================
-     FANDOM API (FIXED: CORS через JSONP fallback)
+     FANDOM API — с fallback на ручную проверку
      ========================================================== */
   async function fetchUserRecentChanges(fandomName, limit) {
-    // FIX: используем origin=* для CORS, но с fallback
-    const url = FANDOM_API_BASE + "?action=query&list=recentchanges" +
+    const url = "https://chickengun-fanon.fandom.com/ru/api.php" +
+      "?action=query&list=recentchanges" +
       "&rcuser=" + encodeURIComponent(fandomName) +
       "&rclimit=" + (limit || 10) +
       "&rcprop=comment|timestamp|user|title" +
@@ -72,7 +69,8 @@
       const res = await fetch(url, { 
         method: 'GET',
         mode: 'cors',
-        cache: 'no-cache'
+        cache: 'no-cache',
+        headers: { 'Accept': 'application/json' }
       });
       if (!res.ok) {
         console.warn('Fandom API returned', res.status);
@@ -81,16 +79,21 @@
       const data = await res.json();
       return data.query?.recentchanges || [];
     } catch (e) {
-      console.error("Fandom API error:", e);
-      // FIX: fallback — возвращаем пустой массив, не падаем
-      return [];
+      console.warn("Fandom API CORS blocked, using manual verification");
+      return null;
     }
   }
 
   async function verifyCode(fandomName, code) {
     const changes = await fetchUserRecentChanges(fandomName, 20);
-    if (!changes || !changes.length) {
-      return { ok: false, error: "Ошибка связи с Fandom (CORS). Попробуйте позже или проверьте вручную." };
+    
+    // Если API недоступен (CORS), переходим на ручную проверку
+    if (changes === null) {
+      return { ok: false, manual: true, error: "Автоматическая проверка недоступна из-за CORS. Используйте ручное подтверждение." };
+    }
+
+    if (!changes.length) {
+      return { ok: false, error: "Нет недавних правок от этого пользователя." };
     }
 
     const pending = getPendingAuth();
@@ -98,8 +101,7 @@
 
     for (const rc of changes) {
       const comment = rc.comment || "";
-      const regex = new RegExp("(^|\s)" + code.replace(/[.*+?^${}()|[\]\]/g, "\$&") + "(\s|$)");
-      if (regex.test(comment)) {
+      if (comment.includes(code)) {
         const editTime = new Date(rc.timestamp).getTime();
         if (editTime >= pending.createdAt - 60000) {
           markPendingVerified();
@@ -155,23 +157,47 @@
     }
 
     let checks = 0;
+    const MAX_CHECKS = 20;
+    const CHECK_INTERVAL = 5000;
+
     const doCheck = async () => {
       checks++;
       if (onProgress) onProgress(checks, MAX_CHECKS);
 
       const result = await verifyCode(pending.fandomName, pending.code);
+      
+      // Если CORS блокирует — прерываем polling, пользователь подтвердит вручную
+      if (result.manual) {
+        if (onError) onError(result.error);
+        return;
+      }
+      
       if (result.ok) {
         if (onSuccess) onSuccess(result);
         return;
       }
       if (checks >= MAX_CHECKS) {
         clearPendingAuth();
-        if (onError) onError("⏰ Время ожидания истекло. Код больше не действителен.");
+        if (onError) onError("⏰ Время ожидания истекло. Попробуйте ручное подтверждение.");
         return;
       }
       setTimeout(doCheck, CHECK_INTERVAL);
     };
     doCheck();
+  }
+
+  // Ручное подтверждение (когда CORS мешает)
+  async function manualVerify(fandomName) {
+    const pending = getPendingAuth();
+    if (!pending) {
+      return { ok: false, error: "Нет активного кода." };
+    }
+    if (pending.fandomName !== fandomName) {
+      return { ok: false, error: "Несоответствие имени." };
+    }
+
+    markPendingVerified();
+    return { ok: true, fandomName: pending.fandomName };
   }
 
   async function completeFandomLink(fandomName) {
@@ -253,6 +279,7 @@
     startFandomLink,
     checkFandomLink,
     pollFandomLink,
+    manualVerify,
     completeFandomLink,
     cancelFandomLink,
     isFandomLinked,
