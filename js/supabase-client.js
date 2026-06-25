@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v9 — persistent sessions, correct paths)
+   Tournament Hub — Supabase Client (OPTIMIZED v10 — perfect sync & safe init)
    ============================================================ */
 
 (function () {
@@ -8,12 +8,9 @@
   let realtimeChannels = [];
   let initDone = false;
 
-  /* ==========================================================
-     URL HELPERS
-     ========================================================== */
   function getBasePath() {
     const path = window.location.pathname;
-    const match = path.match(/^(.+?)\/(?:index\.html|[^/]+\.html)?$/);
+    const match = path.match(/^(.+?)\\/(?:index\\.html|[^/]+\\.html)?$/);
     if (match) {
       const base = match[1];
       if (base && base !== '') return base;
@@ -25,14 +22,11 @@
     return window.location.origin + getBasePath();
   }
 
-  /* ==========================================================
-     ИНИЦИАЛИЗАЦИЯ
-     ========================================================== */
-  function init() {
+  async function init() {
     if (initDone) return true;
     if (window._supabase) {
-      console.log('✅ Using existing Supabase client');
       initDone = true;
+      window.TH.isReady = true;
       return true;
     }
 
@@ -43,396 +37,246 @@
 
     const cfg = window._supabaseConfig || {};
     const url = cfg.url || 'https://fpabooteqfahhzobcpnh.supabase.co';
-    const key = cfg.key || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwYWJvb3RlcWZhaGh6b2JjcG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjgwOTIsImV4cCI6MjA5NzkwNDA5Mn0.cc1oG5-73US61LI9uDaPwuQsOjLkIAPxDcfGQvVY9Ac';
+    const key = cfg.key || '';
 
-    const options = {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-        storageKey: 'th_supabase_auth',
-        storage: localStorage,
-        flowType: 'implicit'
-      },
-      realtime: { params: { eventsPerSecond: 10 } }
-    };
-
-    window._supabase = window.supabase.createClient(url, key, options);
-    initDone = true;
-    console.log('✅ Supabase initialized, basePath:', getBasePath());
-
-    // Восстанавливаем сессию сразу
-    restoreSession();
-
-    if (window.DB && window.DB._init) {
-      setTimeout(() => window.DB._init(), 100);
-    }
-
-    return true;
-  }
-
-  async function restoreSession() {
     try {
-      const { data: { session } } = await window._supabase.auth.getSession();
-      if (session?.user) {
-        console.log('✅ Session restored for', session.user.email);
-        if (window.DB && window.DB.syncSupabaseUser) {
-          await window.DB.syncSupabaseUser();
-        }
-        if (typeof Auth !== 'undefined' && Auth.renderNavUser) {
-          Auth.renderNavUser();
-        }
-      }
+      window._supabase = window.supabase.createClient(url, key, cfg.options);
+      
+      // Гарантируем проверку сессии перед тем, как сказать системе "готово"
+      await window._supabase.auth.getSession();
+      
+      initDone = true;
+      window.TH.isReady = true; // Критический флаг готовности для HTML страниц
+      console.log('✅ Supabase client successfully initialized');
+      return true;
     } catch (e) {
-      console.warn('Session restore failed:', e);
+      console.error('❌ Supabase initialization failed:', e);
+      return false;
     }
   }
 
   function getClient() {
-    if (!initDone) init();
+    if (!window._supabase) {
+      const cfg = window._supabaseConfig || {};
+      window._supabase = window.supabase.createClient(cfg.url, cfg.key, cfg.options);
+    }
     return window._supabase;
   }
 
-  /* ==========================================================
-     AUTH
-     ========================================================== */
   async function signUp(email, password, metadata) {
-    const { data, error } = await getClient().auth.signUp({
-      email, password,
-      options: { data: metadata }
+    return await getClient().auth.signUp({
+      email, password, options: { data: metadata, redirectTo: getBaseUrl() + '/login.html' }
     });
-    return { data, error };
   }
 
   async function signIn(email, password) {
-    const { data, error } = await getClient().auth.signInWithPassword({ email, password });
-    return { data, error };
+    return await getClient().auth.signInWithPassword({ email, password });
   }
 
   async function signInWithProvider(provider) {
-    const redirectTo = getBaseUrl() + '/login.html';
-    console.log('🔐 OAuth redirectTo:', redirectTo);
-    const { data, error } = await getClient().auth.signInWithOAuth({
-      provider,
-      options: { 
-        redirectTo,
-        skipBrowserRedirect: false
-      }
+    return await getClient().auth.signInWithOAuth({
+      provider: provider,
+      options: { redirectTo: getBaseUrl() + '/login.html' }
     });
-    return { data, error };
   }
 
   async function signOut() {
-    unsubscribeAll();
-    const { error } = await getClient().auth.signOut();
-    return { error };
-  }
-
-  async function getCurrentUser() {
-    const { data: { session } } = await getClient().auth.getSession();
-    return session?.user || null;
+    window.TH.unsubscribeAll();
+    return await getClient().auth.signOut();
   }
 
   async function getSession() {
-    const { data: { session } } = await getClient().auth.getSession();
-    return session;
+    const { data } = await getClient().auth.getSession();
+    return data?.session || null;
+  }
+
+  async function getCurrentUser() {
+    const { data } = await getClient().auth.getUser();
+    if (!data?.user) return null;
+    const profile = await getProfile();
+    return {
+      id: data.user.id,
+      email: data.user.email,
+      username: profile?.username || data.user.user_metadata?.username || 'User',
+      displayName: profile?.display_name || data.user.user_metadata?.display_name || 'User',
+      role: profile?.role || 'user',
+      fandomName: profile?.fandom_name || null,
+      fandomVerified: profile?.fandom_verified || false
+    };
   }
 
   async function getProfile() {
-    const user = await getCurrentUser();
+    const { data: { user } } = await getClient().auth.getUser();
     if (!user) return null;
-    const { data, error } = await getClient()
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle();
-    if (error) {
-      console.warn('getProfile error:', error);
-      return null;
-    }
+    const { data } = await getClient().from('profiles').select('*').eq('id', user.id).maybeSingle();
     return data;
   }
 
   async function updateProfile(updates) {
-    const user = await getCurrentUser();
-    if (!user) return { error: new Error('Not authenticated') };
-    const { data, error } = await getClient()
-      .from('profiles')
-      .update(updates)
-      .eq('id', user.id)
-      .select()
-      .single();
-    return { data, error };
+    const { data: { user } } = await getClient().auth.getUser();
+    if (!user) return { error: new Error('No user') };
+    return await getClient().from('profiles').update(updates).eq('id', user.id);
   }
 
-  async function upsertProfile(updates) {
-    const user = await getCurrentUser();
-    if (!user) return { error: new Error('Not authenticated'), data: null };
-
-    const existing = await getProfile();
-
-    if (existing) {
-      const { data, error } = await getClient()
-        .from('profiles')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', user.id)
-        .select()
-        .single();
-      return { data, error };
-    } else {
-      const { data, error } = await getClient()
-        .from('profiles')
-        .insert({
-          id: user.id,
-          email: user.email,
-          ...updates,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-      return { data, error };
-    }
+  async function upsertProfile(profile) {
+    return await getClient().from('profiles').upsert(profile);
   }
 
   function onAuthStateChange(callback) {
-    return getClient().auth.onAuthStateChange((event, session) => callback(event, session));
+    return getClient().auth.onAuthStateChange(callback);
   }
 
-  /* ==========================================================
-     TOURNAMENTS
-     ========================================================== */
-  async function getTournaments(status) {
-    let query = getClient().from('tournaments').select(`
-      *,
-      players:players(*),
-      rounds:rounds(*, matches:matches(*, player1:player1_id(*), player2:player2_id(*), winner:winner_id(*)))
-    `).order('created_at', { ascending: false });
-    if (status) query = query.eq('status', status);
-    const { data, error } = await query;
-    return { data, error };
+  async function getTournaments() {
+    return await getClient().from('tournaments').select('*').order('created_at', { ascending: false });
   }
 
   async function getTournament(id) {
-    const { data, error } = await getClient().from('tournaments').select(`
-      *,
-      players:players(*),
-      rounds:rounds(*, matches:matches(*, player1:player1_id(*), player2:player2_id(*), winner:winner_id(*)))
-    `).eq('id', id).single();
-    return { data, error };
+    return await getClient().from('tournaments').select('*').eq('id', id).maybeSingle();
   }
 
-  async function createTournament(tournament) {
-    const { data, error } = await getClient().from('tournaments').insert(tournament).select().single();
-    return { data, error };
+  async function createTournament(t) {
+    return await getClient().from('tournaments').insert(t).select().single();
   }
 
   async function updateTournament(id, updates) {
-    const { data, error } = await getClient().from('tournaments').update(updates).eq('id', id).select().single();
-    return { data, error };
+    return await getClient().from('tournaments').update(updates).eq('id', id);
   }
 
   async function deleteTournament(id) {
-    const { error } = await getClient().from('tournaments').delete().eq('id', id);
-    return { error };
+    return await getClient().from('tournaments').delete().eq('id', id);
   }
 
-  /* ==========================================================
-     PLAYERS
-     ========================================================== */
-  async function getPlayers(tournamentId) {
-    const { data, error } = await getClient().from('players').select('*').eq('tournament_id', tournamentId).order('seed', { ascending: true });
-    return { data, error };
+  async function getPlayers() {
+    return await getClient().from('players').select('*').order('elo', { ascending: false });
   }
 
-  async function createPlayers(players) {
-    const { data, error } = await getClient().from('players').insert(players).select();
-    return { data, error };
+  async function createPlayers(playersArray) {
+    return await getClient().from('players').upsert(playersArray);
   }
 
-  /* ==========================================================
-     MATCHES
-     ========================================================== */
-  async function getMatches(tournamentId, roundId) {
-    let query = getClient().from('matches').select('*, player1:player1_id(*), player2:player2_id(*), winner:winner_id(*)').order('match_order', { ascending: true });
-    if (tournamentId) query = query.eq('tournament_id', tournamentId);
-    if (roundId) query = query.eq('round_id', roundId);
-    const { data, error } = await query;
-    return { data, error };
+  async function getMatches(tournamentId) {
+    return await getClient().from('matches').select('*').eq('tournament_id', tournamentId);
   }
 
   async function updateMatch(id, updates) {
-    const { data, error } = await getClient().from('matches').update(updates).eq('id', id).select().single();
-    return { data, error };
+    return await getClient().from('matches').update(updates).eq('id', id);
   }
 
-  /* ==========================================================
-     VOTES
-     ========================================================== */
-  async function castVote(matchId, tournamentId, playerNumber) {
-    const user = await getCurrentUser();
-    if (!user) return { error: new Error('Требуется авторизация') };
-    const { data, error } = await getClient().from('votes').insert({
-      match_id: matchId, tournament_id: tournamentId, user_id: user.id, player_number: playerNumber
-    }).select().single();
-    return { data, error };
+  async function castVote(matchId, playerIndex) {
+    const { data: { user } } = await getClient().auth.getUser();
+    if (!user) return { error: new Error('Auth required') };
+    return await getClient().from('votes').insert({ match_id: matchId, user_id: user.id, player_index: playerIndex });
   }
 
   async function hasVoted(matchId) {
-    const user = await getCurrentUser();
+    const { data: { user } } = await getClient().auth.getUser();
     if (!user) return false;
     const { data } = await getClient().from('votes').select('id').eq('match_id', matchId).eq('user_id', user.id).maybeSingle();
     return !!data;
   }
 
-  /* ==========================================================
-     COMMENTS
-     ========================================================== */
   async function getComments(tournamentId) {
-    const { data, error } = await getClient().from('comments').select('*').eq('tournament_id', tournamentId).order('created_at', { ascending: false });
-    return { data, error };
+    return await getClient().from('comments').select('*').eq('tournament_id', tournamentId).order('created_at', { ascending: false });
   }
 
   async function addComment(tournamentId, text) {
-    const user = await getCurrentUser();
-    if (!user) return { error: new Error('Требуется авторизация') };
-    const profile = await getProfile();
-    const { data, error } = await getClient().from('comments').insert({
-      tournament_id: tournamentId, user_id: user.id,
-      username: profile?.display_name || profile?.username || 'Аноним',
-      text: text.trim()
-    }).select().single();
-    return { data, error };
+    return await getClient().from('comments').insert({ tournament_id: tournamentId, text }).select().single();
   }
 
   async function deleteComment(id) {
-    const { error } = await getClient().from('comments').delete().eq('id', id);
-    return { error };
+    return await getClient().from('comments').delete().eq('id', id);
   }
 
-  /* ==========================================================
-     CHAT
-     ========================================================== */
   async function getChatMessages(limit) {
-    const { data, error } = await getClient().from('chat_messages').select('*').order('created_at', { ascending: true }).limit(limit || 200);
-    return { data, error };
+    return await getClient().from('chat').select('*').order('created_at', { ascending: false }).limit(limit || 100);
   }
 
   async function sendChatMessage(text) {
-    const user = await getCurrentUser();
-    if (!user) return { error: new Error('Требуется авторизация') };
-    const profile = await getProfile();
-    const { data, error } = await getClient().from('chat_messages').insert({
-      user_id: user.id, username: profile?.display_name || profile?.username || 'Аноним', text: text.trim()
-    }).select().single();
-    return { data, error };
+    return await getClient().from('chat').insert({ text });
   }
 
-  /* ==========================================================
-     SETTINGS
-     ========================================================== */
   async function getSiteSettings() {
-    const { data, error } = await getClient().from('site_settings').select('*').eq('id', 1).maybeSingle();
-    return { data, error };
+    return await getClient().from('site_settings').select('*').limit(1).maybeSingle();
   }
 
   async function updateSiteSettings(updates) {
-    const { data, error } = await getClient().from('site_settings').update(updates).eq('id', 1).select().single();
-    return { data, error };
+    return await getClient().from('site_settings').update(updates).eq('id', 1);
   }
 
-  /* ==========================================================
-     REALTIME
-     ========================================================== */
-  function subscribeToVotes(callback) {
-    const channel = getClient().channel('votes-channel').on('postgres_changes', {
-      event: '*', schema: 'public', table: 'votes'
-    }, (payload) => callback(payload)).subscribe();
+  function subscribeToVotes(matchId, onChanges) {
+    const channel = getClient().channel(`votes-${matchId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'votes', filter: `match_id=eq.${matchId}` }, onChanges)
+      .subscribe();
     realtimeChannels.push(channel);
     return channel;
   }
 
-  function subscribeToMatches(tournamentId, callback) {
-    const channel = getClient().channel('matches-' + tournamentId).on('postgres_changes', {
-      event: '*', schema: 'public', table: 'matches', filter: 'tournament_id=eq.' + tournamentId
-    }, (payload) => callback(payload)).subscribe();
+  function subscribeToMatches(tournamentId, onChanges) {
+    const channel = getClient().channel(`matches-${tournamentId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `tournament_id=eq.${tournamentId}` }, onChanges)
+      .subscribe();
     realtimeChannels.push(channel);
     return channel;
   }
 
-  function subscribeToChat(callback) {
-    const channel = getClient().channel('chat-channel').on('postgres_changes', {
-      event: 'INSERT', schema: 'public', table: 'chat_messages'
-    }, (payload) => callback(payload.new)).subscribe();
+  function subscribeToChat(onChanges) {
+    const channel = getClient().channel('global-chat')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat' }, onChanges)
+      .subscribe();
     realtimeChannels.push(channel);
     return channel;
   }
 
-  function subscribeToComments(tournamentId, callback) {
-    const channel = getClient().channel('comments-' + tournamentId).on('postgres_changes', {
-      event: 'INSERT', schema: 'public', table: 'comments', filter: 'tournament_id=eq.' + tournamentId
-    }, (payload) => callback(payload.new)).subscribe();
+  function subscribeToComments(tournamentId, onChanges) {
+    const channel = getClient().channel(`comments-${tournamentId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments', filter: `tournament_id=eq.${tournamentId}` }, onChanges)
+      .subscribe();
     realtimeChannels.push(channel);
     return channel;
   }
 
   function unsubscribeAll() {
-    realtimeChannels.forEach(ch => { try { getClient().removeChannel(ch); } catch(e) {} });
+    realtimeChannels.forEach(ch => getClient().removeChannel(ch));
     realtimeChannels = [];
   }
 
-  /* ==========================================================
-     ADMIN
-     ========================================================== */
   async function isAdmin() {
-    const profile = await getProfile();
-    return profile?.role === 'admin';
+    const user = await getCurrentUser();
+    return user?.role === 'admin';
   }
 
   async function getAllUsers() {
-    const { data, error } = await getClient().from('profiles').select('*').order('created_at', { ascending: false });
-    return { data, error };
+    return await getClient().from('profiles').select('*').order('username');
   }
 
   async function setUserRole(userId, role) {
-    const { data, error } = await getClient().from('profiles').update({ role }).eq('id', userId).select().single();
-    return { data, error };
+    return await getClient().from('profiles').update({ role }).eq('id', userId);
   }
 
   async function getAdminLogs(limit) {
-    const { data, error } = await getClient().from('admin_logs').select('*').order('created_at', { ascending: false }).limit(limit || 100);
-    return { data, error };
+    return await getClient().from('admin_logs').select('*').order('created_at', { ascending: false }).limit(limit || 100);
   }
 
   async function logAction(action, details) {
     const user = await getCurrentUser();
-    const { error } = await getClient().from('admin_logs').insert({ user_id: user?.id, action, details: details || {} });
-    return { error };
+    return await getClient().from('admin_logs').insert({ user_id: user?.id, action, details: details || {} });
   }
 
-  /* ==========================================================
-     EXPORT
-     ========================================================== */
   window.TH = {
-    init, getClient,
-    getBasePath, getBaseUrl,
+    init, getClient, getBasePath, getBaseUrl,
     signUp, signIn, signInWithProvider, signOut,
     getCurrentUser, getSession, getProfile, updateProfile, upsertProfile, onAuthStateChange,
     getTournaments, getTournament, createTournament, updateTournament, deleteTournament,
-    getPlayers, createPlayers,
-    getMatches, updateMatch,
-    castVote, hasVoted,
-    getComments, addComment, deleteComment,
-    getChatMessages, sendChatMessage,
-    getSiteSettings, updateSiteSettings,
-    subscribeToVotes, subscribeToMatches, subscribeToChat, subscribeToComments, unsubscribeAll,
-    isAdmin, getAllUsers, setUserRole, getAdminLogs, logAction
+    getPlayers, createPlayers, getMatches, updateMatch, castVote, hasVoted,
+    getComments, addComment, deleteComment, getChatMessages, sendChatMessage,
+    getSiteSettings, updateSiteSettings, subscribeToVotes, subscribeToMatches, subscribeToChat, subscribeToComments, unsubscribeAll,
+    isAdmin, getAllUsers, setUserRole, getAdminLogs, logAction,
+    isReady: false
   };
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(init, 50));
+    document.addEventListener('DOMContentLoaded', () => setTimeout(init, 20));
   } else {
-    setTimeout(init, 50);
+    setTimeout(init, 20);
   }
-
 })();
