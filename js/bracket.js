@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Bracket Controller (FIXED v7 — Supabase First)
+   Tournament Hub — Bracket Controller (FIXED v8 — Swiss Edition)
    ============================================================ */
 (function () {
   'use strict';
@@ -28,26 +28,21 @@
   }
 
   async function vote(matchId, playerNumber) {
-    // Try Supabase first
     if (window.TH && window.TH.castVote) {
-      try {
-        return await window.TH.castVote(matchId, playerNumber);
-      } catch (e) {
-        console.warn('Supabase vote failed, trying local:', e.message);
-      }
+      try { return await window.TH.castVote(matchId, playerNumber); }
+      catch (e) { console.warn('Supabase vote failed:', e.message); }
     }
-
     // Local fallback
     const db = window.DB ? window.DB.getDB() : { tournaments: [] };
-    let targetMatch = null, targetTournament = null;
+    let targetMatch = null;
     for (const t of (db.tournaments || [])) {
       const found = findMatchInTournament(t, matchId);
-      if (found) { targetMatch = found.match; targetTournament = t; break; }
+      if (found) { targetMatch = found.match; break; }
     }
-    if (!targetMatch || !targetTournament) return { success: false, error: "Матч не найден." };
+    if (!targetMatch) return { success: false, error: "Матч не найден." };
     if (targetMatch.finished) return { success: false, error: "Голосование закрыто." };
 
-    const voteKey = `voted_match_${matchId}`;
+    const voteKey = 'th_voted_match_' + matchId;
     if (localStorage.getItem(voteKey)) return { success: false, error: "Вы уже голосовали." };
 
     if (playerNumber === 1) targetMatch.votes1 = (targetMatch.votes1 || 0) + 1;
@@ -59,11 +54,5 @@
     return { success: true, match: targetMatch };
   }
 
-  function finishMatch(matchId) {
-    // This is now handled by admin.js / server
-    console.warn('finishMatch is deprecated — use admin panel to advance rounds');
-    return { success: false, error: "Используйте панель администратора для завершения матчей" };
-  }
-
-  window.Bracket = { getTournamentById, findMatchInTournament, getActiveRound, vote, finishMatch };
+  window.Bracket = { getTournamentById, findMatchInTournament, getActiveRound, vote };
 })();

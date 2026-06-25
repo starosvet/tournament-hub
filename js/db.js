@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Data Bridge Layer (FIXED v11 — Clean Bridge)
+   Tournament Hub — Data Bridge Layer (FIXED v12 — Clean Bridge)
    ============================================================ */
 (function () {
   'use strict';
@@ -9,11 +9,7 @@
   let defaultDB = {
     tournaments: [],
     players: [],
-    settings: {
-      siteName: "Tournament Hub",
-      allowGuestVotes: true,
-      theme: "dark"
-    }
+    settings: { siteName: "Tournament Hub", allowGuestVotes: true, theme: "dark" }
   };
 
   function escapeHTML(text) {
@@ -22,35 +18,22 @@
   }
 
   function getDB() {
-    try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : defaultDB;
-    } catch (e) { return defaultDB; }
+    try { const data = localStorage.getItem(STORAGE_KEY); return data ? JSON.parse(data) : defaultDB; }
+    catch (e) { return defaultDB; }
   }
 
   function saveDB(data) {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { console.error("DB save error:", e); }
   }
 
-  function updateDB(fn) {
-    const db = getDB();
-    fn(db);
-    saveDB(db);
-  }
+  function updateDB(fn) { const db = getDB(); fn(db); saveDB(db); }
 
   async function getCurrentUser() {
-    // Prefer Supabase user
     if (window.TH && window.TH.getCurrentUser) {
-      try {
-        const user = await window.TH.getCurrentUser();
-        if (user) return user;
-      } catch (e) {}
+      try { const user = await window.TH.getCurrentUser(); if (user) return user; } catch (e) {}
     }
-    // Fallback to local
-    try {
-      const localUser = localStorage.getItem(USER_KEY);
-      return localUser ? JSON.parse(localUser) : null;
-    } catch (e) { return null; }
+    try { const localUser = localStorage.getItem(USER_KEY); return localUser ? JSON.parse(localUser) : null; }
+    catch (e) { return null; }
   }
 
   async function setCurrentUser(userObj) {
@@ -82,7 +65,6 @@
     } catch (e) { console.warn("Supabase sync unavailable:", e); }
   }
 
-  // Global toast
   window.toast = function(msg) {
     const el = document.createElement("div");
     el.className = "toast";
@@ -97,10 +79,8 @@
       if (window.TH && typeof window.TH.onAuthStateChange === 'function') {
         clearInterval(bridgeInit);
         window.TH.onAuthStateChange(async (event, session) => {
-          if (session?.user) {
-            const freshUser = await window.TH.getCurrentUser();
-            await setCurrentUser(freshUser);
-          } else await setCurrentUser(null);
+          if (session?.user) { const freshUser = await window.TH.getCurrentUser(); await setCurrentUser(freshUser); }
+          else await setCurrentUser(null);
           if (window.Auth && typeof window.Auth.renderNavUser === 'function') window.Auth.renderNavUser();
         });
         await syncWithSupabase();
@@ -111,8 +91,5 @@
     }, 50);
   });
 
-  window.DB = {
-    getDB, saveDB, updateDB, getCurrentUser, setCurrentUser,
-    clearAllLocalData, syncWithSupabase, escapeHTML
-  };
+  window.DB = { getDB, saveDB, updateDB, getCurrentUser, setCurrentUser, clearAllLocalData, syncWithSupabase, escapeHTML };
 })();

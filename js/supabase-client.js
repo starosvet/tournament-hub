@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v12 — Shikimori Edition)
+   Tournament Hub — Supabase Client (FIXED v13 — Swiss Edition)
    ============================================================ */
 (function () {
   'use strict';
@@ -61,8 +61,7 @@
     if (!user) return null;
     const { data: profile } = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
     return {
-      id: user.id,
-      email: user.email,
+      id: user.id, email: user.email,
       username: profile?.username || user.user_metadata?.username || 'User',
       displayName: profile?.display_name || user.user_metadata?.display_name || 'User',
       role: profile?.role || user.user_metadata?.role || 'user',
@@ -86,7 +85,7 @@
     return client.auth.onAuthStateChange(async (event, session) => { await callback(event, session); });
   }
 
-  // ========== TOURNAMENTS (with full nested data) ==========
+  // ========== TOURNAMENTS (Swiss system) ==========
   async function getTournaments() {
     const client = getClient();
     return await client.from('tournaments').select('*').order('created_at', { ascending: false });
@@ -94,66 +93,68 @@
 
   async function getTournament(id) {
     const client = getClient();
-    // Fetch tournament with all related data
-    const { data: tournament, error: tError } = await client
-      .from('tournaments')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-
+    const { data: tournament, error: tError } = await client.from('tournaments').select('*').eq('id', id).maybeSingle();
     if (tError || !tournament) return { data: null, error: tError };
 
-    // Fetch rounds
-    const { data: rounds } = await client
-      .from('rounds')
-      .select('*')
-      .eq('tournament_id', id)
-      .order('round_number', { ascending: true });
+    const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', id);
+    const { data: rounds } = await client.from('rounds').select('*').eq('tournament_id', id).order('round_number', { ascending: true });
+    const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', id);
+    const { data: allVotes } = await client.from('votes').select('*').eq('tournament_id', id);
 
-    // Fetch all matches for this tournament
-    const { data: allMatches } = await client
-      .from('matches')
-      .select('*')
-      .eq('tournament_id', id);
-
-    // Fetch all players for this tournament
-    const { data: allPlayers } = await client
-      .from('players')
-      .select('*')
-      .eq('tournament_id', id);
-
-    // Build nested structure
     const playerMap = {};
     (allPlayers || []).forEach(p => { playerMap[p.id] = p; });
+
+    // Calculate scores for Swiss system
+    const playerScores = {};
+    (allPlayers || []).forEach(p => { playerScores[p.id] = { wins: 0, losses: 0, points: 0 }; });
+    (allMatches || []).forEach(m => {
+      if (m.finished && m.winner_id) {
+        if (!playerScores[m.winner_id]) playerScores[m.winner_id] = { wins: 0, losses: 0, points: 0 };
+        playerScores[m.winner_id].wins++;
+        playerScores[m.winner_id].points += 1;
+        const loserId = m.winner_id === m.player1_id ? m.player2_id : m.player1_id;
+        if (loserId) {
+          if (!playerScores[loserId]) playerScores[loserId] = { wins: 0, losses: 0, points: 0 };
+          playerScores[loserId].losses++;
+        }
+      }
+    });
+
+    tournament.players = (allPlayers || []).map(p => ({
+      ...p,
+      score: playerScores[p.id] || { wins: 0, losses: 0, points: 0 }
+    })).sort((a, b) => (b.score?.points || 0) - (a.score?.points || 0));
 
     tournament.rounds = (rounds || []).map(r => {
       const roundMatches = (allMatches || []).filter(m => m.round_id === r.id);
       return {
-        ...r,
-        isActive: r.is_active,
-        startedAt: r.started_at,
+        ...r, isActive: r.is_active, startedAt: r.started_at,
         matches: roundMatches.map(m => ({
           ...m,
           player1: m.player1_id ? playerMap[m.player1_id] : null,
           player2: m.player2_id ? playerMap[m.player2_id] : null,
           winner: m.winner_id ? playerMap[m.winner_id] : null,
-          votes1: m.votes1 || 0,
-          votes2: m.votes2 || 0,
+          votes1: m.votes1 || 0, votes2: m.votes2 || 0,
           finished: m.finished || false
         }))
       };
     });
 
-    tournament.players = allPlayers || [];
     tournament.currentRound = tournament.current_round || 0;
+    tournament.totalRounds = tournament.total_rounds || 10;
+    tournament.standings = tournament.players;
 
     return { data: tournament, error: null };
   }
 
   async function createTournament(tournamentData) {
     const client = getClient();
-    const { title, description, status } = tournamentData || {};
-    return await client.from('tournaments').insert({ title, description, status }).select().single();
+    const { title, description, status, total_rounds } = tournamentData || {};
+    return await client.from('tournaments').insert({ 
+      title, description, status, 
+      total_rounds: total_rounds || 10,
+      current_round: 0 
+    }).select().single();
   }
 
   async function updateTournament(id, updates) {
@@ -163,11 +164,10 @@
 
   async function deleteTournament(id) {
     const client = getClient();
-    // Delete in correct order: matches -> rounds -> players -> tournament
+    await client.from('votes').delete().eq('tournament_id', id);
     await client.from('matches').delete().eq('tournament_id', id);
     await client.from('rounds').delete().eq('tournament_id', id);
     await client.from('players').delete().eq('tournament_id', id);
-    await client.from('votes').delete().eq('tournament_id', id);
     await client.from('comments').delete().eq('tournament_id', id);
     return await client.from('tournaments').delete().eq('id', id);
   }
@@ -194,31 +194,31 @@
     return await client.from('matches').update(updates).eq('id', id).select().single();
   }
 
-  // ========== VOTING ==========
+  // ========== VOTING (NO is_guest!) ==========
   async function castVote(matchId, playerIndex) {
     const client = getClient();
     const user = await getCurrentUser();
+    const votedKey = user ? null : 'th_voted_match_' + matchId;
 
     // Check if already voted
     if (user) {
       const { data: existing } = await client.from('votes')
-        .select('id')
-        .eq('match_id', matchId)
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .select('id').eq('match_id', matchId).eq('user_id', user.id).maybeSingle();
       if (existing) throw new Error("Вы уже голосовали в этом матче!");
     } else {
-      // For guests, check localStorage
-      const voted = JSON.parse(localStorage.getItem('th_voted_matches') || '[]');
-      if (voted.includes(matchId)) throw new Error("Вы уже голосовали!");
+      if (localStorage.getItem(votedKey)) throw new Error("Вы уже голосовали!");
     }
+
+    // Get tournament_id from match
+    const { data: matchData } = await client.from('matches').select('tournament_id').eq('id', matchId).single();
+    const tournamentId = matchData?.tournament_id;
 
     // Insert vote
     const { error } = await client.from('votes').insert({
       match_id: matchId,
+      tournament_id: tournamentId,
       user_id: user ? user.id : null,
-      player_index: playerIndex,
-      is_guest: !user
+      player_index: playerIndex
     });
 
     if (error) throw error;
@@ -230,12 +230,8 @@
       : { votes2: (match.votes2 || 0) + 1 };
     await client.from('matches').update(updates).eq('id', matchId);
 
-    // Mark as voted locally
-    if (!user) {
-      const voted = JSON.parse(localStorage.getItem('th_voted_matches') || '[]');
-      voted.push(matchId);
-      localStorage.setItem('th_voted_matches', JSON.stringify(voted));
-    }
+    // Mark locally for guests
+    if (!user && votedKey) localStorage.setItem(votedKey, 'true');
 
     return { success: true };
   }
@@ -243,35 +239,24 @@
   async function hasVoted(matchId) {
     const client = getClient();
     const user = await getCurrentUser();
-    if (!user) {
-      const voted = JSON.parse(localStorage.getItem('th_voted_matches') || '[]');
-      return voted.includes(matchId);
-    }
+    if (!user) return !!localStorage.getItem('th_voted_match_' + matchId);
     const { data } = await client.from('votes')
-      .select('id')
-      .eq('match_id', matchId)
-      .eq('user_id', user.id)
-      .maybeSingle();
+      .select('id').eq('match_id', matchId).eq('user_id', user.id).maybeSingle();
     return !!data;
   }
 
   // ========== COMMENTS ==========
   async function getComments(tournamentId) {
     const client = getClient();
-    return await client.from('comments')
-      .select('*')
-      .eq('tournament_id', tournamentId)
-      .order('created_at', { ascending: false });
+    return await client.from('comments').select('*').eq('tournament_id', tournamentId).order('created_at', { ascending: false });
   }
 
   async function addComment(tournamentId, text) {
     const client = getClient();
     const user = await getCurrentUser();
     return await client.from('comments').insert({
-      tournament_id: tournamentId,
-      user_id: user?.id || null,
-      author_name: user?.displayName || user?.username || 'Гость',
-      text: text
+      tournament_id: tournamentId, user_id: user?.id || null,
+      author_name: user?.displayName || user?.username || 'Гость', text
     }).select().single();
   }
 
@@ -283,10 +268,7 @@
   // ========== CHAT ==========
   async function getChatMessages(limit) {
     const client = getClient();
-    return await client.from('chat_messages')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit || 100);
+    return await client.from('chat_messages').select('*').order('created_at', { ascending: false }).limit(limit || 100);
   }
 
   async function sendChatMessage(text) {
@@ -294,8 +276,7 @@
     const user = await getCurrentUser();
     return await client.from('chat_messages').insert({
       user_id: user?.id || null,
-      author_name: user?.displayName || user?.username || 'Аноним',
-      text: text
+      author_name: user?.displayName || user?.username || 'Аноним', text
     });
   }
 
@@ -322,20 +303,13 @@
 
   async function getAdminLogs(limit) {
     const client = getClient();
-    return await client.from('admin_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit || 100);
+    return await client.from('admin_logs').select('*').order('created_at', { ascending: false }).limit(limit || 100);
   }
 
   async function logAction(action, details) {
     const client = getClient();
     const user = await getCurrentUser();
-    return await client.from('admin_logs').insert({
-      user_id: user?.id || null,
-      action,
-      details: details || {}
-    });
+    return await client.from('admin_logs').insert({ user_id: user?.id || null, action, details: details || {} });
   }
 
   async function getSiteStats() {
@@ -352,7 +326,7 @@
   function subscribeToChat(callback) {
     const client = getClient();
     const channel = client.channel('public-chat')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, payload => { callback(payload.new); })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, payload => callback(payload.new))
       .subscribe();
     realtimeChannels.push(channel);
     return channel;
@@ -361,7 +335,7 @@
   function subscribeToMatches(tournamentId, callback) {
     const client = getClient();
     const channel = client.channel('matches-' + tournamentId)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: 'tournament_id=eq.' + tournamentId }, payload => { callback(payload.new); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: 'tournament_id=eq.' + tournamentId }, payload => callback(payload.new))
       .subscribe();
     realtimeChannels.push(channel);
     return channel;
@@ -378,6 +352,12 @@
     return user?.role === 'admin' || localStorage.getItem('th_admin') === 'yes';
   }
 
+  // ========== SWISS SYSTEM HELPERS ==========
+  async function getStandings(tournamentId) {
+    const { data: tournament } = await getTournament(tournamentId);
+    return tournament?.standings || [];
+  }
+
   window.TH = {
     init, getClient, isReady: false,
     signUp, signIn, signInWithProvider, signOut, getSession, getCurrentUser, updateProfile, onAuthStateChange,
@@ -386,7 +366,8 @@
     castVote, hasVoted, getComments, addComment, deleteComment,
     getChatMessages, sendChatMessage, getSiteSettings, updateSiteSettings, getSiteStats,
     subscribeToChat, subscribeToMatches, unsubscribeAll,
-    isAdmin, getAllUsers, setUserRole, getAdminLogs, logAction
+    isAdmin, getAllUsers, setUserRole, getAdminLogs, logAction,
+    getStandings
   };
 
   if (document.readyState === 'loading') {

@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Bracket Renderer (FIXED v6 — Shikimori Edition)
+   Tournament Hub Bracket Renderer (v7 — TRUE Shikimori Swiss Edition)
    ============================================================ */
 (function () {
   'use strict';
@@ -7,8 +7,6 @@
   function getUrlParam(name) { return new URLSearchParams(window.location.search).get(name); }
 
   let realtimeSubscribed = false;
-  let previousVotes = new Map();
-  const MAX_VOTES_CACHE = 100;
   let currentTournamentId = null;
   let isRendering = false;
 
@@ -18,9 +16,8 @@
         const { data, error } = await window.TH.getTournament(tournamentId);
         if (error) throw error;
         if (data) return data;
-      } catch (e) { console.warn('Supabase tournament load failed:', e); }
+      } catch (e) { console.warn('Supabase load failed:', e); }
     }
-    // Fallback to local
     const db = window.DB ? window.DB.getDB() : { tournaments: [] };
     return (db.tournaments || []).find(t => t.id === tournamentId) || null;
   }
@@ -30,9 +27,10 @@
     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
+  // ========== SHIKIMORI-STYLE MATCH CARD ==========
   async function renderMatch(match, isRoundActive, tournamentStatus) {
-    const p1 = match.player1 || { name: "???", image_url: '' };
-    const p2 = match.player2 || { name: "???", image_url: '' };
+    const p1 = match.player1 || { name: "???", image_url: '', score: { points: 0 } };
+    const p2 = match.player2 || { name: "???", image_url: '', score: { points: 0 } };
     const votes1 = match.votes1 || 0;
     const votes2 = match.votes2 || 0;
     const total = votes1 + votes2;
@@ -43,77 +41,128 @@
     const p1Win = isFinished && wId && p1.id === wId;
     const p2Win = isFinished && wId && p2.id === wId;
 
-    // Check if user can vote
     let canVote = false;
-    let voteReason = '';
     if (isRoundActive && !isFinished && tournamentStatus === 'active') {
       if (window.TH && window.TH.hasVoted) {
-        try {
-          const hasVoted = await window.TH.hasVoted(match.id);
-          canVote = !hasVoted;
-          if (hasVoted) voteReason = 'Вы уже голосовали';
-        } catch (e) { canVote = true; }
+        try { canVote = !(await window.TH.hasVoted(match.id)); } catch (e) { canVote = true; }
       } else {
-        const voted = JSON.parse(localStorage.getItem('th_voted_matches') || '[]');
-        canVote = !voted.includes(match.id);
-        if (!canVote) voteReason = 'Вы уже голосовали';
+        canVote = !localStorage.getItem('th_voted_match_' + match.id);
       }
     }
 
-    // Shikimori-style: big cards, clear VS, click to vote
     const p1Image = p1.image_url || p1.image || '';
     const p2Image = p2.image_url || p2.image || '';
-    const p1Class = p1Win ? 'winner' : (isFinished ? 'loser' : '');
-    const p2Class = p2Win ? 'winner' : (isFinished ? 'loser' : '');
-    const p1Opacity = isFinished && !p1Win ? 'style="opacity:0.5"' : '';
-    const p2Opacity = isFinished && !p2Win ? 'style="opacity:0.5"' : '';
 
-    const voteBtn1 = canVote ? `onclick="RenderBracket.castVote('${match.id}', 1, this)"` : '';
-    const voteBtn2 = canVote ? `onclick="RenderBracket.castVote('${match.id}', 2, this)"` : '';
-    const cursor1 = canVote ? 'pointer' : 'default';
-    const cursor2 = canVote ? 'pointer' : 'default';
-
+    // Shikimori: big image left, big image right, VS center, vote buttons below
     return `
-      <div class="bracket-match ${isFinished ? 'done' : ''} ${canVote ? 'can-vote' : ''}" id="match-${match.id}">
-        <div class="match-players">
-          <div class="player-card ${p1Class}" ${p1Opacity} ${voteBtn1} style="cursor:${cursor1}">
-            <div class="player-image-wrap">
-              ${p1Image ? `<img src="${escapeHTML(p1Image)}" alt="${escapeHTML(p1.name)}" onerror="this.style.display='none';this.parentElement.classList.add('no-image')">` : '<div class="no-image">👤</div>'}
+      <div class="shiki-match ${isFinished ? 'finished' : ''} ${canVote ? 'can-vote' : ''}" id="match-${match.id}">
+        <div class="shiki-match-inner">
+          <!-- Player 1 -->
+          <div class="shiki-player ${p1Win ? 'winner' : ''} ${!p1Win && isFinished ? 'loser' : ''}" 
+               ${canVote ? `onclick="RenderBracket.castVote('${match.id}', 1, this)"` : ''}
+               style="cursor:${canVote ? 'pointer' : 'default'}">
+            <div class="shiki-player-img">
+              ${p1Image ? `<img src="${escapeHTML(p1Image)}" alt="" onerror="this.style.display='none';this.parentElement.classList.add('no-img')">` : ''}
+              <div class="shiki-player-overlay"></div>
             </div>
-            <div class="player-info">
-              <div class="player-name">${escapeHTML(p1.name)}</div>
-              <div class="player-votes">${votes1} голосов</div>
+            <div class="shiki-player-info">
+              <div class="shiki-player-name">${escapeHTML(p1.name)}</div>
+              <div class="shiki-player-stats">
+                <span class="shiki-points">${p1.score?.points || 0} очков</span>
+                <span class="shiki-wl">${p1.score?.wins || 0}W / ${p1.score?.losses || 0}L</span>
+              </div>
             </div>
-            <div class="vote-bar" style="width:${pct1}%"></div>
-            ${p1Win ? '<div class="winner-badge">🏆</div>' : ''}
+            ${p1Win ? '<div class="shiki-crown">👑</div>' : ''}
           </div>
 
-          <div class="vs-divider">
-            <span class="vs-text">VS</span>
-            <div class="vs-score">${votes1} : ${votes2}</div>
+          <!-- Center VS + Votes -->
+          <div class="shiki-center">
+            <div class="shiki-vs">VS</div>
+            <div class="shiki-vote-count">${votes1} — ${votes2}</div>
+            <div class="shiki-vote-bar">
+              <div class="shiki-bar-left" style="width:${pct1}%"></div>
+              <div class="shiki-bar-right" style="width:${pct2}%"></div>
+            </div>
+            ${canVote ? '<div class="shiki-vote-hint">👆 Выбери победителя</div>' : ''}
+            ${!canVote && !isFinished ? '<div class="shiki-voted-mark">✓ Проголосовано</div>' : ''}
           </div>
 
-          <div class="player-card ${p2Class}" ${p2Opacity} ${voteBtn2} style="cursor:${cursor2}">
-            <div class="player-image-wrap">
-              ${p2Image ? `<img src="${escapeHTML(p2Image)}" alt="${escapeHTML(p2.name)}" onerror="this.style.display='none';this.parentElement.classList.add('no-image')">` : '<div class="no-image">👤</div>'}
+          <!-- Player 2 -->
+          <div class="shiki-player ${p2Win ? 'winner' : ''} ${!p2Win && isFinished ? 'loser' : ''}" 
+               ${canVote ? `onclick="RenderBracket.castVote('${match.id}', 2, this)"` : ''}
+               style="cursor:${canVote ? 'pointer' : 'default'}">
+            <div class="shiki-player-img">
+              ${p2Image ? `<img src="${escapeHTML(p2Image)}" alt="" onerror="this.style.display='none';this.parentElement.classList.add('no-img')">` : ''}
+              <div class="shiki-player-overlay"></div>
             </div>
-            <div class="player-info">
-              <div class="player-name">${escapeHTML(p2.name)}</div>
-              <div class="player-votes">${votes2} голосов</div>
+            <div class="shiki-player-info">
+              <div class="shiki-player-name">${escapeHTML(p2.name)}</div>
+              <div class="shiki-player-stats">
+                <span class="shiki-points">${p2.score?.points || 0} очков</span>
+                <span class="shiki-wl">${p2.score?.wins || 0}W / ${p2.score?.losses || 0}L</span>
+              </div>
             </div>
-            <div class="vote-bar" style="width:${pct2}%"></div>
-            ${p2Win ? '<div class="winner-badge">🏆</div>' : ''}
+            ${p2Win ? '<div class="shiki-crown">👑</div>' : ''}
           </div>
         </div>
-        ${!isFinished && !canVote && voteReason ? `<div class="vote-hint">${voteReason}</div>` : ''}
-        ${canVote ? '<div class="vote-hint active">👆 Нажмите на участника, чтобы проголосовать</div>' : ''}
+      </div>`;
+  }
+
+  // ========== STANDINGS TABLE (Swiss system) ==========
+  function renderStandings(players) {
+    if (!players || !players.length) return '';
+    return `
+      <div class="shiki-standings">
+        <h3 class="shiki-section-title">📊 Турнирная таблица</h3>
+        <table class="shiki-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Участник</th>
+              <th>Очки</th>
+              <th>W</th>
+              <th>L</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${players.map((p, i) => `
+              <tr class="${i < 3 ? 'top-' + (i+1) : ''}">
+                <td class="shiki-rank">${i + 1}</td>
+                <td class="shiki-name">
+                  <div class="shiki-avatar-small">
+                    ${p.image_url || p.image ? `<img src="${escapeHTML(p.image_url || p.image)}" onerror="this.style.display='none'">` : '👤'}
+                  </div>
+                  ${escapeHTML(p.name)}
+                </td>
+                <td class="shiki-pts">${p.score?.points || 0}</td>
+                <td class="shiki-w">${p.score?.wins || 0}</td>
+                <td class="shiki-l">${p.score?.losses || 0}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  // ========== ROUND HEADER ==========
+  function renderRoundHeader(round, idx, totalRounds, tournament) {
+    const isActive = idx === (tournament.current_round || tournament.currentRound || 0) && tournament.status === 'active';
+    const isCurrent = idx === (tournament.current_round || tournament.currentRound || 0);
+    const dateStr = round.startedAt ? new Date(round.startedAt).toLocaleDateString('ru-RU') : '';
+
+    return `
+      <div class="shiki-round-header ${isActive ? 'active' : ''} ${isCurrent ? 'current' : ''}">
+        <div class="shiki-round-num">Раунд ${idx + 1} / ${totalRounds}</div>
+        <div class="shiki-round-name">${escapeHTML(round.name || `Раунд ${idx + 1}`)}</div>
+        ${dateStr ? `<div class="shiki-round-date">${dateStr}</div>` : ''}
+        ${isActive ? '<div class="shiki-round-status">🔥 Активен</div>' : ''}
+        ${!isActive && isCurrent && tournament.status !== 'active' ? '<div class="shiki-round-status wait">⏳ Ожидает</div>' : ''}
       </div>`;
   }
 
   async function castVote(matchId, playerIndex, el) {
-    // Visual feedback immediately
     if (el) {
-      el.style.transform = 'scale(0.95)';
+      el.style.transform = 'scale(0.97)';
       setTimeout(() => el.style.transform = '', 150);
     }
 
@@ -124,7 +173,6 @@
       } else {
         // Local fallback
         const db = window.DB ? window.DB.getDB() : { tournaments: [] };
-        let found = false;
         for (const t of (db.tournaments || [])) {
           if (t.rounds) {
             for (const r of t.rounds) {
@@ -132,45 +180,23 @@
               if (m) {
                 if (playerIndex === 1) m.votes1 = (m.votes1 || 0) + 1;
                 else m.votes2 = (m.votes2 || 0) + 1;
-                found = true;
+                if (window.DB) window.DB.saveDB(db);
                 break;
               }
             }
           }
-          if (found) break;
         }
-        if (found && window.DB) window.DB.saveDB(db);
-        const voted = JSON.parse(localStorage.getItem('th_voted_matches') || '[]');
-        if (!voted.includes(matchId)) { voted.push(matchId); localStorage.setItem('th_voted_matches', JSON.stringify(voted)); }
+        localStorage.setItem('th_voted_match_' + matchId, 'true');
         toast('✅ Голос засчитан (локально)');
       }
 
-      // Re-render
       if (currentTournamentId) {
         const container = document.getElementById("bracket-container");
         if (container) await renderBracket(currentTournamentId, container);
       }
     } catch (e) {
       toast('❌ ' + (e.message || 'Ошибка голосования'));
-      console.error('Vote error:', e);
     }
-  }
-
-  function animateVote(matchId, votes1, votes2) {
-    const key = matchId;
-    const prev = previousVotes.get(key);
-    if (prev && (prev.votes1 !== votes1 || prev.votes2 !== votes2)) {
-      const el = document.getElementById(`match-${matchId}`);
-      if (el) { 
-        el.classList.add("vote-just-cast"); 
-        setTimeout(() => el.classList.remove("vote-just-cast"), 400); 
-      }
-    }
-    if (previousVotes.size > MAX_VOTES_CACHE) { 
-      const firstKey = previousVotes.keys().next().value; 
-      previousVotes.delete(firstKey); 
-    }
-    previousVotes.set(key, { votes1, votes2 });
   }
 
   function subscribeToTournamentUpdates(tournamentId, container) {
@@ -189,78 +215,94 @@
     if (!container) { isRendering = false; return; }
 
     let tournament = null;
-    if (typeof tournamentOrId === "string") { 
+    if (typeof tournamentOrId === "string") {
       currentTournamentId = tournamentOrId;
-      tournament = await loadTournament(tournamentOrId); 
-      subscribeToTournamentUpdates(tournamentOrId, container); 
-    } else { 
+      tournament = await loadTournament(tournamentOrId);
+      subscribeToTournamentUpdates(tournamentOrId, container);
+    } else {
       tournament = tournamentOrId;
       currentTournamentId = tournament.id;
     }
 
-    if (!tournament) { 
-      container.innerHTML = `<div class="empty-state"><h3>Турнир не найден</h3><p>Проверьте ID в URL</p></div>`; 
+    if (!tournament) {
+      container.innerHTML = `<div class="empty-state"><h3>Турнир не найден</h3><p>Проверьте ID в URL</p></div>`;
       isRendering = false;
-      return; 
+      return;
     }
 
-    // Update header
+    // Header
     const header = document.getElementById('bracket-header');
     if (header) header.innerHTML = `<h1>🏆 ${escapeHTML(tournament.title || 'Турнир')}</h1>`;
 
     const sub = document.getElementById('bracket-sub');
     if (sub) {
       const statusMap = { draft: 'Черновик', active: 'Активен', finished: 'Завершён', archived: 'Архивирован' };
-      sub.textContent = tournament.description || `Статус: ${statusMap[tournament.status] || tournament.status}`;
+      const participants = tournament.players?.length || 0;
+      const rounds = tournament.total_rounds || tournament.totalRounds || 10;
+      sub.innerHTML = `<span class="shiki-status-badge ${tournament.status}">${statusMap[tournament.status] || tournament.status}</span> 
+                       <span class="shiki-meta">${participants} участников · ${rounds} раундов · Швейцарская система</span>`;
     }
 
-    const activeRound = tournament.current_round || tournament.currentRound || 0;
     const rounds = tournament.rounds || [];
+    const totalRounds = tournament.total_rounds || tournament.totalRounds || rounds.length || 10;
+    const activeRound = tournament.current_round || tournament.currentRound || 0;
 
     if (!rounds.length) {
-      container.innerHTML = `<div class="empty-state"><h3>Сетка ещё не создана</h3><p>Администратор должен запустить турнир</p></div>`;
+      container.innerHTML = `<div class="empty-state"><h3>Турнир ещё не запущен</h3><p>Администратор должен запустить первый раунд</p></div>`;
       isRendering = false;
       return;
     }
 
-    let html = '';
+    // Build rounds HTML
+    let roundsHtml = '';
     for (let idx = 0; idx < rounds.length; idx++) {
       const round = rounds[idx];
-      const isActive = idx === activeRound && tournament.status === "active";
-      const isPast = idx < activeRound || tournament.status === "finished";
-      const isFuture = idx > activeRound && tournament.status === "active";
-      const roundTitle = round.name || `Раунд ${idx + 1}`;
+      const isActive = idx === activeRound && tournament.status === 'active';
 
       const matchesHtml = [];
       for (const m of (round.matches || [])) {
-        animateVote(m.id, m.votes1 || 0, m.votes2 || 0);
         matchesHtml.push(await renderMatch(m, isActive, tournament.status));
       }
 
-      html += `
-        <section class="round-col ${isActive ? "active" : ""} ${isPast ? "past" : ""} ${isFuture ? "future" : ""}">
-          <h2 class="round-title">${escapeHTML(roundTitle)}</h2>
-          <div class="round-matches">${matchesHtml.join("") || "<p style='color:var(--text-3);text-align:center;padding:20px;'>Нет матчей</p>"}</div>
-        </section>`;
+      roundsHtml += `
+        <div class="shiki-round ${isActive ? 'active' : ''} ${idx < activeRound ? 'past' : ''} ${idx > activeRound ? 'future' : ''}">
+          ${renderRoundHeader(round, idx, totalRounds, tournament)}
+          <div class="shiki-matches">
+            ${matchesHtml.join('') || '<p class="shiki-no-matches">Нет матчей в этом раунде</p>'}
+          </div>
+        </div>`;
     }
 
-    let footer = "";
-    if (tournament.status === "finished" && tournament.winner) {
+    // Standings (Swiss system)
+    const standingsHtml = renderStandings(tournament.standings || tournament.players || []);
+
+    // Champion (if finished)
+    let championHtml = '';
+    if (tournament.status === 'finished' && tournament.winner) {
       const w = tournament.winner;
       const wImage = w.image_url || w.image || '';
-      footer = `
-        <section class="champion-card">
-          <h2>🏆 Чемпион</h2>
-          <span class="champion-crown">👑</span>
-          <div class="champion-avatar">
-            ${wImage ? `<img src="${escapeHTML(wImage)}" alt="${escapeHTML(w.name || '')}" onerror="this.style.display='none'">` : '<div style="font-size:4em">🏆</div>'}
+      championHtml = `
+        <div class="shiki-champion">
+          <div class="shiki-champion-title">🏆 Победитель турнира</div>
+          <div class="shiki-champion-card">
+            <div class="shiki-champion-img">
+              ${wImage ? `<img src="${escapeHTML(wImage)}" onerror="this.style.display='none'">` : '<div class="no-img">🏆</div>'}
+            </div>
+            <div class="shiki-champion-name">${escapeHTML(w.name || w.title || 'Победитель')}</div>
+            <div class="shiki-champion-score">${w.score?.points || 0} очков · ${w.score?.wins || 0} побед</div>
           </div>
-          <p class="champ-name">${escapeHTML(w.name || w.title || "Победитель")}</p>
-          <p class="champ-wins">Победитель турнира!</p>
-        </section>`;
+        </div>`;
     }
 
-    container.innerHTML = `<div class="bracket-grid">${html}</div>${footer}`;
+    container.innerHTML = `
+      <div class="shiki-container">
+        ${standingsHtml}
+        <div class="shiki-rounds">
+          ${roundsHtml}
+        </div>
+        ${championHtml}
+      </div>`;
+
     isRendering = false;
   }
 
