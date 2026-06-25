@@ -52,7 +52,96 @@
     </footer>
 
 <script>
-    document.addEventListener("DOMContentLoaded", async function() {
+    function escapeHTML(text) {
+        if (!text) return "";
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    async function loadHistory() {
+        try {
+            // FIX: проверяем window.TH перед вызовом
+            if (!window.TH) {
+                document.getElementById("history-stats").innerHTML = `<p style="color:var(--red);">Ошибка: Supabase не загружен</p>`;
+                return;
+            }
+
+            const { data: tournaments } = await window.TH.getTournaments();
+            const { data: users } = await window.TH.getAllUsers();
+
+            let totalMatches = 0;
+            let totalVotes = 0;
+            const allMatches = [];
+
+            (tournaments || []).forEach(t => {
+                (t.rounds || []).forEach((r, ri) => {
+                    (r.matches || []).forEach(m => {
+                        totalMatches++;
+                        totalVotes += (m.votes1 || 0) + (m.votes2 || 0);
+                        if (m.finished) {
+                            allMatches.push({
+                                ...m,
+                                tournamentName: t.title || "Без названия",
+                                roundName: r.name || "Раунд " + (ri + 1)
+                            });
+                        }
+                    });
+                });
+            });
+
+            const finished = (tournaments || []).filter(t => t.status === "finished");
+
+            document.getElementById("history-stats").innerHTML = `
+                <div style="display:flex;gap:20px;flex-wrap:wrap;">
+                    <div class="stat-badge">🏆 Завершено турниров: ${finished.length}</div>
+                    <div class="stat-badge">⚔️ Матчей сыграно: ${allMatches.length}</div>
+                    <div class="stat-badge">🗳️ Всего голосов: ${totalVotes}</div>
+                    <div class="stat-badge">👥 Пользователей: ${(users || []).length}</div>
+                </div>
+            `;
+
+            // Завершённые турниры
+            const ftContainer = document.getElementById("finished-tournaments");
+            if (!finished.length) {
+                ftContainer.innerHTML = `<p style="color:var(--text-3);">Пока нет завершённых турниров</p>`;
+            } else {
+                ftContainer.innerHTML = finished.map(t => `
+                    <div class="tournament-item" onclick="location.href='bracket.html?id=${encodeURIComponent(t.id)}'" style="cursor:pointer;">
+                        <span class="ti-status completed"></span>
+                        <div class="ti-info">
+                            <h4>${escapeHTML(t.title || "Без названия")}</h4>
+                            <span>${new Date(t.created_at).toLocaleDateString("ru-RU")} — Победитель: ${escapeHTML(t.winner?.name || "?")}</span>
+                        </div>
+                    </div>
+                `).join("");
+            }
+
+            // История матчей
+            const mhContainer = document.getElementById("match-history");
+            if (!allMatches.length) {
+                mhContainer.innerHTML = `<p style="color:var(--text-3);">Пока нет завершённых матчей</p>`;
+            } else {
+                mhContainer.innerHTML = allMatches.map(m => `
+                    <div class="recent-match">
+                        <span class="win">${escapeHTML(m.winner?.name || "?")}</span>
+                        <span style="color:var(--text-3);">победил</span>
+                        <span>${escapeHTML((m.player1?.id === m.winner?.id ? m.player2 : m.player1)?.name || "?")}</span>
+                        <span class="recent-score">${m.votes1 || 0}:${m.votes2 || 0}</span>
+                        <span class="recent-round">${escapeHTML(m.tournamentName)} — ${escapeHTML(m.roundName)}</span>
+                    </div>
+                `).join("");
+            }
+        } catch (e) {
+            console.error('History load error', e);
+            document.getElementById("history-stats").innerHTML = `<p style="color:var(--red);">Ошибка загрузки статистики</p>`;
+        }
+    }
+
+document.addEventListener("DOMContentLoaded", async function() {
         // 🔧 FIX: Ждём инициализации TH из db.js
         let attempts = 0;
         const waitForInit = setInterval(() => {
