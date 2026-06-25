@@ -1,26 +1,18 @@
+
 /* ============================================================
-   Tournament Hub Bracket Renderer (FIXED)
+   Tournament Hub Bracket Renderer (FIXED v2 — no memory leaks, stable voting)
    ============================================================ */
 
 (function () {
   'use strict';
 
-  function escapeHTML(text) {
-    if (text == null) return "";
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
   function getUrlParam(name) {
     return new URLSearchParams(window.location.search).get(name);
   }
 
-  let previousVotes = {};
   let realtimeSubscribed = false;
+  let previousVotes = new Map(); // FIX: Map вместо объекта, лучше управление памятью
+  const MAX_VOTES_CACHE = 500;   // FIX: ограничение размера кэша
 
   /* ==========================================================
      LOAD TOURNAMENT
@@ -94,11 +86,17 @@
     const p1Win = winner && (winner.id ? winner.id === p1?.id : winner === p1);
     const p2Win = winner && (winner.id ? winner.id === p2?.id : winner === p2);
 
-    const prevKey = match.id;
-    const prev = previousVotes[prevKey] || { v1: 0, v2: 0 };
+    // FIX: Используем Map для кэша голосов
+    const prev = previousVotes.get(match.id) || { v1: 0, v2: 0 };
     const v1Changed = prev.v1 !== votes1;
     const v2Changed = prev.v2 !== votes2;
-    previousVotes[prevKey] = { v1: votes1, v2: votes2 };
+    
+    // FIX: Ограничиваем размер кэша
+    if (previousVotes.size > MAX_VOTES_CACHE) {
+      const firstKey = previousVotes.keys().next().value;
+      previousVotes.delete(firstKey);
+    }
+    previousVotes.set(match.id, { v1: votes1, v2: votes2 });
 
     const v1AnimClass = v1Changed && votes1 > prev.v1 ? 'vote-just-cast' : '';
     const v2AnimClass = v2Changed && votes2 > prev.v2 ? 'vote-just-cast' : '';
@@ -106,10 +104,10 @@
     const canVote = isActive && p1 && p2 && !match.finished;
 
     const voteBtn1 = canVote
-      ? `onclick="handleVote('${match.id}', '${match.tournament_id || ''}', 1)"`
+      ? `onclick="RenderBracket.handleVote('${match.id}', '${match.tournament_id || ''}', 1)"`
       : "disabled tabindex='-1'";
     const voteBtn2 = canVote
-      ? `onclick="handleVote('${match.id}', '${match.tournament_id || ''}', 2)"`
+      ? `onclick="RenderBracket.handleVote('${match.id}', '${match.tournament_id || ''}', 2)"`
       : "disabled tabindex='-1'";
 
     return `
@@ -130,10 +128,10 @@
   }
 
   /* ==========================================================
-     VOTE
+     VOTE (FIXED: внутри namespace, не глобальная)
      ========================================================== */
-  window.handleVote = async function(matchId, tournamentId, playerNum) {
-    const user = DB.getCurrentUser();
+  async function handleVote(matchId, tournamentId, playerNum) {
+    const user = await DB.getCurrentUser();
     if (!user) {
       toast("Войдите, чтобы голосовать");
       return;
@@ -160,7 +158,7 @@
       console.error('Vote error:', e);
       toast("Ошибка голосования");
     }
-  };
+  }
 
   function animateVote(matchId, playerNum) {
     const matchEl = document.getElementById(`match-${matchId}`);
@@ -274,7 +272,11 @@
     container.innerHTML = `<div class="bracket-grid">${html}</div>${footer}`;
   }
 
-  window.RenderBracket = { renderBracket, animateVote };
+  window.RenderBracket = { 
+    renderBracket, 
+    animateVote,
+    handleVote  // FIX: экспортируем handleVote в namespace
+  };
 
   if (document.readyState === 'loading') {
     document.addEventListener("DOMContentLoaded", renderBracket);
