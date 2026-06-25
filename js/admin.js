@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Admin Panel (FIXED v7 — Swiss System Edition)
+   Tournament Hub Admin Panel (FIXED v8 — Swiss System Edition)
    ============================================================ */
 (function () {
   'use strict';
@@ -52,7 +52,6 @@
 
   // ===== SWISS SYSTEM: Generate pairs by score =====
   function generateSwissPairs(players, previousMatches) {
-    // Sort by points (desc), then by wins
     const sorted = [...players].sort((a, b) => {
       const ptsA = a.score?.points || 0;
       const ptsB = b.score?.points || 0;
@@ -60,7 +59,6 @@
       return (b.score?.wins || 0) - (a.score?.wins || 0);
     });
 
-    // Track who already played with whom
     const playedWith = {};
     (previousMatches || []).forEach(m => {
       if (m.player1_id && m.player2_id) {
@@ -76,25 +74,16 @@
 
     for (const p1 of sorted) {
       if (used.has(p1.id)) continue;
-
-      // Find best opponent: closest score, not played before
       let bestOpponent = null;
       let bestScore = -Infinity;
 
       for (const p2 of sorted) {
         if (p1.id === p2.id || used.has(p2.id)) continue;
-
         const alreadyPlayed = playedWith[p1.id]?.has(p2.id);
         const ptsDiff = Math.abs((p1.score?.points || 0) - (p2.score?.points || 0));
-
-        // Prefer: not played before, close score
         let score = 1000 - ptsDiff * 10;
         if (alreadyPlayed) score -= 5000;
-
-        if (score > bestScore) {
-          bestScore = score;
-          bestOpponent = p2;
-        }
+        if (score > bestScore) { bestScore = score; bestOpponent = p2; }
       }
 
       if (bestOpponent) {
@@ -102,7 +91,6 @@
         used.add(p1.id);
         used.add(bestOpponent.id);
       } else {
-        // Bye round — player gets free win
         pairs.push([p1, null]);
         used.add(p1.id);
       }
@@ -149,7 +137,12 @@
       const { data: tournament, error } = await window.TH.createTournament({ 
         title: name, description: desc, status: 'draft', total_rounds: totalRounds 
       });
-      if (error) throw error;
+      if (error) {
+        if (error.message?.includes('total_rounds')) {
+          throw new Error("В БД отсутствует колонка 'total_rounds'. Выполните SQL-скрипт из инструкции!");
+        }
+        throw error;
+      }
 
       const playersWithTournament = players.map((p, i) => ({ 
         ...p, tournament_id: tournament.id, seed: i, elo: 1000 
@@ -165,7 +158,11 @@
       try { await window.TH.logAction('create_tournament', { title: name, id: tournament.id }); } catch (e) {}
       await refreshAll();
     } catch (e) {
-      document.getElementById("tCreateStatus").innerHTML = "<span style='color:var(--red);'>" + escapeHTML(e.message) + "</span>";
+      const msg = e.message || String(e);
+      document.getElementById("tCreateStatus").innerHTML = "<span style='color:var(--red);'>" + escapeHTML(msg) + "</span>";
+      if (msg.includes('column') || msg.includes('schema')) {
+        document.getElementById("tCreateStatus").innerHTML += "<br><span style='color:var(--accent);font-size:12px;'>⚠️ Нужно выполнить SQL-скрипт в Supabase!</span>";
+      }
     }
   }
 
@@ -181,13 +178,11 @@
       const client = window.TH.getClient();
       const totalRounds = t.total_rounds || 10;
 
-      // Create Round 1
       const { data: roundData } = await client.from('rounds').insert({
         tournament_id: t.id, round_number: 0, name: "Раунд 1", 
         is_active: true, started_at: new Date().toISOString()
       }).select().single();
 
-      // Generate pairs (random for first round)
       const shuffled = [...players].sort(() => Math.random() - 0.5);
       const matches = [];
       for (let i = 0; i < shuffled.length; i += 2) {
@@ -223,11 +218,9 @@
       const currentRound = rounds?.[0];
       if (!currentRound) { toast("Нет текущего раунда"); return; }
 
-      // Get all matches in current round
       const { data: matches } = await client.from('matches')
         .select('*').eq('round_id', currentRound.id);
 
-      // Determine winners by votes
       for (const match of (matches || [])) {
         if (!match.finished) {
           const winnerId = (match.votes1 || 0) >= (match.votes2 || 0) ? match.player1_id : match.player2_id;
@@ -239,7 +232,6 @@
         }
       }
 
-      // Deactivate current round
       await client.from('rounds').update({ 
         is_active: false, ended_at: new Date().toISOString() 
       }).eq('id', currentRound.id);
@@ -248,11 +240,9 @@
       const nextRoundNum = (currentRound.round_number || 0) + 1;
 
       if (nextRoundNum >= totalRounds) {
-        // Tournament finished
         const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', t.id);
         const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', t.id);
 
-        // Calculate final standings
         const scores = {};
         (allPlayers || []).forEach(p => { scores[p.id] = { wins: 0, points: 0 }; });
         (allMatches || []).forEach(m => {
@@ -273,11 +263,9 @@
         });
         toast("🏆 Турнир завершён! Победитель: " + (winner?.name || "?"));
       } else {
-        // Create next round with Swiss pairing
         const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', t.id);
         const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', t.id);
 
-        // Calculate current scores
         const playerScores = {};
         (allPlayers || []).forEach(p => { 
           playerScores[p.id] = { wins: 0, losses: 0, points: 0 }; 
