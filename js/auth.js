@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Authentication (FIXED v3 — async isAdmin, no duplicates)
+   Tournament Hub Authentication (FIXED v4 — no double init, safe DOM)
    ============================================================ */
 
 (function () {
@@ -91,12 +91,9 @@
     location.reload();
   }
 
-  // FIX: isAdmin теперь async и проверяет Supabase
   async function isAdmin() {
-    // Быстрая проверка localStorage
     if (localStorage.getItem("th_admin") === "yes") return true;
     
-    // Проверка через Supabase
     if (window.TH) {
       try {
         const profile = await window.TH.getProfile();
@@ -111,7 +108,6 @@
     return false;
   }
 
-  // Синхронная версия для onclick (проверяет только localStorage)
   function isAdminSync() {
     return localStorage.getItem("th_admin") === "yes";
   }
@@ -154,7 +150,7 @@
   }
 
   /* ==========================================================
-     UI
+     UI (FIXED: безопасный рендер, проверка DOM)
      ========================================================== */
   function renderNavUser() {
     const box = document.getElementById("navUser") || document.getElementById("user-area");
@@ -171,6 +167,9 @@
       } else {
         box.innerHTML = `<a href="login.html" style="color:var(--text-3);font-size:13px;">Войти</a>`;
       }
+    }).catch(e => {
+      console.warn('renderNavUser error', e);
+      box.innerHTML = `<a href="login.html" style="color:var(--text-3);font-size:13px;">Войти</a>`;
     });
   }
 
@@ -190,9 +189,6 @@
     });
   }
 
-  /* ==========================================================
-     FANDOM UNLINK
-     ========================================================== */
   async function unlinkFandom() {
     try {
       await window.TH.updateProfile({
@@ -213,40 +209,13 @@
   }
 
   /* ==========================================================
-     INIT
-     ========================================================== */
-  async function initAuth() {
-    if (!window.TH) return;
-
-    await new Promise(resolve => {
-      if (document.readyState === 'complete') resolve();
-      else window.addEventListener('load', resolve);
-    });
-
-    const session = await window.TH.getSession();
-    if (session) {
-      await DB.syncSupabaseUser();
-      const user = await DB.getCurrentUser();
-      if (user?.role === 'admin') localStorage.setItem("th_admin", "yes");
-    }
-    renderNavUser();
-    checkFandomAutoAdmin();
-  }
-
-  /* ==========================================================
      EXPORT
      ========================================================== */
   window.Auth = {
     register, login, logout, isAdmin, isAdminSync, adminLogin,
-    canUserVote, markVote, renderNavUser, checkFandomAutoAdmin, initAuth,
-    unlinkFandom
+    canUserVote, markVote, renderNavUser, checkFandomAutoAdmin, unlinkFandom
   };
 
-  window.initAuth = initAuth;
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => initAuth());
-  } else {
-    initAuth();
-  }
+  // 🔧 FIX: Убран initAuth() — управляется db.js
+  // 🔧 FIX: Убраны авто-вызовы при загрузке — дублировали db.js
 })();
