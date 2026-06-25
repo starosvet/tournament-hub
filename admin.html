@@ -67,9 +67,17 @@
                         <input type="text" id="tName" placeholder="Название турнира">
                         <textarea id="tDesc" placeholder="Описание (необязательно)"></textarea>
                         <textarea id="tData" placeholder="Участники (по одному на строку):
-Имя | URL изображения
-Имя 2
-Имя 3 | https://..." style="min-height:200px;"></textarea>
+[персонаж] Имя | URL изображения | Описание
+[арт] Название арта | https://...
+[статья] Название статьи
+[оружие] Название оружия | https://...
+[локация] Название локации
+[скин] Название скина
+[босс] Имя босса
+[другое] Любой объект
+
+Типы: [персонаж], [статья], [арт], [оружие], [локация], [скин], [босс], [другое]
+Если тип не указан — будет [персонаж]" style="min-height:240px;"></textarea>
                         <div class="btn-row">
                             <button class="btn-primary" onclick="Admin.doCreateTournament()">Создать турнир</button>
                         </div>
