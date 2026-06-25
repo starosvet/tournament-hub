@@ -91,17 +91,18 @@
         <p>Tournament Hub</p>
     </footer>
 
-    <script>
-        document.addEventListener("DOMContentLoaded", async function() {
-            if (window.TH) {
-                window.TH.init();
-                await DB.syncSupabaseUser();
-            }
-            Auth.renderNavUser();
-            Auth.checkFandomAutoAdmin();
-            const navAdmin = document.getElementById("navAdmin");
-            if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
-        });
-    </script>
+   <script>
+    document.addEventListener("DOMContentLoaded", async function() {
+        if (window.TH) {
+            window.TH.init();
+            await DB.syncSupabaseUser();
+        }
+        Auth.renderNavUser();
+        Auth.checkFandomAutoAdmin();
+        // FIX: Используем isAdminSync
+        const navAdmin = document.getElementById("navAdmin");
+        if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) navAdmin.classList.remove("hidden");
+    });
+</script>
 </body>
 </html>
