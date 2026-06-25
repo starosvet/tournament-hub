@@ -1,3 +1,107 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Профиль | Tournament Hub</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/db.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/fandom-auth.js"></script>
+</head>
+<body>
+    <header>
+        <div class="header-inner">
+            <a href="index.html" class="logo" id="siteLogoLink">🏆 Tournament Hub</a>
+            <nav>
+                <a href="index.html">Главная</a>
+                <a href="bracket.html">Сетка</a>
+                <a href="history.html">История</a>
+                <a href="chat.html">💬 Чат</a>
+                <a href="rules.html">Правила</a>
+                <a href="profile.html" class="active">👤 Профиль</a>
+                <a href="admin.html" id="navAdmin" class="hidden">⚙️ Управление</a>
+            </nav>
+            <div class="nav-user" id="navUser"></div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="profileBox" class="login-box page-enter" style="max-width:600px;">
+            <h2>👤 Профиль</h2>
+            <div id="profileContent">Загрузка профиля...</div>
+        </div>
+
+        <!-- FIX: Блок привязки Fandom Wiki -->
+        <div id="fandomLinkBox" class="login-box page-enter" style="max-width:600px; margin-top:24px; display:none;">
+            <h2>🌐 Привязка Fandom Wiki</h2>
+            <p style="color:var(--text-3);font-size:14px;">Подтвердите владение аккаунтом Fandom для получения особого статуса</p>
+
+            <!-- Шаг 1: Ввод ника -->
+            <div id="fandomStep1">
+                <div style="background:var(--bg);border:1px solid var(--border-2);border-radius:12px;padding:16px;margin:16px 0;">
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:8px;">Ваш ник на сайте</label>
+                    <div id="fandomCurrentUsername" style="font-size:1.2em;font-weight:700;color:var(--accent);margin-bottom:16px;">—</div>
+
+                    <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:8px;">Введите ник на Fandom <span style="color:var(--red);">*</span></label>
+                    <input type="text" id="fandomName" placeholder="Точно такой же ник, как на сайте">
+                    <p style="color:var(--text-3);font-size:12px;margin-top:6px;">⚠️ Ник должен совпадать с вашим ником на сайте!</p>
+                </div>
+                <button class="btn-primary" style="width:100%;" onclick="startFandomLink()">📨 Получить код подтверждения</button>
+                <div id="fandomError" style="color:var(--red);margin-top:12px;font-size:13px;text-align:center;"></div>
+            </div>
+
+            <!-- Шаг 2: Код и инструкции -->
+            <div id="fandomStep2" style="display:none;">
+                <div style="background:var(--bg);border:2px dashed var(--accent);border-radius:16px;padding:24px;margin:16px 0;text-align:center;">
+                    <div style="font-size:12px;color:var(--text-3);margin-bottom:8px;">Ваш код подтверждения</div>
+                    <div id="fandomCode" style="font-size:2em;font-weight:700;font-family:monospace;letter-spacing:4px;color:var(--accent);"></div>
+                    <div style="font-size:11px;color:var(--text-3);margin-top:8px;">⏳ Код действителен 10 минут</div>
+                </div>
+
+                <ol style="color:var(--text-2);font-size:14px;line-height:1.8;padding-left:20px;">
+                    <li>Зайдите в свой профиль на <a href="https://chickengun-fanon.fandom.com/ru/wiki/Участник:" target="_blank" style="color:var(--accent);">вики</a></li>
+                    <li>Сделайте любую правку (например, добавьте пробел в профиль)</li>
+                    <li>В описании правки вставьте код выше</li>
+                    <li>Сохраните правку</li>
+                </ol>
+
+                <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="checkFandomLink()">✅ Я сделал правку</button>
+                <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="cancelFandomLink()">❌ Отмена</button>
+
+                <div id="fandomStatus" style="margin-top:12px;text-align:center;font-size:13px;"></div>
+                <div id="fandomProgress" style="margin-top:8px;text-align:center;font-size:12px;color:var(--text-3);"></div>
+            </div>
+
+            <!-- Шаг 3: Успех -->
+            <div id="fandomStep3" style="display:none;">
+                <div style="text-align:center;padding:20px;">
+                    <div style="font-size:3em;margin-bottom:12px;">✅</div>
+                    <div style="font-size:1.2em;font-weight:700;color:var(--green);margin-bottom:8px;">Fandom привязан!</div>
+                    <p style="color:var(--text-2);font-size:14px;">Ваш аккаунт подтверждён через Fandom Wiki.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- FIX: Блок уже привязанного Fandom -->
+        <div id="fandomLinkedBox" class="login-box page-enter" style="max-width:600px; margin-top:24px; display:none;">
+            <h2>🌐 Fandom Wiki <span style="color:var(--green);font-size:0.7em;">✓ ПРИВЯЗАН</span></h2>
+            <div style="display:flex;align-items:center;gap:12px;padding:16px;background:var(--bg);border-radius:12px;margin-top:12px;">
+                <div style="font-size:2em;">🌐</div>
+                <div>
+                    <div style="font-weight:700;" id="linkedFandomName">—</div>
+                    <div style="font-size:12px;color:var(--green);margin-top:4px;">✓ Подтверждён через правку на вики</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Tournament Hub</p>
+    </footer>
+
 <script>
     function escapeHTML(text) {
         if (!text) return "";
@@ -179,3 +283,5 @@
         if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) navAdmin.classList.remove("hidden");
     });
 </script>
+</body>
+</html>
