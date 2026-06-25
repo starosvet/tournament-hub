@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/supabase-client.js"></script>
     <script src="js/db.js"></script>
@@ -30,7 +29,7 @@
     </header>
 
     <div class="container">
-        <!-- EMAIL/PASSWORD АВТОРИЗАЦИЯ -->
+        <!-- EMAIL/PASSWORD -->
         <div class="login-box page-enter" style="margin-bottom:24px;">
             <h2>🔐 Вход по email</h2>
             <p>Безопасная авторизация через Supabase</p>
@@ -63,7 +62,7 @@
             </p>
         </div>
 
-        <!-- FANDOM АВТОРИЗАЦИЯ -->
+        <!-- FANDOM -->
         <div class="login-box page-enter" id="fandomBox">
             <h2>🌐 Вход через Fandom Wiki</h2>
             <p>chickengun-fanon.fandom.com/ru</p>
@@ -92,6 +91,13 @@
             </div>
 
             <div id="fandomError" style="color:var(--red);margin-top:16px;text-align:center;font-size:13px;"></div>
+        </div>
+
+        <!-- FIX: Кнопка очистки локальных данных -->
+        <div class="login-box page-enter" style="margin-top:24px;">
+            <h2>🧹 Очистка данных</h2>
+            <p style="color:var(--text-3);font-size:13px;">Если сайт работает некорректно, очистите локальные данные</p>
+            <button class="btn-danger" style="width:100%;margin-top:12px;" onclick="clearAllData()">🗑 Очистить все локальные данные</button>
         </div>
     </div>
 
@@ -133,11 +139,7 @@
             err.textContent = "";
 
             if (isRegisterMode) {
-                // Регистрация
-                if (!username) {
-                    err.textContent = "Введите никнейм";
-                    return;
-                }
+                if (!username) { err.textContent = "Введите никнейм"; return; }
                 const result = await Auth.register(username, password, email);
                 if (result.success) {
                     location.href = "index.html";
@@ -145,7 +147,6 @@
                     err.textContent = result.error || "Ошибка регистрации";
                 }
             } else {
-                // Вход
                 const result = await Auth.login(email, password);
                 if (result.success) {
                     location.href = "index.html";
@@ -155,6 +156,7 @@
             }
         }
 
+        // FIX: Google OAuth с правильным redirect
         async function loginWithGoogle() {
             try {
                 const { error } = await window.TH.signInWithProvider('google');
@@ -166,11 +168,27 @@
             }
         }
 
+        // FIX: Обработка OAuth callback после редиректа
+        async function handleOAuthCallback() {
+            const hash = window.location.hash;
+            if (hash && hash.includes('access_token')) {
+                // Supabase уже обработал токен через detectSessionInUrl
+                // Ждём инициализации и редиректим
+                setTimeout(async () => {
+                    const session = await window.TH.getSession();
+                    if (session) {
+                        await DB.syncSupabaseUser();
+                        location.href = "index.html";
+                    }
+                }, 1000);
+            }
+        }
+
         document.addEventListener("keydown", function(e) {
             if (e.key === "Enter") doLogin();
         });
 
-        /* ---------- fandom авторизация ---------- */
+        /* ---------- Fandom auth ---------- */
         function startFandomLogin() {
             const name = document.getElementById("fandomName").value.trim();
             const err = document.getElementById("fandomError");
@@ -210,9 +228,7 @@
 
                     const complete = FandomAuth.completeFandomAuth(result.fandomName);
                     if (complete.ok) {
-                        setTimeout(() => {
-                            location.href = "index.html";
-                        }, 800);
+                        setTimeout(() => { location.href = "index.html"; }, 800);
                     } else {
                         err.textContent = complete.error || "Ошибка создания пользователя";
                     }
@@ -228,11 +244,28 @@
             );
         }
 
-        document.addEventListener("DOMContentLoaded", function() {
+        // FIX: Очистка всех данных
+        function clearAllData() {
+            if (!confirm("ВНИМАНИЕ! Это удалит ВСЕ локальные данные сайта. Продолжить?")) return;
+            if (prompt('Введите "DELETE" для подтверждения:') !== "DELETE") return;
+
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('th_') || key === 'tournament_hub_db') {
+                    localStorage.removeItem(key);
+                }
+            });
+            toast("🧹 Локальные данные очищены. Перезагрузка...");
+            setTimeout(() => location.reload(), 1000);
+        }
+
+        document.addEventListener("DOMContentLoaded", async function() {
             Auth.renderNavUser();
             Auth.checkFandomAutoAdmin();
             const navAdmin = document.getElementById("navAdmin");
             if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
+
+            // FIX: Обрабатываем OAuth callback
+            handleOAuthCallback();
         });
     </script>
 </body>
