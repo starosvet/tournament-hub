@@ -1,12 +1,12 @@
 /* ============================================================
-   Tournament Hub Comments system (Supabase + Realtime)
+   Tournament Hub Comments system (FIXED)
    ============================================================ */
 
 (function () {
   'use strict';
 
   function escapeHTML(text) {
-    if (text === null || text === undefined) return "";
+    if (text == null) return "";
     return String(text)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -14,10 +14,6 @@
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   }
-
-  /* ==========================================================
-     ЗАГРУЗКА КОММЕНТАРИЕВ
-     ========================================================== */
 
   async function getComments(tournamentId) {
     if (window.TH) {
@@ -28,17 +24,11 @@
         console.warn('Supabase comments failed');
       }
     }
-
-    // Fallback
     const db = DB.getDB();
     return (db.comments || [])
       .filter(c => c.tournamentId === tournamentId)
       .sort((a, b) => b.createdAt - a.createdAt);
   }
-
-  /* ==========================================================
-     ДОБАВЛЕНИЕ КОММЕНТАРИЯ
-     ========================================================== */
 
   async function addComment(tournamentId, text) {
     const user = DB.getCurrentUser();
@@ -57,7 +47,6 @@
       }
     }
 
-    // Fallback
     const comment = {
       id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
       tournamentId,
@@ -72,107 +61,4 @@
       db.comments.push(comment);
     });
 
-    return { data: comment };
-  }
-
-  /* ==========================================================
-     УДАЛЕНИЕ КОММЕНТАРИЯ
-     ========================================================== */
-
-  async function deleteComment(id) {
-    const user = DB.getCurrentUser();
-    if (!user) return false;
-
-    if (window.TH) {
-      try {
-        await window.TH.deleteComment(id);
-        return true;
-      } catch (e) {
-        console.warn('Supabase delete failed');
-      }
-    }
-
-    // Fallback
-    let removed = false;
-    DB.updateDB(db => {
-      db.comments = (db.comments || []).filter(c => {
-        if (c.id === id && c.userId === user.id) {
-          removed = true;
-          return false;
-        }
-        return true;
-      });
-    });
-    return removed;
-  }
-
-  /* ==========================================================
-     РЕНДЕР
-     ========================================================== */
-
-  async function renderComments(tournamentId, container) {
-    if (!container) return;
-
-    const comments = await getComments(tournamentId);
-
-    if (!comments || !comments.length) {
-      container.innerHTML = `
-        <div class="empty-state" style="padding:40px;">
-          <h3>Комментариев пока нет</h3>
-          <p>Будьте первым.</p>
-        </div>
-      `;
-      return;
-    }
-
-    container.innerHTML = comments.map(c => {
-      const date = c.created_at
-        ? new Date(c.created_at).toLocaleString("ru-RU")
-        : new Date(c.createdAt).toLocaleString("ru-RU");
-
-      return `
-        <article class="comment-card">
-          <div class="comment-meta">
-            <strong>${escapeHTML(c.username)}</strong>
-            <span>${date}</span>
-          </div>
-          <div class="comment-text">${escapeHTML(c.text)}</div>
-        </article>
-      `;
-    }).join("");
-  }
-
-  /* ==========================================================
-     REALTIME ПОДПИСКА
-     ========================================================== */
-
-  function subscribeToComments(tournamentId, container) {
-    if (!window.TH) return;
-
-    window.TH.getClient()
-      .channel('comments-' + tournamentId)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'comments',
-        filter: 'tournament_id=eq.' + tournamentId
-      }, (payload) => {
-        renderComments(tournamentId, container);
-      })
-      .subscribe();
-  }
-
-  /* ==========================================================
-     ЭКСПОРТ
-     ========================================================== */
-
-  window.Comments = {
-    getComments,
-    addComment,
-    deleteComment,
-    renderComments,
-    subscribeToComments
-  };
-
-  window.escapeHTML = window.escapeHTML || escapeHTML;
-})();
+    return { data: comment
