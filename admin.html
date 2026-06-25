@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/oauth-init.js"></script>
     <script src="js/supabase-client.js"></script>
     <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
@@ -249,9 +250,9 @@
                 await DB.syncSupabaseUser();
             }
             Auth.renderNavUser();
-            Auth.checkFandomAutoAdmin();
+            // FIX: Используем isAdminSync для DOM
             const navAdmin = document.getElementById("navAdmin");
-            if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
+            if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) navAdmin.classList.remove("hidden");
         });
     </script>
 </body>
