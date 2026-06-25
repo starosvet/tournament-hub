@@ -62,36 +62,7 @@
             </p>
         </div>
 
-        <!-- FANDOM -->
-        <div class="login-box page-enter" id="fandomBox">
-            <h2>🌐 Вход через Fandom Wiki</h2>
-            <p>chickengun-fanon.fandom.com/ru</p>
-
-            <div id="fandomStep1">
-                <label>Ваш ник на Fandom</label>
-                <input type="text" id="fandomName" placeholder="Например: Melanthe Weber">
-                <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="startFandomLogin()">📨 Получить код</button>
-            </div>
-
-            <div id="fandomStep2" style="display:none;">
-                <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:12px;padding:16px;margin:16px 0;text-align:center;">
-                    <div style="font-size:12px;color:var(--text-3);margin-bottom:8px;">Ваш код подтверждения</div>
-                    <div id="fandomCode" style="font-size:2em;font-weight:700;font-family:monospace;letter-spacing:4px;color:var(--accent);"></div>
-                </div>
-                <ol style="color:var(--text-2);font-size:14px;line-height:1.8;padding-left:20px;">
-                    <li>Зайдите в свой профиль на <a href="https://chickengun-fanon.fandom.com/ru/wiki/Участник:" target="_blank" style="color:var(--accent);">вики</a></li>
-                    <li>Сделайте любую правку (например, добавьте пробел)</li>
-                    <li>В описании правки вставьте код выше</li>
-                    <li>Сохраните правку</li>
-                </ol>
-                <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="checkFandomLogin()">✅ Я сделал правку</button>
-                <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="cancelFandomLogin()">❌ Отмена</button>
-                <div id="fandomStatus" style="margin-top:12px;text-align:center;font-size:13px;"></div>
-                <div id="fandomProgress" style="margin-top:8px;text-align:center;font-size:12px;color:var(--text-3);"></div>
-            </div>
-
-            <div id="fandomError" style="color:var(--red);margin-top:16px;text-align:center;font-size:13px;"></div>
-        </div>
+        <!-- FIX: Убран Fandom-вход отсюда, перенесён в профиль -->
 
         <!-- FIX: Кнопка очистки локальных данных -->
         <div class="login-box page-enter" style="margin-top:24px;">
@@ -156,93 +127,32 @@
             }
         }
 
-        // FIX: Google OAuth с правильным redirect
+        // FIX: Google OAuth — правильная обработка через onAuthStateChange
         async function loginWithGoogle() {
             try {
                 const { error } = await window.TH.signInWithProvider('google');
                 if (error) {
                     document.getElementById("loginError").textContent = error.message;
                 }
+                // Редирект произойдёт автоматически, дальше обработает onAuthStateChange в db.js
             } catch (e) {
                 document.getElementById("loginError").textContent = "Ошибка входа через Google";
             }
         }
 
-        // FIX: Обработка OAuth callback после редиректа
-        async function handleOAuthCallback() {
-            const hash = window.location.hash;
-            if (hash && hash.includes('access_token')) {
-                // Supabase уже обработал токен через detectSessionInUrl
-                // Ждём инициализации и редиректим
-                setTimeout(async () => {
-                    const session = await window.TH.getSession();
-                    if (session) {
-                        await DB.syncSupabaseUser();
-                        location.href = "index.html";
-                    }
-                }, 1000);
+        // FIX: OAuth callback обрабатывается автоматически через onAuthStateChange в db.js
+        // Но проверим — если уже есть сессия, редиректим на главную
+        async function checkAlreadyLoggedIn() {
+            const session = await window.TH.getSession();
+            if (session?.user) {
+                await DB.syncSupabaseUser();
+                location.href = "index.html";
             }
         }
 
         document.addEventListener("keydown", function(e) {
             if (e.key === "Enter") doLogin();
         });
-
-        /* ---------- Fandom auth ---------- */
-        function startFandomLogin() {
-            const name = document.getElementById("fandomName").value.trim();
-            const err = document.getElementById("fandomError");
-            err.textContent = "";
-
-            const result = FandomAuth.startFandomAuth(name);
-            if (!result.ok) {
-                err.textContent = result.error;
-                return;
-            }
-
-            document.getElementById("fandomStep1").style.display = "none";
-            document.getElementById("fandomStep2").style.display = "block";
-            document.getElementById("fandomCode").textContent = result.code;
-        }
-
-        function cancelFandomLogin() {
-            FandomAuth.clearPendingAuth();
-            document.getElementById("fandomStep1").style.display = "block";
-            document.getElementById("fandomStep2").style.display = "none";
-            document.getElementById("fandomStatus").textContent = "";
-            document.getElementById("fandomProgress").textContent = "";
-            document.getElementById("fandomError").textContent = "";
-        }
-
-        function checkFandomLogin() {
-            const status = document.getElementById("fandomStatus");
-            const progress = document.getElementById("fandomProgress");
-            const err = document.getElementById("fandomError");
-            status.textContent = "⏳ Проверяем правки...";
-            err.textContent = "";
-
-            FandomAuth.pollFandomAuth(
-                function(result) {
-                    status.textContent = "✅ Код подтверждён!";
-                    progress.textContent = "";
-
-                    const complete = FandomAuth.completeFandomAuth(result.fandomName);
-                    if (complete.ok) {
-                        setTimeout(() => { location.href = "index.html"; }, 800);
-                    } else {
-                        err.textContent = complete.error || "Ошибка создания пользователя";
-                    }
-                },
-                function(errorMsg) {
-                    status.textContent = "";
-                    progress.textContent = "";
-                    err.textContent = errorMsg;
-                },
-                function(current, max) {
-                    progress.textContent = "Проверка " + current + "/" + max;
-                }
-            );
-        }
 
         // FIX: Очистка всех данных
         function clearAllData() {
@@ -264,8 +174,8 @@
             const navAdmin = document.getElementById("navAdmin");
             if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
 
-            // FIX: Обрабатываем OAuth callback
-            handleOAuthCallback();
+            // FIX: Проверяем, не залогинены ли уже (после OAuth редиректа)
+            await checkAlreadyLoggedIn();
         });
     </script>
 </body>
