@@ -1,22 +1,19 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v4 — inline init support)
+   Tournament Hub — Supabase Client (FIXED v5 — single init, no duplicates)
    ============================================================ */
 
 (function () {
   'use strict';
 
-  const SUPABASE_URL = 'https://fpabooteqfahhzobcpnh.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwYWJvb3RlcWZhaGh6b2JjcG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjgwOTIsImV4cCI6MjA5NzkwNDA5Mn0.cc1oG5-73US61LI9uDaPwuQsOjLkIAPxDcfGQvVY9Ac';
-
   let realtimeChannels = [];
 
   /* ==========================================================
-     ИНИЦИАЛИЗАЦИЯ (используем глобальный клиент если есть)
+     ИНИЦИАЛИЗАЦИЯ (единственная точка создания клиента)
      ========================================================== */
   function init() {
-    // Если клиент уже создан inline в login.html — используем его
+    // Если клиент уже создан — не трогаем
     if (window._supabase) {
-      console.log('✅ Using inline Supabase client');
+      console.log('✅ Using existing Supabase client');
       return true;
     }
 
@@ -25,14 +22,20 @@
       return false;
     }
 
-    window._supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    // Используем конфиг из oauth-init.js или создаём с нуля
+    const cfg = window._supabaseConfig || {};
+    const url = cfg.url || 'https://fpabooteqfahhzobcpnh.supabase.co';
+    const key = cfg.key || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwYWJvb3RlcWZhaGh6b2JjcG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjgwOTIsImV4cCI6MjA5NzkwNDA5Mn0.cc1oG5-73US61LI9uDaPwuQsOjLkIAPxDcfGQvVY9Ac';
+    const options = cfg.options || {
       auth: {
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true
       },
       realtime: { params: { eventsPerSecond: 10 } }
-    });
+    };
+
+    window._supabase = window.supabase.createClient(url, key, options);
     console.log('✅ Supabase initialized from client');
     return true;
   }
@@ -62,8 +65,7 @@
     const { data, error } = await getClient().auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: window.location.origin + '/login.html',
-        queryParams: { access_type: 'offline', prompt: 'consent' }
+        redirectTo: window.location.origin + '/login.html'
       }
     });
     return { data, error };
