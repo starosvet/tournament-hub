@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v8 — OAuth works, correct paths, safe getProfile)
+   Tournament Hub — Supabase Client (FIXED v9 — persistent sessions, correct paths)
    ============================================================ */
 
 (function () {
@@ -12,16 +12,12 @@
      URL HELPERS
      ========================================================== */
   function getBasePath() {
-    // FIX: автоопределение basePath вместо хардкода
     const path = window.location.pathname;
-    // Если мы в /tournament-hub/ или /tournament-hub/page.html
     const match = path.match(/^(.+?)\/(?:index\.html|[^/]+\.html)?$/);
     if (match) {
       const base = match[1];
-      // Проверяем, что это не корневой путь
       if (base && base !== '') return base;
     }
-    // Fallback на конфиг или корень
     return window._supabaseConfig?.basePath || '';
   }
 
@@ -49,12 +45,14 @@
     const url = cfg.url || 'https://fpabooteqfahhzobcpnh.supabase.co';
     const key = cfg.key || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwYWJvb3RlcWZhaGh6b2JjcG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjgwOTIsImV4cCI6MjA5NzkwNDA5Mn0.cc1oG5-73US61LI9uDaPwuQsOjLkIAPxDcfGQvVY9Ac';
 
-    // FIX: detectSessionInUrl: true — критично для OAuth!
-    const options = cfg.options || {
-      auth: { 
-        autoRefreshToken: true, 
-        persistSession: true, 
-        detectSessionInUrl: true  // ← FIX: было false!
+    const options = {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        storageKey: 'th_supabase_auth',
+        storage: localStorage,
+        flowType: 'implicit'
       },
       realtime: { params: { eventsPerSecond: 10 } }
     };
@@ -63,12 +61,31 @@
     initDone = true;
     console.log('✅ Supabase initialized, basePath:', getBasePath());
 
-    // FIX: вызываем DB._init() ПОСЛЕ создания клиента
+    // Восстанавливаем сессию сразу
+    restoreSession();
+
     if (window.DB && window.DB._init) {
       setTimeout(() => window.DB._init(), 100);
     }
 
     return true;
+  }
+
+  async function restoreSession() {
+    try {
+      const { data: { session } } = await window._supabase.auth.getSession();
+      if (session?.user) {
+        console.log('✅ Session restored for', session.user.email);
+        if (window.DB && window.DB.syncSupabaseUser) {
+          await window.DB.syncSupabaseUser();
+        }
+        if (typeof Auth !== 'undefined' && Auth.renderNavUser) {
+          Auth.renderNavUser();
+        }
+      }
+    } catch (e) {
+      console.warn('Session restore failed:', e);
+    }
   }
 
   function getClient() {
@@ -93,13 +110,14 @@
   }
 
   async function signInWithProvider(provider) {
-    // FIX: правильный redirectTo с автоопределением пути
     const redirectTo = getBaseUrl() + '/login.html';
     console.log('🔐 OAuth redirectTo:', redirectTo);
-
     const { data, error } = await getClient().auth.signInWithOAuth({
       provider,
-      options: { redirectTo }
+      options: { 
+        redirectTo,
+        skipBrowserRedirect: false
+      }
     });
     return { data, error };
   }
@@ -411,7 +429,6 @@
     isAdmin, getAllUsers, setUserRole, getAdminLogs, logAction
   };
 
-  // FIX: auto-init при загрузке
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => setTimeout(init, 50));
   } else {
