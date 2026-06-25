@@ -1,5 +1,5 @@
 /* ============================================================
-   Login Page Logic
+   Login Page Logic (FIXED v3 — no OAuth loops, proper session handling)
    ============================================================ */
 
 let isRegisterMode = false;
@@ -58,50 +58,84 @@ async function loginWithGoogle() {
         if (error) {
             document.getElementById("loginError").textContent = error.message;
         }
+        // FIX: НЕ редиректим здесь — Supabase OAuth сам редиректнет на Google,
+        // а потом обратно. Обработка будет в handleOAuthReturn()
     } catch (e) {
         document.getElementById("loginError").textContent = "Ошибка входа через Google";
     }
 }
 
+// FIX: Полностью переписанная обработка OAuth возврата
 async function handleOAuthReturn() {
+    // Ждём загрузки всех скриптов
     let attempts = 0;
-    while (attempts < 30) {
+    while (attempts < 50) {
         if (window.TH && window._supabase) break;
         await new Promise(r => setTimeout(r, 100));
         attempts++;
     }
 
-    const session = await window.TH.getSession();
-    if (session?.user) {
-        console.log('✅ OAuth session found');
-        await DB.syncSupabaseUser();
-
-        if (window.history.replaceState) {
-            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-        }
-
-        location.href = "index.html";
-        return true;
+    if (!window.TH || !window._supabase) {
+        console.error('❌ Scripts not loaded');
+        return false;
     }
 
-    if (window.location.hash && window.location.hash.includes('access_token')) {
-        console.log('⏳ Hash still present, retrying...');
-        await new Promise(r => setTimeout(r, 1000));
+    // FIX: Проверяем, есть ли хеш с токеном (OAuth возврат)
+    const hash = window.location.hash;
+    const hasOAuthToken = hash && (hash.includes('access_token=') || hash.includes('error='));
 
-        const retrySession = await window.TH.getSession();
-        if (retrySession?.user) {
+    if (!hasOAuthToken) {
+        // Обычная загрузка страницы — проверяем существующую сессию
+        const session = await window.TH.getSession();
+        if (session?.user) {
+            console.log('✅ Existing session found');
             await DB.syncSupabaseUser();
-            if (window.history.replaceState) {
-                window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-            }
-            location.href = "index.html";
             return true;
         }
-
-        console.error('❌ Failed to establish session from OAuth hash');
-        document.getElementById("loginError").textContent = "Ошибка авторизации. Попробуйте войти через email.";
+        return false;
     }
 
+    // OAuth возврат — Supabase уже обработал токен (detectSessionInUrl: true)
+    // Просто ждём немного и проверяем сессию
+    console.log('⏳ OAuth return detected, waiting for session...');
+    
+    // Даём Supabase время обработать хеш
+    await new Promise(r => setTimeout(r, 500));
+
+    // Пробуем получить сессию несколько раз
+    for (let i = 0; i < 10; i++) {
+        const session = await window.TH.getSession();
+        if (session?.user) {
+            console.log('✅ OAuth session established');
+            await DB.syncSupabaseUser();
+            
+            // FIX: Очищаем хеш из URL БЕЗ перезагрузки
+            if (window.history.replaceState) {
+                window.history.replaceState(
+                    {}, 
+                    document.title, 
+                    window.location.pathname + window.location.search
+                );
+            }
+            
+            // FIX: Редирект на главную ТОЛЬКО если мы ещё на login.html
+            if (window.location.pathname.includes('login.html')) {
+                location.href = "index.html";
+            }
+            return true;
+        }
+        await new Promise(r => setTimeout(r, 300));
+    }
+
+    console.error('❌ Failed to establish OAuth session');
+    document.getElementById("loginError").textContent = 
+        "Ошибка авторизации через Google. Попробуйте войти через email или обновите страницу.";
+    
+    // Очищаем хеш чтобы не было повторных попыток
+    if (window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    }
+    
     return false;
 }
 
@@ -131,8 +165,12 @@ document.addEventListener("DOMContentLoaded", async function() {
 
     Auth.renderNavUser();
     Auth.checkFandomAutoAdmin();
+    
+    // FIX: Используем isAdminSync для DOM (не async)
     const navAdmin = document.getElementById("navAdmin");
-    if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
+    if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) {
+        navAdmin.classList.remove("hidden");
+    }
 
     await handleOAuthReturn();
 });
