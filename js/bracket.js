@@ -1,180 +1,140 @@
-/*
- Tournament Hub — Bracket Controller (FIXED v4 — async vote, proper DB updates, safe fallback)
- Работает с nested-структурой: tournament.rounds[].matches[]
-*/
-
+/* ============================================================
+   Tournament Hub — Bracket Controller (FIXED v5 — safe sub-mutations)
+   ============================================================ */
 (function () {
+  'use strict';
 
-    /* ---------- helpers ---------- */
+  function getTournamentById(id) {
+    const db = window.DB.getDB();
+    return (db.tournaments || []).find(t => t.id === id) || null;
+  }
 
-    function getTournamentById(id) {
-        const db = DB.getDB();
-        return (db.tournaments || []).find(t => t.id === id) || null;
+  function findMatchInTournament(tournament, matchId) {
+    if (!tournament || !Array.isArray(tournament.rounds)) return null;
+    for (let rIdx = 0; rIdx < tournament.rounds.length; rIdx++) {
+      const round = tournament.rounds[rIdx];
+      const match = (round.matches || []).find(m => m.id === matchId);
+      if (match) return { match, round, roundIndex: rIdx };
+    }
+    return null;
+  }
+
+  function getActiveRound(tournament) {
+    if (!tournament || !Array.isArray(tournament.rounds)) return null;
+    return tournament.rounds[tournament.currentRound || 0] || null;
+  }
+
+  // --- ГОЛОСОВАНИЕ ЗА УЧАСТНИКА В МАТЧЕ ---
+  async function vote(matchId, playerNumber) {
+    const db = window.DB.getDB();
+    let targetMatch = null;
+    let targetTournament = null;
+
+    for (const t of (db.tournaments || [])) {
+      const found = findMatchInTournament(t, matchId);
+      if (found) {
+        targetMatch = found.match;
+        targetTournament = t;
+        break;
+      }
     }
 
-    function findMatchInTournament(tournament, matchId) {
-        if (!tournament || !Array.isArray(tournament.rounds)) return null;
-        for (const round of tournament.rounds) {
-            const match = (round.matches || []).find(m => m.id === matchId);
-            if (match) return { match, round };
-        }
-        return null;
+    if (!targetMatch || !targetTournament) {
+      return { success: false, error: "Матч не найден в структуре активных сеток." };
     }
 
-    function getActiveRound(tournament) {
-        if (!tournament || !Array.isArray(tournament.rounds)) return null;
-        return tournament.rounds[tournament.currentRound || 0] || null;
+    if (targetMatch.finished) {
+      return { success: false, error: "Голосование за этот поединок уже закрыто." };
     }
 
-    /* ---------- public API ---------- */
-
-    function getMatch(matchId) {
-        const db = DB.getDB();
-        for (const t of (db.tournaments || [])) {
-            const found = findMatchInTournament(t, matchId);
-            if (found) return found.match;
-        }
-        return null;
+    // Проверка дублирования голосов через локальные маркеры безопасности
+    const voteKey = `voted_match_${matchId}`;
+    if (localStorage.getItem(voteKey)) {
+      return { success: false, error: "Вы уже оставили свой голос в этом матче." };
     }
 
-    function getTournament(matchId) {
-        const db = DB.getDB();
-        for (const t of (db.tournaments || [])) {
-            const found = findMatchInTournament(t, matchId);
-            if (found) return t;
-        }
-        return null;
+    // Инкрементируем сторону голосования
+    if (playerNumber === 1) {
+      targetMatch.votes1 = (targetMatch.votes1 || 0) + 1;
+    } else if (playerNumber === 2) {
+      targetMatch.votes2 = (targetMatch.votes2 || 0) + 1;
+    } else {
+      return { success: false, error: "Неверный идентификатор стороны." };
     }
 
-    // FIX: async vote с правильной проверкой canUserVote и markVote
-    async function vote(matchId, player) {
-        const canVote = await Auth.canUserVote(matchId);
-        if (!canVote) {
-            toast("Вы уже голосовали в этом матче");
-            return false;
-        }
+    localStorage.setItem(voteKey, "true");
 
-        // Находим tournament_id для markVote
-        let targetTournamentId = null;
-
-        DB.updateDB(db => {
-            for (const t of (db.tournaments || [])) {
-                const found = findMatchInTournament(t, matchId);
-                if (found) {
-                    const match = found.match;
-                    if (match.finished) return;
-                    if (player !== 1 && player !== 2) return;
-                    if (t.status !== "active") return;
-
-                    if (player === 1) match.votes1 = (match.votes1 || 0) + 1;
-                    if (player === 2) match.votes2 = (match.votes2 || 0) + 1;
-
-                    targetTournamentId = t.id;
-                    break;
-                }
-            }
-        });
-
-        if (!targetTournamentId) {
-            toast("Ошибка: турнир не найден");
-            return false;
-        }
-
-        // FIX: передаём tournamentId в markVote
-        await Auth.markVote(matchId, targetTournamentId, player);
-
-        if (typeof RenderBracket !== "undefined" && RenderBracket.renderBracket) {
-            const urlParams = new URLSearchParams(window.location.search);
-            const currentTid = urlParams.get("id");
-            if (currentTid === targetTournamentId) {
-                RenderBracket.renderBracket();
-            }
-        }
-
-        return true;
+    // Интеграция с сервером Supabase (если онлайн-режим доступен)
+    if (window.TH && typeof window.TH.castVote === 'function') {
+      try {
+        await window.TH.castVote(matchId, playerNumber);
+      } catch (e) {
+        console.warn("Сервер Supabase отклонил трансляцию голоса, пишем в локальный кэш:", e);
+      }
     }
 
-    function calculateWinner(match) {
-        if (!match) return null;
-        const v1 = match.votes1 || 0;
-        const v2 = match.votes2 || 0;
-        if (v1 > v2) return match.player1;
-        if (v2 > v1) return match.player2;
-        return match.player1;
+    window.DB.saveDB(db);
+    return { success: true, match: targetMatch };
+  }
+
+  // --- РУЧНОЕ ИЛИ АВТОМАТИЧЕСКОЕ ЗАКРЫТИЕ МАТЧА АДМИНИСТРАТОРОМ ---
+  function finishMatch(matchId) {
+    const db = window.DB.getDB();
+    let foundData = null;
+
+    for (const t of (db.tournaments || [])) {
+      const found = findMatchInTournament(t, matchId);
+      if (found) {
+        foundData = { ...found, tournament: t };
+        break;
+      }
     }
 
-    function finishMatch(matchId) {
-        let result = null;
-        let tournamentId = null;
-        let isFinal = false;
+    if (!foundData) return { success: false, error: "Матч не найден." };
 
-        DB.updateDB(db => {
-            for (const t of (db.tournaments || [])) {
-                const found = findMatchInTournament(t, matchId);
-                if (found) {
-                    const match = found.match;
-                    if (match.finished) return;
+    const { match, tournament } = foundData;
+    if (match.finished) return { success: true, match };
 
-                    const winner = calculateWinner(match);
-                    if (!winner) return;
-
-                    match.winner = winner;
-                    match.finished = true;
-                    match.status = "done";
-                    result = winner;
-                    tournamentId = t.id;
-
-                    const currentRound = t.rounds[t.currentRound || 0];
-                    if (currentRound) {
-                        const allFinished = (currentRound.matches || []).every(m => m.finished);
-                        const isLastRound = t.currentRound >= (t.rounds.length - 1);
-                        isFinal = allFinished && isLastRound;
-                    }
-                    break;
-                }
-            }
-        });
-
-        if (isFinal && tournamentId) {
-            Tournament.advanceRound(tournamentId);
-        }
-
-        return result;
+    // Вычисляем победителя на основе накопленных кликов
+    if ((match.votes1 || 0) >= (match.votes2 || 0)) {
+      match.winner_id = match.player1 ? match.player1.id : null;
+    } else {
+      match.winner_id = match.player2 ? match.player2.id : null;
     }
 
-    function getTournamentByMatchId(matchId) {
-        const db = DB.getDB();
-        for (const t of (db.tournaments || [])) {
-            const found = findMatchInTournament(t, matchId);
-            if (found) return t;
-        }
-        return null;
+    match.finished = true;
+
+    // Запускаем пересчёт Elo-дельты для участников поединка
+    if (match.player1 && match.player2) {
+      const rating1 = match.player1.elo || 1000;
+      const rating2 = match.player2.elo || 1000;
+      
+      const outcome1 = match.winner_id === match.player1.id ? 1 : 0;
+      const outcome2 = match.winner_id === match.player2.id ? 1 : 0;
+
+      match.player1.elo = rating1 + window.TournamentEngine.calculateEloChange(rating1, rating2, outcome1);
+      match.player2.elo = rating2 + window.TournamentEngine.calculateEloChange(rating2, rating1, outcome2);
     }
 
-    /* ---------- legacy compatibility ---------- */
+    // Проверяем, закрылся ли весь раунд целиком для автоматического продвижения дальше
+    const currentRound = tournament.rounds[tournament.currentRound || 0];
+    const allMatchesFinished = currentRound.matches.every(m => m.finished);
 
-    function getMatches(roundIndex) {
-        const db = DB.getDB();
-        const allMatches = [];
-        for (const t of (db.tournaments || [])) {
-            if (t.rounds && t.rounds[roundIndex]) {
-                allMatches.push(...(t.rounds[roundIndex].matches || []));
-            }
-        }
-        return allMatches;
+    if (allMatchesFinished) {
+      window.Tournament.advanceRound(tournament.id);
+    } else {
+      window.TournamentEngine.propagateWinners(tournament.rounds);
+      window.DB.saveDB(db);
     }
 
-    window.Bracket = {
-        getMatches,
-        getMatch,
-        getTournament,
-        getTournamentById,
-        getTournamentByMatchId,
-        vote,
-        finishMatch,
-        calculateWinner,
-        findMatchInTournament,
-        getActiveRound
-    };
+    return { success: true, match };
+  }
 
+  window.Bracket = {
+    getTournamentById,
+    findMatchInTournament,
+    getActiveRound,
+    vote,
+    finishMatch
+  };
 })();
