@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Database Layer (FIXED v9 — proper init order, no loops)
+   Tournament Hub — Database Layer (FIXED v10 — persistent auth, no loops)
    ============================================================ */
 
 (function () {
@@ -144,7 +144,6 @@
             })),
             config: t.config || {}
           }));
-          // FIX: синхронизируем activeTournamentId
           const active = tournaments.find(t => t.status === 'active');
           if (active) db.activeTournamentId = active.id;
         });
@@ -157,9 +156,10 @@
   }
 
   /* ==========================================================
-     USER
+     USER — FIXED: always check Supabase session first
      ========================================================== */
   async function getCurrentUser() {
+    // Сначала проверяем Supabase сессию
     if (window.TH) {
       try {
         const session = await window.TH.getSession();
@@ -174,7 +174,7 @@
           const meta = session.user.user_metadata || {};
           const emailName = session.user.email?.split('@')[0] || 'user';
 
-          return {
+          const user = {
             id: session.user.id,
             username: profile?.username || meta.username || meta.name || emailName,
             displayName: profile?.display_name || meta.display_name || meta.name || meta.username || emailName,
@@ -186,6 +186,10 @@
             fandomName: profile?.fandom_name || meta.fandom_name || null,
             fandomVerified: profile?.fandom_verified || meta.fandom_verified || false
           };
+
+          // Сохраняем в localStorage для fallback
+          setCurrentUser(user);
+          return user;
         }
       } catch (e) {
         console.warn('Supabase getSession failed, trying cache', e);
@@ -363,7 +367,7 @@
   function cleanupLegacyData() {
     const keysToKeep = [
       'th_user_id', 'th_user_email', 'th_user_name', 'th_user_role', 'th_user_votes',
-      'th_admin', 'th_fandom_pending', 'tournament_hub_db'
+      'th_admin', 'th_fandom_pending', 'tournament_hub_db', 'th_supabase_auth'
     ];
 
     const keysToRemove = [];
@@ -406,7 +410,7 @@
   }
 
   /* ==========================================================
-     INIT (FIXED: вызывается из supabase-client.js после создания window.TH)
+     INIT
      ========================================================== */
   async function init() {
     if (!window.TH) {
@@ -448,10 +452,8 @@
   window.setCurrentUser = setCurrentUser;
   window.toast = toast;
 
-  // FIX: init теперь вызывается извне, но есть fallback
   window.DB._init = init;
 
-  // FIX: auto-init с проверкой window.TH
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
