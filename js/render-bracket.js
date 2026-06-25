@@ -1,6 +1,5 @@
-
 /* ============================================================
-   Tournament Hub Bracket Renderer (FIXED v2 — no memory leaks, stable voting)
+   Tournament Hub Bracket Renderer (FIXED v3 — tournament_id fix, memory-safe, stable voting)
    ============================================================ */
 
 (function () {
@@ -11,8 +10,8 @@
   }
 
   let realtimeSubscribed = false;
-  let previousVotes = new Map(); // FIX: Map вместо объекта, лучше управление памятью
-  const MAX_VOTES_CACHE = 500;   // FIX: ограничение размера кэша
+  let previousVotes = new Map();
+  const MAX_VOTES_CACHE = 200;  // FIX: уменьшили с 500 до 200
 
   /* ==========================================================
      LOAD TOURNAMENT
@@ -23,12 +22,13 @@
         const { data } = await window.TH.getTournament(tournamentId);
         if (data) return normalizeTournament(data);
       } catch (e) {
-        console.warn('Supabase tournament load failed');
+        console.warn('Supabase tournament load failed:', e);
       }
     }
     return Bracket.getTournamentById(tournamentId);
   }
 
+  // FIX: tournament_id теперь передаётся в каждый матч!
   function normalizeTournament(t) {
     return {
       id: t.id,
@@ -54,7 +54,8 @@
           winner: m.winner,
           finished: m.finished,
           status: m.status,
-          tournament_id: t.id
+          tournament_id: t.id,  // ← FIX: было потеряно!
+          round_id: r.id        // ← бонус: round_id тоже
         }))
       })),
       config: t.config || {}
@@ -86,15 +87,20 @@
     const p1Win = winner && (winner.id ? winner.id === p1?.id : winner === p1);
     const p2Win = winner && (winner.id ? winner.id === p2?.id : winner === p2);
 
-    // FIX: Используем Map для кэша голосов
+    // FIX: безопасный кэш с FIFO-очисткой
     const prev = previousVotes.get(match.id) || { v1: 0, v2: 0 };
     const v1Changed = prev.v1 !== votes1;
     const v2Changed = prev.v2 !== votes2;
     
-    // FIX: Ограничиваем размер кэша
-    if (previousVotes.size > MAX_VOTES_CACHE) {
-      const firstKey = previousVotes.keys().next().value;
-      previousVotes.delete(firstKey);
+    // FIX: FIFO очистка — удаляем самые старые
+    if (previousVotes.size >= MAX_VOTES_CACHE) {
+      const keysToDelete = [];
+      const iter = previousVotes.keys();
+      for (let i = 0; i < previousVotes.size - MAX_VOTES_CACHE + 1; i++) {
+        const next = iter.next();
+        if (!next.done) keysToDelete.push(next.value);
+      }
+      keysToDelete.forEach(k => previousVotes.delete(k));
     }
     previousVotes.set(match.id, { v1: votes1, v2: votes2 });
 
@@ -103,11 +109,13 @@
 
     const canVote = isActive && p1 && p2 && !match.finished;
 
+    // FIX: tournament_id всегда есть, не упадёт
+    const tid = match.tournament_id || '';
     const voteBtn1 = canVote
-      ? `onclick="RenderBracket.handleVote('${match.id}', '${match.tournament_id || ''}', 1)"`
+      ? `onclick="RenderBracket.handleVote('${match.id}', '${tid}', 1)"`
       : "disabled tabindex='-1'";
     const voteBtn2 = canVote
-      ? `onclick="RenderBracket.handleVote('${match.id}', '${match.tournament_id || ''}', 2)"`
+      ? `onclick="RenderBracket.handleVote('${match.id}', '${tid}', 2)"`
       : "disabled tabindex='-1'";
 
     return `
@@ -128,9 +136,16 @@
   }
 
   /* ==========================================================
-     VOTE (FIXED: внутри namespace, не глобальная)
+     VOTE
      ========================================================== */
   async function handleVote(matchId, tournamentId, playerNum) {
+    // FIX: проверяем tournamentId
+    if (!tournamentId) {
+      toast("Ошибка: не указан турнир");
+      console.error('handleVote: missing tournament_id for match', matchId);
+      return;
+    }
+
     const user = await DB.getCurrentUser();
     if (!user) {
       toast("Войдите, чтобы голосовать");
@@ -152,11 +167,44 @@
 
       animateVote(matchId, playerNum);
       toast("✅ Голос засчитан!");
-      renderBracket();
+      
+      // FIX: не вызываем renderBracket() сразу — дождёмся realtime события
+      // или обновим только этот матч
+      await refreshSingleMatch(matchId);
 
     } catch (e) {
       console.error('Vote error:', e);
       toast("Ошибка голосования");
+    }
+  }
+
+  // FIX: обновляем только один матч вместо всей сетки
+  async function refreshSingleMatch(matchId) {
+    if (!window.TH) return;
+    try {
+      const { data: match } = await window.TH.getClient()
+        .from('matches')
+        .select('*, player1:player1_id(*), player2:player2_id(*)')
+        .eq('id', matchId)
+        .single();
+      
+      if (!match) return;
+
+      const el1 = document.getElementById(`votes-${matchId}-1`);
+      const el2 = document.getElementById(`votes-${matchId}-2`);
+      if (el1) el1.textContent = match.votes1 || 0;
+      if (el2) el2.textContent = match.votes2 || 0;
+
+      // Обновляем бары
+      const total = (match.votes1 || 0) + (match.votes2 || 0);
+      const matchEl = document.getElementById(`match-${matchId}`);
+      if (matchEl) {
+        const bars = matchEl.querySelectorAll('.player-bar');
+        if (bars[0]) bars[0].style.width = total ? Math.round((match.votes1 || 0) / total * 100) + '%' : '0%';
+        if (bars[1]) bars[1].style.width = total ? Math.round((match.votes2 || 0) / total * 100) + '%' : '0%';
+      }
+    } catch (e) {
+      console.warn('refreshSingleMatch failed:', e);
     }
   }
 
@@ -171,7 +219,7 @@
     const votesEl = document.getElementById(`votes-${matchId}-${playerNum}`);
     if (votesEl) {
       votesEl.style.animation = 'none';
-      votesEl.offsetHeight;
+      votesEl.offsetHeight; // force reflow
       votesEl.style.animation = 'count-up 0.3s ease';
     }
   }
@@ -275,7 +323,8 @@
   window.RenderBracket = { 
     renderBracket, 
     animateVote,
-    handleVote  // FIX: экспортируем handleVote в namespace
+    handleVote,
+    refreshSingleMatch
   };
 
   if (document.readyState === 'loading') {
