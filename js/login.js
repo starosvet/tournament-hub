@@ -1,12 +1,10 @@
 /* ============================================================
-   Tournament Hub — Login Page Logic (OPTIMIZED v3 — reactive OAuth callbacks)
+   Tournament Hub — Login Page Controller (FIXED v4 — safe OAuth loops)
    ============================================================ */
-
 (function () {
   'use strict';
 
   let isRegisterMode = false;
-  let initDone = false;
 
   function showError(msg) {
     const el = document.getElementById("loginError");
@@ -20,19 +18,16 @@
     if (!btn) return;
     btn.disabled = loading;
     btn.dataset.originalText = btn.dataset.originalText || btn.textContent;
-    btn.textContent = loading ? "⏳ Загрузка..." : btn.dataset.originalText;
-  }
-
-  function getQueryParam(name) {
-    return new URLSearchParams(window.location.search).get(name);
+    btn.textContent = loading ? "⏳ Подождите..." : btn.dataset.originalText;
   }
 
   function redirectAfterLogin() {
-    const target = getQueryParam("redirect") || "index.html";
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get("redirect") || "index.html";
     window.location.href = target;
   }
 
-  async function doLogin() {
+  async function handleFormSubmit() {
     showError("");
     const emailEl = document.getElementById("loginEmail");
     const passEl = document.getElementById("loginPassword");
@@ -44,7 +39,7 @@
     const username = userEl ? userEl.value.trim() : "";
 
     if (!email || !password) {
-      showError("Заполните Email и Пароль");
+      showError("Пожалуйста, заполните поля Email и Пароль");
       return;
     }
 
@@ -52,23 +47,24 @@
 
     if (isRegisterMode) {
       if (!username) {
-        showError("Введите никнейм для регистрации");
+        showError("Необходимо указать никнейм для создания аккаунта");
         setLoading(btn, false);
         return;
       }
-      const res = await Auth.register(username, password, email);
+      
+      const res = await window.Auth.register(username, password, email);
       if (!res.success) {
-        showError(res.error || "Ошибка регистрации");
+        showError(res.error || "Не удалось создать аккаунт.");
         setLoading(btn, false);
       } else {
-        alert("Регистрация успешна! Теперь вы можете войти.");
-        toggleMode();
+        alert("Регистрация завершена! Проверьте почту для подтверждения или выполните вход.");
+        toggleFormMode();
         setLoading(btn, false);
       }
     } else {
-      const res = await Auth.login(email, password);
+      const res = await window.Auth.login(email, password);
       if (!res.success) {
-        showError(res.error || "Неверный логин или пароль");
+        showError(res.error || "Неверный логин или пароль.");
         setLoading(btn, false);
       } else {
         redirectAfterLogin();
@@ -76,7 +72,7 @@
     }
   }
 
-  async function doGoogleLogin() {
+  async function handleGoogleOAuth() {
     showError("");
     const btn = document.getElementById("googleBtn");
     setLoading(btn, true);
@@ -84,92 +80,87 @@
       const { error } = await window.TH.signInWithProvider('google');
       if (error) throw error;
     } catch (e) {
-      showError("Ошибка Google Auth: " + e.message);
+      showError("Ошибка аутентификации через Google: " + e.message);
       setLoading(btn, false);
     }
   }
 
-  function toggleMode() {
+  function toggleFormMode() {
     isRegisterMode = !isRegisterMode;
     const title = document.getElementById("loginTitle");
     const btn = document.getElementById("loginBtn");
     const toggle = document.getElementById("toggleBtn");
-    const userRow = document.getElementById("loginUsername");
+    const usernameContainer = document.getElementById("usernameContainer");
 
-    if (title) title.textContent = isRegisterMode ? "📝 Регистрация" : "🔐 Вход в систему";
-    if (btn) btn.textContent = isRegisterMode ? "🚀 Создать аккаунт" : "🔐 Войти";
-    if (toggle) toggle.textContent = isRegisterMode ? "У меня уже есть аккаунт" : "📝 Создать аккаунт";
-    if (userRow) userRow.style.display = isRegisterMode ? "block" : "none";
+    if (title) title.textContent = isRegisterMode ? "📝 Регистрация профиля" : "🔐 Вход в систему";
+    if (btn) btn.textContent = isRegisterMode ? "🚀 Зарегистрироваться" : "🔐 Войти";
+    if (toggle) toggle.textContent = isRegisterMode ? "Уже есть аккаунт? Войти" : "Нет аккаунта? Создать профиль";
+    if (usernameContainer) usernameContainer.style.display = isRegisterMode ? "block" : "none";
     showError("");
   }
 
-  function doClearData() {
-    if (confirm("Вы уверены, что хотите очистить локальный кэш? Это исправит ошибки отображения.")) {
-      DB.clearAllLocalData();
-      alert("Данные успешно очищены!");
-      window.location.reload();
-    }
-  }
-
   function handleOAuthCallback() {
-    // Если в URL есть параметры сессии Supabase, дожидаемся обработки и редиректим
+    // Сканируем URL на наличие хэш-токенов от Google OAuth
     if (window.location.hash.includes('access_token') || window.location.hash.includes('id_token')) {
-      let checkTicks = 0;
-      const oauthInterval = setInterval(async () => {
-        const user = await DB.getCurrentUser();
+      showError("Синхронизация профиля Google...");
+      let ticks = 0;
+      const oauthCheck = setInterval(async () => {
+        const user = await window.TH.getCurrentUser();
         if (user) {
-          clearInterval(oauthInterval);
+          clearInterval(oauthCheck);
+          await window.DB.setCurrentUser(user);
           redirectAfterLogin();
         }
-        checkTicks++;
-        if (checkTicks > 50) clearInterval(oauthInterval); // Предохранитель таймаута
-      }, 100);
+        ticks++;
+        if (ticks > 60) {
+          clearInterval(oauthCheck);
+          showError("Превышено время ожидания ответа от сессии Google. Попробуйте еще раз.");
+        }
+      }, 150);
     }
   }
 
-  function init() {
-    if (initDone) return;
-    initDone = true;
-
-    handleOAuthCallback();
-
-    const loginBtn = document.getElementById("loginBtn");
-    const toggleBtn = document.getElementById("toggleBtn");
-    const googleBtn = document.getElementById("googleBtn");
-    const clearBtn = document.getElementById("clearBtn");
-
-    if (loginBtn) loginBtn.addEventListener("click", doLogin);
-    if (toggleBtn) toggleBtn.addEventListener("click", toggleMode);
-    if (googleBtn) googleBtn.addEventListener("click", doGoogleLogin);
-    if (clearBtn) clearBtn.addEventListener("click", doClearData);
+  function bindEvents() {
+    document.getElementById("loginBtn")?.addEventListener("click", handleFormSubmit);
+    document.getElementById("toggleBtn")?.addEventListener("click", toggleFormMode);
+    document.getElementById("googleBtn")?.addEventListener("click", handleGoogleOAuth);
+    
+    document.getElementById("clearCacheBtn")?.addEventListener("click", function() {
+      if (confirm("Очистить кэш авторизации? Это сбросит зависшие сессии.")) {
+        window.DB.clearAllLocalData();
+        window.location.reload();
+      }
+    });
 
     const inputs = ["loginEmail", "loginPassword", "loginUsername"];
     inputs.forEach(id => {
       document.getElementById(id)?.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") doLogin();
+        if (e.key === "Enter") handleFormSubmit();
       });
     });
+  }
 
-    // Редирект авторизованного пользователя, если нет хэша OAuth
-    if (!window.location.hash.includes('access_token')) {
-      let attempts = 0;
-      const checkAuthInit = setInterval(async () => {
-        if (window.TH && window.TH.isReady) {
-          clearInterval(checkAuthInit);
-          const user = await DB.getCurrentUser();
-          if (user && !window.location.search.includes('error')) {
-            redirectAfterLogin();
-          }
+  // Безопасный запуск строго после готовности глобальных скриптов
+  document.addEventListener("DOMContentLoaded", function () {
+    let readyAttempts = 0;
+    const checkFormInit = setInterval(() => {
+      if (window.TH && window.DB && window.Auth) {
+        clearInterval(checkFormInit);
+        handleOAuthCallback();
+        bindEvents();
+
+        // Если пользователь уже вошел и это не возврат от OAuth, уводим на главную
+        if (!window.location.hash.includes('access_token')) {
+          window.DB.getCurrentUser().then(user => {
+            if (user) redirectAfterLogin();
+          });
         }
-        attempts++;
-        if (attempts > 30) clearInterval(checkAuthInit);
-      }, 100);
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+      }
+      readyAttempts++;
+      if (readyAttempts > 40) {
+        clearInterval(checkFormInit);
+        console.error("Критические модулиTournament Hub не смогли загрузиться.");
+      }
+    }, 50);
+  });
 })();
