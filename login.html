@@ -5,30 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Supabase SDK — загружаем синхронно ПЕРВЫМ -->
+    <!-- Supabase SDK — синхронно -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- КРИТИЧЕСКИЙ ФИКС: Инициализация Supabase ДО всех остальных скриптов -->
-    <script>
-        (function() {
-            'use strict';
-            const SUPABASE_URL = 'https://fpabooteqfahhzobcpnh.supabase.co';
-            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwYWJvb3RlcWZhaGh6b2JjcG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjgwOTIsImV4cCI6MjA5NzkwNDA5Mn0.cc1oG5-73US61LI9uDaPwuQsOjLkIAPxDcfGQvVY9Ac';
-
-            // Создаём клиент СРАЗУ, пока хэш ещё в URL
-            if (typeof window.supabase !== 'undefined') {
-                window._supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-                    auth: {
-                        autoRefreshToken: true,
-                        persistSession: true,
-                        detectSessionInUrl: true
-                    }
-                });
-                console.log('✅ Supabase initialized inline');
-            } else {
-                console.error('❌ Supabase library not loaded!');
-            }
-        })();
-    </script>
+    <!-- OAuth init — СРАЗУ после SDK, синхронно -->
+    <script src="js/oauth-init.js"></script>
+    <!-- Остальные скрипты -->
     <script src="js/supabase-client.js"></script>
     <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
@@ -67,15 +48,15 @@
                 <label id="usernameLabel" style="display:none;">Никнейм</label>
                 <input type="text" id="loginUsername" placeholder="username" style="display:none;">
 
-                <button class="btn-primary" style="width:100%;margin-top:20px;" onclick="doLogin()" id="loginBtn">🔐 Войти</button>
-                <button class="btn-secondary" style="width:100%;margin-top:12px;" onclick="toggleRegister()" id="toggleBtn">📝 Создать аккаунт</button>
+                <button class="btn-primary" style="width:100%;margin-top:20px;" id="loginBtn">🔐 Войти</button>
+                <button class="btn-secondary" style="width:100%;margin-top:12px;" id="toggleBtn">📝 Создать аккаунт</button>
 
                 <div class="error" id="loginError" style="color:var(--red);margin-top:16px;text-align:center;font-size:14px;"></div>
             </div>
 
             <div style="margin-top:24px;text-align:center;">
                 <p style="color:var(--text-3);font-size:13px;margin-bottom:12px;">Или войдите через:</p>
-                <button class="btn-secondary" onclick="loginWithGoogle()" style="width:100%;">
+                <button class="btn-secondary" id="googleBtn" style="width:100%;">
                     🔍 Google
                 </button>
             </div>
@@ -89,7 +70,7 @@
         <div class="login-box page-enter" style="margin-top:24px;">
             <h2>🧹 Очистка данных</h2>
             <p style="color:var(--text-3);font-size:13px;">Если сайт работает некорректно, очистите локальные данные</p>
-            <button class="btn-danger" style="width:100%;margin-top:12px;" onclick="clearAllData()">🗑 Очистить все локальные данные</button>
+            <button class="btn-danger" style="width:100%;margin-top:12px;" id="clearBtn">🗑 Очистить все локальные данные</button>
         </div>
     </div>
 
@@ -97,141 +78,6 @@
         <p>Tournament Hub</p>
     </footer>
 
-    <script>
-        let isRegisterMode = false;
-
-        function toggleRegister() {
-            isRegisterMode = !isRegisterMode;
-            const usernameLabel = document.getElementById("usernameLabel");
-            const usernameInput = document.getElementById("loginUsername");
-            const loginBtn = document.getElementById("loginBtn");
-            const toggleBtn = document.getElementById("toggleBtn");
-
-            if (isRegisterMode) {
-                usernameLabel.style.display = "block";
-                usernameInput.style.display = "block";
-                usernameInput.required = true;
-                loginBtn.textContent = "📝 Зарегистрироваться";
-                toggleBtn.textContent = "🔐 Уже есть аккаунт";
-            } else {
-                usernameLabel.style.display = "none";
-                usernameInput.style.display = "none";
-                usernameInput.required = false;
-                loginBtn.textContent = "🔐 Войти";
-                toggleBtn.textContent = "📝 Создать аккаунт";
-            }
-            document.getElementById("loginError").textContent = "";
-        }
-
-        async function doLogin() {
-            const email = document.getElementById("loginEmail").value.trim();
-            const password = document.getElementById("loginPassword").value;
-            const username = document.getElementById("loginUsername").value.trim();
-            const err = document.getElementById("loginError");
-            err.textContent = "";
-
-            if (isRegisterMode) {
-                if (!username) { err.textContent = "Введите никнейм"; return; }
-                const result = await Auth.register(username, password, email);
-                if (result.success) {
-                    location.href = "index.html";
-                } else {
-                    err.textContent = result.error || "Ошибка регистрации";
-                }
-            } else {
-                const result = await Auth.login(email, password);
-                if (result.success) {
-                    location.href = "index.html";
-                } else {
-                    err.textContent = result.error || "Ошибка входа";
-                }
-            }
-        }
-
-        async function loginWithGoogle() {
-            try {
-                const { error } = await window.TH.signInWithProvider('google');
-                if (error) {
-                    document.getElementById("loginError").textContent = error.message;
-                }
-            } catch (e) {
-                document.getElementById("loginError").textContent = "Ошибка входа через Google";
-            }
-        }
-
-        // FIX: Обработка OAuth callback — проверяем сессию сразу
-        async function handleOAuthReturn() {
-            // Ждём инициализации из supabase-client.js
-            let attempts = 0;
-            while (attempts < 30) {
-                if (window.TH && window._supabase) break;
-                await new Promise(r => setTimeout(r, 100));
-                attempts++;
-            }
-
-            // Проверяем сессию (Supabase уже должен был обработать хэш inline)
-            const session = await window.TH.getSession();
-            if (session?.user) {
-                console.log('✅ OAuth session found');
-                await DB.syncSupabaseUser();
-
-                // Очищаем хэш
-                if (window.history.replaceState) {
-                    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-                }
-
-                location.href = "index.html";
-                return true;
-            }
-
-            // Если хэш всё ещё есть — пробуем ещё раз через секунду
-            if (window.location.hash && window.location.hash.includes('access_token')) {
-                console.log('⏳ Hash still present, retrying...');
-                await new Promise(r => setTimeout(r, 1000));
-
-                const retrySession = await window.TH.getSession();
-                if (retrySession?.user) {
-                    await DB.syncSupabaseUser();
-                    if (window.history.replaceState) {
-                        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-                    }
-                    location.href = "index.html";
-                    return true;
-                }
-
-                // Если всё ещё нет сессии — показываем ошибку
-                console.error('❌ Failed to establish session from OAuth hash');
-                document.getElementById("loginError").textContent = "Ошибка авторизации. Попробуйте войти через email.";
-            }
-
-            return false;
-        }
-
-        document.addEventListener("keydown", function(e) {
-            if (e.key === "Enter") doLogin();
-        });
-
-        function clearAllData() {
-            if (!confirm("ВНИМАНИЕ! Это удалит ВСЕ локальные данные сайта. Продолжить?")) return;
-            if (prompt('Введите "DELETE" для подтверждения:') !== "DELETE") return;
-
-            Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('th_') || key === 'tournament_hub_db') {
-                    localStorage.removeItem(key);
-                }
-            });
-            toast("🧹 Локальные данные очищены. Перезагрузка...");
-            setTimeout(() => location.reload(), 1000);
-        }
-
-        document.addEventListener("DOMContentLoaded", async function() {
-            Auth.renderNavUser();
-            Auth.checkFandomAutoAdmin();
-            const navAdmin = document.getElementById("navAdmin");
-            if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
-
-            await handleOAuthReturn();
-        });
-    </script>
+    <script src="js/login.js"></script>
 </body>
 </html>
