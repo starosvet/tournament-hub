@@ -62,9 +62,7 @@
             </p>
         </div>
 
-        <!-- FIX: Убран Fandom-вход отсюда, перенесён в профиль -->
-
-        <!-- FIX: Кнопка очистки локальных данных -->
+        <!-- Очистка данных -->
         <div class="login-box page-enter" style="margin-top:24px;">
             <h2>🧹 Очистка данных</h2>
             <p style="color:var(--text-3);font-size:13px;">Если сайт работает некорректно, очистите локальные данные</p>
@@ -127,34 +125,70 @@
             }
         }
 
-        // FIX: Google OAuth — правильная обработка через onAuthStateChange
         async function loginWithGoogle() {
             try {
                 const { error } = await window.TH.signInWithProvider('google');
                 if (error) {
                     document.getElementById("loginError").textContent = error.message;
                 }
-                // Редирект произойдёт автоматически, дальше обработает onAuthStateChange в db.js
             } catch (e) {
                 document.getElementById("loginError").textContent = "Ошибка входа через Google";
             }
         }
 
-        // FIX: OAuth callback обрабатывается автоматически через onAuthStateChange в db.js
-        // Но проверим — если уже есть сессия, редиректим на главную
-        async function checkAlreadyLoggedIn() {
+        // FIX: Проверяем OAuth callback — ждём полной инициализации Supabase
+        async function handleOAuthReturn() {
+            // Ждём, пока db.js полностью инициализируется
+            let attempts = 0;
+            const maxAttempts = 20;
+
+            while (attempts < maxAttempts) {
+                if (window.TH && window._supabase) {
+                    break;
+                }
+                await new Promise(r => setTimeout(r, 100));
+                attempts++;
+            }
+
+            // Проверяем сессию
             const session = await window.TH.getSession();
             if (session?.user) {
+                console.log('✅ OAuth session found, syncing user...');
                 await DB.syncSupabaseUser();
+
+                // Очищаем хэш
+                if (window.history.replaceState) {
+                    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+                }
+
+                // Редирект на главную
                 location.href = "index.html";
+                return true;
             }
+
+            // Если хэш есть, но сессии нет — возможно ещё обрабатывается
+            if (window.location.hash && window.location.hash.includes('access_token')) {
+                console.log('⏳ OAuth hash present, waiting for processing...');
+                await new Promise(r => setTimeout(r, 1000));
+
+                const retrySession = await window.TH.getSession();
+                if (retrySession?.user) {
+                    await DB.syncSupabaseUser();
+                    if (window.history.replaceState) {
+                        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+                    }
+                    location.href = "index.html";
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         document.addEventListener("keydown", function(e) {
             if (e.key === "Enter") doLogin();
         });
 
-        // FIX: Очистка всех данных
         function clearAllData() {
             if (!confirm("ВНИМАНИЕ! Это удалит ВСЕ локальные данные сайта. Продолжить?")) return;
             if (prompt('Введите "DELETE" для подтверждения:') !== "DELETE") return;
@@ -174,8 +208,8 @@
             const navAdmin = document.getElementById("navAdmin");
             if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
 
-            // FIX: Проверяем, не залогинены ли уже (после OAuth редиректа)
-            await checkAlreadyLoggedIn();
+            // FIX: Обрабатываем OAuth return
+            await handleOAuthReturn();
         });
     </script>
 </body>
