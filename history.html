@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>История | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
 </head>
 <body>
@@ -58,79 +62,90 @@
                 .replace(/'/g, "&#039;");
         }
 
-        function loadHistory() {
-            const db = DB.getDB();
+        async function loadHistory() {
+            try {
+                // Загружаем данные из Supabase
+                const { data: tournaments } = await window.TH.getTournaments();
+                const { data: users } = await window.TH.getAllUsers();
 
-            // ИСПРАВЛЕНО: считаем матчи и голоса из tournament.rounds[].matches
-            let totalMatches = 0;
-            let totalVotes = 0;
-            const allMatches = [];
+                let totalMatches = 0;
+                let totalVotes = 0;
+                const allMatches = [];
 
-            (db.tournaments || []).forEach(t => {
-                (t.rounds || []).forEach((r, ri) => {
-                    (r.matches || []).forEach(m => {
-                        totalMatches++;
-                        totalVotes += (m.votes1 || 0) + (m.votes2 || 0);
-                        if (m.finished) {
-                            allMatches.push({
-                                ...m,
-                                tournamentName: t.title || "Без названия",
-                                roundName: r.name || "Раунд " + (ri + 1)
-                            });
-                        }
+                (tournaments || []).forEach(t => {
+                    (t.rounds || []).forEach((r, ri) => {
+                        (r.matches || []).forEach(m => {
+                            totalMatches++;
+                            totalVotes += (m.votes1 || 0) + (m.votes2 || 0);
+                            if (m.finished) {
+                                allMatches.push({
+                                    ...m,
+                                    tournamentName: t.title || "Без названия",
+                                    roundName: r.name || "Раунд " + (ri + 1)
+                                });
+                            }
+                        });
                     });
                 });
-            });
 
-            const finished = (db.tournaments || []).filter(t => t.status === "finished");
+                const finished = (tournaments || []).filter(t => t.status === "finished");
 
-            document.getElementById("history-stats").innerHTML = `
-                <div style="display:flex;gap:20px;flex-wrap:wrap;">
-                    <div class="stat-badge">🏆 Завершено турниров: ${finished.length}</div>
-                    <div class="stat-badge">⚔️ Матчей сыграно: ${allMatches.length}</div>
-                    <div class="stat-badge">🗳️ Всего голосов: ${totalVotes}</div>
-                </div>
-            `;
+                document.getElementById("history-stats").innerHTML = `
+                    <div style="display:flex;gap:20px;flex-wrap:wrap;">
+                        <div class="stat-badge">🏆 Завершено турниров: ${finished.length}</div>
+                        <div class="stat-badge">⚔️ Матчей сыграно: ${allMatches.length}</div>
+                        <div class="stat-badge">🗳️ Всего голосов: ${totalVotes}</div>
+                        <div class="stat-badge">👥 Пользователей: ${(users || []).length}</div>
+                    </div>
+                `;
 
-            // Завершённые турниры
-            const ftContainer = document.getElementById("finished-tournaments");
-            if (!finished.length) {
-                ftContainer.innerHTML = `<p style="color:var(--text-3);">Пока нет завершённых турниров</p>`;
-            } else {
-                ftContainer.innerHTML = finished.map(t => `
-                    <div class="tournament-item" onclick="location.href='bracket.html?id=${encodeURIComponent(t.id)}'" style="cursor:pointer;">
-                        <span class="ti-status completed"></span>
-                        <div class="ti-info">
-                            <h4>${escapeHTML(t.title || "Без названия")}</h4>
-                            <span>${new Date(t.createdAt).toLocaleDateString("ru-RU")} — Победитель: ${escapeHTML(t.winner?.name || "?")}</span>
+                // Завершённые турниры
+                const ftContainer = document.getElementById("finished-tournaments");
+                if (!finished.length) {
+                    ftContainer.innerHTML = `<p style="color:var(--text-3);">Пока нет завершённых турниров</p>`;
+                } else {
+                    ftContainer.innerHTML = finished.map(t => `
+                        <div class="tournament-item" onclick="location.href='bracket.html?id=${encodeURIComponent(t.id)}'" style="cursor:pointer;">
+                            <span class="ti-status completed"></span>
+                            <div class="ti-info">
+                                <h4>${escapeHTML(t.title || "Без названия")}</h4>
+                                <span>${new Date(t.created_at).toLocaleDateString("ru-RU")} — Победитель: ${escapeHTML(t.winner?.name || "?")}</span>
+                            </div>
                         </div>
-                    </div>
-                `).join("");
-            }
+                    `).join("");
+                }
 
-            // История матчей
-            const mhContainer = document.getElementById("match-history");
-            if (!allMatches.length) {
-                mhContainer.innerHTML = `<p style="color:var(--text-3);">Пока нет завершённых матчей</p>`;
-            } else {
-                mhContainer.innerHTML = allMatches.map(m => `
-                    <div class="recent-match">
-                        <span class="win">${escapeHTML(m.winner?.name || "?")}</span>
-                        <span style="color:var(--text-3);">победил</span>
-                        <span>${escapeHTML((m.player1?.id === m.winner?.id ? m.player2 : m.player1)?.name || "?")}</span>
-                        <span class="recent-score">${m.votes1 || 0}:${m.votes2 || 0}</span>
-                        <span class="recent-round">${escapeHTML(m.tournamentName)} — ${escapeHTML(m.roundName)}</span>
-                    </div>
-                `).join("");
+                // История матчей
+                const mhContainer = document.getElementById("match-history");
+                if (!allMatches.length) {
+                    mhContainer.innerHTML = `<p style="color:var(--text-3);">Пока нет завершённых матчей</p>`;
+                } else {
+                    mhContainer.innerHTML = allMatches.map(m => `
+                        <div class="recent-match">
+                            <span class="win">${escapeHTML(m.winner?.name || "?")}</span>
+                            <span style="color:var(--text-3);">победил</span>
+                            <span>${escapeHTML((m.player1?.id === m.winner?.id ? m.player2 : m.player1)?.name || "?")}</span>
+                            <span class="recent-score">${m.votes1 || 0}:${m.votes2 || 0}</span>
+                            <span class="recent-round">${escapeHTML(m.tournamentName)} — ${escapeHTML(m.roundName)}</span>
+                        </div>
+                    `).join("");
+                }
+            } catch (e) {
+                console.error('History load error', e);
+                document.getElementById("history-stats").innerHTML = `<p style="color:var(--red);">Ошибка загрузки статистики</p>`;
             }
         }
 
-        document.addEventListener("DOMContentLoaded", function() {
+        document.addEventListener("DOMContentLoaded", async function() {
+            if (window.TH) {
+                window.TH.init();
+                await DB.syncSupabaseUser();
+            }
             Auth.renderNavUser();
             Auth.checkFandomAutoAdmin();
             const navAdmin = document.getElementById("navAdmin");
             if (navAdmin && Auth.isAdmin()) navAdmin.classList.remove("hidden");
-            loadHistory();
+            await loadHistory();
         });
     </script>
 </body>
