@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Chat (FIXED v2 — async user, proper init)
+   Tournament Hub Chat (FIXED v3 — waits for TH, dedup init, safe render)
    ============================================================ */
 
 (function () {
@@ -7,6 +7,7 @@
 
   const CHAT_KEY = "tournament_hub_chat";
   let realtimeSubscribed = false;
+  let initDone = false;  // FIX: защита от двойного init
 
   async function getChatMessages() {
     if (window.TH) {
@@ -26,7 +27,6 @@
   }
 
   async function sendChatMessage(text) {
-    // FIX: await для async getCurrentUser
     const user = await DB.getCurrentUser();
     if (!user) {
       alert("Войдите, чтобы писать в чат");
@@ -114,7 +114,18 @@
     }
   };
 
+  // FIX: ждём window.TH перед init
   async function initChat() {
+    if (initDone) return;
+    initDone = true;
+
+    // Ждём TH если он ещё не загружен
+    let attempts = 0;
+    while (!window.TH && attempts < 50) {
+      await new Promise(r => setTimeout(r, 100));
+      attempts++;
+    }
+
     await renderChat();
     subscribeToChat();
 
@@ -128,7 +139,6 @@
       });
     }
 
-    // FIX: await для async getCurrentUser
     const user = await DB.getCurrentUser();
     const loginMsg = document.getElementById("chat-login-msg");
     if (loginMsg) {
@@ -140,9 +150,13 @@
     getChatMessages, sendChatMessage, renderChat, initChat
   };
 
+  // FIX: не запускаем сразу — ждём DOM и TH
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initChat);
+    document.addEventListener('DOMContentLoaded', () => {
+      // Даём время supabase-client.js создать window.TH
+      setTimeout(initChat, 200);
+    });
   } else {
-    initChat();
+    setTimeout(initChat, 200);
   }
 })();
