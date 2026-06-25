@@ -14,7 +14,7 @@
   const MAX_VOTES_CACHE = 100;
 
   /* ==========================================================
-     LOAD TOURNAMENT
+     ЗАГРУЗКА ТУРНИРА
      ========================================================== */
   async function loadTournament(tournamentId) {
     if (window.TH) {
@@ -36,258 +36,159 @@
       status: t.status,
       createdAt: t.created_at,
       currentRound: t.current_round || 0,
-      winner: t.winner_id ? { name: t.winner_id } : null,
+      winner: t.winner_id ? { id: t.winner_id, name: t.winner_name || "Победитель" } : (t.winner || null),
       players: t.players || [],
       rounds: (t.rounds || []).map(r => ({
         id: r.id,
         name: r.name,
         isActive: r.is_active,
         startedAt: r.started_at,
-        endedAt: r.ended_at,
-        matches: (r.matches || []).map(m => ({
-          id: m.id,
-          player1: m.player1,
-          player2: m.player2,
-          votes1: m.votes1 || 0,
-          votes2: m.votes2 || 0,
-          winner: m.winner,
-          finished: m.finished,
-          status: m.status,
-          tournament_id: t.id,
-          round_id: r.id
-        }))
-      })),
-      config: t.config || {}
+        matches: r.matches || []
+      }))
     };
   }
 
-  /* ==========================================================
-     REALTIME
-     ========================================================== */
-  function subscribeToRealtime(tournamentId) {
-    if (!window.TH || realtimeSubscribed) return;
-    window.TH.subscribeToMatches(tournamentId, () => renderBracket());
-    window.TH.subscribeToVotes(() => renderBracket());
-    realtimeSubscribed = true;
+  function escapeHTML(text) {
+    if (!text) return "";
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   /* ==========================================================
-     RENDER MATCH
+     РЕНДЕРИНГ КАРТОЧКИ МАТЧА
      ========================================================== */
-  function renderMatch(match, isActive) {
-    const p1 = match.player1;
-    const p2 = match.player2;
+  function renderMatch(match, isRoundActive) {
+    const p1 = match.player1 || { name: "???" };
+    const p2 = match.player2 || { name: "???" };
     const votes1 = match.votes1 || 0;
     const votes2 = match.votes2 || 0;
     const total = votes1 + votes2;
-    const pct1 = total ? Math.round(votes1 / total * 100) : 0;
-    const pct2 = total ? Math.round(votes2 / total * 100) : 0;
-    const winner = match.winner || null;
-    const p1Win = winner && (winner.id ? winner.id === p1?.id : winner === p1);
-    const p2Win = winner && (winner.id ? winner.id === p2?.id : winner === p2);
-
-    // FIX: безопасный кэш с FIFO-очисткой
-    const prev = previousVotes.get(match.id) || { v1: 0, v2: 0 };
-    const v1Changed = prev.v1 !== votes1;
-    const v2Changed = prev.v2 !== votes2;
-
-    if (previousVotes.size >= MAX_VOTES_CACHE) {
-      const keysToDelete = [];
-      const iter = previousVotes.keys();
-      for (let i = 0; i < previousVotes.size - MAX_VOTES_CACHE + 1; i++) {
-        const next = iter.next();
-        if (!next.done) keysToDelete.push(next.value);
-      }
-      keysToDelete.forEach(k => previousVotes.delete(k));
-    }
-    previousVotes.set(match.id, { v1: votes1, v2: votes2 });
-
-    const v1AnimClass = v1Changed && votes1 > prev.v1 ? 'vote-just-cast' : '';
-    const v2AnimClass = v2Changed && votes2 > prev.v2 ? 'vote-just-cast' : '';
-
-    const canVote = isActive && p1 && p2 && !match.finished;
-    const tid = match.tournament_id || '';
-
-    // FIX: handleVote теперь глобальный — экспортирован в window
-    const voteBtn1 = canVote
-      ? `onclick="handleBracketVote('${match.id}', '${tid}', 1)"`
-      : "disabled tabindex='-1'";
-    const voteBtn2 = canVote
-      ? `onclick="handleBracketVote('${match.id}', '${tid}', 2)"`
-      : "disabled tabindex='-1'";
+    const pct1 = total > 0 ? Math.round((votes1 / total) * 100) : 50;
+    const pct2 = total > 0 ? Math.round((votes2 / total) * 100) : 50;
+    
+    const isFinished = match.finished;
+    const wId = match.winner?.id || match.winner_id;
+    
+    const p1WinClass = (isFinished && wId === p1.id) ? "winner" : "";
+    const p2WinClass = (isFinished && wId === p2.id) ? "winner" : "";
+    
+    const canVote = isRoundActive && !isFinished && window.Auth && Auth.canUserVote && Auth.canUserVote(match.id);
 
     return `
-      <div class="bracket-match ${match.finished ? "done" : ""}" id="match-${match.id}">
-        <button class="player ${p1Win ? "winner" : ""} ${canVote ? "can-vote" : ""} ${v1AnimClass}" ${voteBtn1}>
-          <span class="player-name">${p1 ? escapeHTML(p1.name || p1.title || "—") : "—"}</span>
-          <span class="player-votes" id="votes-${match.id}-1">${votes1}</span>
-          <span class="player-bar" style="width:${pct1}%"></span>
-        </button>
-        <div class="vs-line">${match.finished ? `${votes1}:${votes2}` : "VS"}</div>
-        <button class="player ${p2Win ? "winner" : ""} ${canVote ? "can-vote" : ""} ${v2AnimClass}" ${voteBtn2}>
-          <span class="player-name">${p2 ? escapeHTML(p2.name || p2.title || "—") : "—"}</span>
-          <span class="player-votes" id="votes-${match.id}-2">${votes2}</span>
-          <span class="player-bar" style="width:${pct2}%"></span>
-        </button>
+      <div class="match-card ${isFinished ? 'finished' : ''}" id="match-${match.id}">
+        <div class="match-player ${p1WinClass} ${canVote ? 'clickable' : ''}" onclick="${canVote ? `RenderBracket.castVote('${match.id}', 1)` : ''}">
+          <span class="player-name">${escapeHTML(p1.name)}</span>
+          <span class="player-votes">${votes1} (${pct1}%)</span>
+        </div>
+        <div class="match-progress-bar">
+          <div class="progress-fill" style="width: ${pct1}%"></div>
+        </div>
+        <div class="match-player ${p2WinClass} ${canVote ? 'clickable' : ''}" onclick="${canVote ? `RenderBracket.castVote('${match.id}', 2)` : ''}">
+          <span class="player-name">${escapeHTML(p2.name)}</span>
+          <span class="player-votes">${votes2} (${pct2}%)</span>
+        </div>
       </div>
     `;
   }
 
   /* ==========================================================
-     VOTE HANDLER (глобальная функция для onclick)
+     МЕХАНИКА ГОЛОСОВАНИЯ И АНИМАЦИЯ POP-UP
      ========================================================== */
-  async function handleBracketVote(matchId, tournamentId, playerNum) {
-    if (!tournamentId) {
-      toast("Ошибка: не указан турнир");
-      console.error('handleBracketVote: missing tournament_id for match', matchId);
+  async function castVote(matchId, playerIndex) {
+    if (window.Auth && window.Auth.canUserVote && !window.Auth.canUserVote(matchId)) {
+      alert("Вы уже проголосовали в этом матче!");
       return;
     }
-
-    const user = await DB.getCurrentUser();
-    if (!user) {
-      toast("Войдите, чтобы голосовать");
-      return;
-    }
-
-    try {
-      const canVote = await Auth.canUserVote(matchId);
-      if (!canVote) {
-        toast("Вы уже голосовали в этом матче");
-        return;
+    
+    if (window.TH) {
+      try {
+        await window.TH.castVote(matchId, playerIndex);
+        if (window.Auth && window.Auth.markVote) window.Auth.markVote(matchId);
+      } catch (e) {
+        alert("Ошибка при сохранении голоса: " + e.message);
       }
-
-      const { error } = await window.TH.castVote(matchId, tournamentId, playerNum);
-      if (error) {
-        toast("Ошибка голосования: " + error.message);
-        return;
+    } else {
+      const db = DB.getDB();
+      for (const t of (db.tournaments || [])) {
+        if (t.rounds) {
+          for (const r of t.rounds) {
+            const m = (r.matches || []).find(x => x.id === matchId);
+            if (m) {
+              if (playerIndex === 1) m.votes1 = (m.votes1 || 0) + 1;
+              else m.votes2 = (m.votes2 || 0) + 1;
+              break;
+            }
+          }
+        }
       }
-
-      animateVote(matchId, playerNum);
-      toast("✅ Голос засчитан!");
-      await refreshSingleMatch(matchId);
-
-    } catch (e) {
-      console.error('Vote error:', e);
-      toast("Ошибка голосования");
+      DB.saveDB(db);
+      if (window.Auth && window.Auth.markVote) window.Auth.markVote(matchId);
+      const tid = getUrlParam("id");
+      if (tid) renderBracket(tid, document.getElementById("bracket-container"));
     }
   }
 
-  // FIX: экспортируем в window для onclick
-  window.handleBracketVote = handleBracketVote;
-
-  async function refreshSingleMatch(matchId) {
-    if (!window.TH) return;
-    try {
-      const { data: match } = await window.TH.getClient()
-        .from('matches')
-        .select('*, player1:player1_id(*), player2:player2_id(*)')
-        .eq('id', matchId)
-        .single();
-
-      if (!match) return;
-
-      const el1 = document.getElementById(`votes-${matchId}-1`);
-      const el2 = document.getElementById(`votes-${matchId}-2`);
-      if (el1) el1.textContent = match.votes1 || 0;
-      if (el2) el2.textContent = match.votes2 || 0;
-
-      const total = (match.votes1 || 0) + (match.votes2 || 0);
-      const matchEl = document.getElementById(`match-${matchId}`);
-      if (matchEl) {
-        const bars = matchEl.querySelectorAll('.player-bar');
-        if (bars[0]) bars[0].style.width = total ? Math.round((match.votes1 || 0) / total * 100) + '%' : '0%';
-        if (bars[1]) bars[1].style.width = total ? Math.round((match.votes2 || 0) / total * 100) + '%' : '0%';
+  function animateVote(matchId, votes1, votes2) {
+    const key = matchId;
+    const prev = previousVotes.get(key);
+    if (prev) {
+      if (prev.votes1 !== votes1 || prev.votes2 !== votes2) {
+        const el = document.getElementById(`match-${matchId}`);
+        if (el) {
+          el.classList.add("vote-just-cast");
+          setTimeout(() => el.classList.remove("vote-just-cast"), 400);
+        }
       }
-    } catch (e) {
-      console.warn('refreshSingleMatch failed:', e);
     }
+    if (previousVotes.size > MAX_VOTES_CACHE) {
+      const firstKey = previousVotes.keys().next().value;
+      previousVotes.delete(firstKey);
+    }
+    previousVotes.set(key, { votes1, votes2 });
   }
 
-  function animateVote(matchId, playerNum) {
-    const matchEl = document.getElementById(`match-${matchId}`);
-    if (!matchEl) return;
-    const playerBtn = matchEl.querySelectorAll('.player')[playerNum - 1];
-    if (playerBtn) {
-      playerBtn.classList.add('vote-just-cast');
-      setTimeout(() => playerBtn.classList.remove('vote-just-cast'), 500);
-    }
-    const votesEl = document.getElementById(`votes-${matchId}-${playerNum}`);
-    if (votesEl) {
-      votesEl.style.animation = 'none';
-      votesEl.offsetHeight;
-      votesEl.style.animation = 'count-up 0.3s ease';
-    }
+  function subscribeToTournamentUpdates(tournamentId, container) {
+    if (realtimeSubscribed || !window.TH) return;
+    realtimeSubscribed = true;
+    
+    window.TH.subscribeToMatches(tournamentId, async () => {
+      const t = await loadTournament(tournamentId);
+      if (t) renderBracket(t, container);
+    });
   }
 
   /* ==========================================================
-     RENDER BRACKET
+     ОСНОВНОЙ РЕНДЕР СЕТКИ
      ========================================================== */
-  async function renderBracket() {
-    const container = document.querySelector("#bracket-container");
+  async function renderBracket(tournamentOrId, container) {
     if (!container) return;
-
-    const tournamentId = getUrlParam("id");
-    if (!tournamentId) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <span class="empty-state-icon">🏆</span>
-          <h3>Турнир не выбран</h3>
-          <p>Выберите турнир на главной странице, чтобы увидеть сетку.</p>
-          <a href="index.html">На главную</a>
-        </div>
-      `;
-      return;
+    let tournament = null;
+    if (typeof tournamentOrId === "string") {
+      tournament = await loadTournament(tournamentOrId);
+      subscribeToTournamentUpdates(tournamentOrId, container);
+    } else {
+      tournament = tournamentOrId;
     }
-
-    const tournament = await loadTournament(tournamentId);
+    
     if (!tournament) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <span class="empty-state-icon">❓</span>
-          <h3>Турнир не найден</h3>
-          <p>Проверьте ссылку или создайте новый турнир в админ-панели.</p>
-          <a href="admin.html">В админку</a>
-        </div>
-      `;
+      container.innerHTML = "<p style='color:var(--red);text-align:center;'>Турнир не найден</p>";
       return;
     }
 
-    subscribeToRealtime(tournamentId);
-
-    const header = document.querySelector("#bracket-header");
-    if (header) {
-      header.innerHTML = `<h1>${escapeHTML(tournament.title || tournament.name || "Турнир")}</h1><p>${escapeHTML(tournament.description || "")}</p>`;
-    }
-
-    const sub = document.querySelector("#bracket-sub");
-    if (sub) {
-      const statusText = tournament.status === "active"
-        ? "🗳️ Голосуйте за участников!"
-        : tournament.status === "finished"
-        ? "🏆 Турнир завершён"
-        : "✏️ Турнир в режиме черновика";
-      sub.textContent = statusText;
-    }
-
-    const rounds = tournament.rounds || [];
-    if (!rounds.length) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <span class="empty-state-icon">📋</span>
-          <h3>Сетка ещё не создана</h3>
-          <p>Запустите турнир из админ-панели, чтобы сгенерировать сетку.</p>
-          <a href="admin.html">В админку</a>
-        </div>
-      `;
-      return;
-    }
-
-    const activeRound = tournament.status === "active" ? (tournament.currentRound || 0) : -1;
-    const html = rounds.map((round, idx) => {
+    const activeRound = tournament.currentRound || 0;
+    
+    const html = (tournament.rounds || []).map((round, idx) => {
       const isActive = idx === activeRound && tournament.status === "active";
       const isPast = idx < activeRound || tournament.status === "finished";
       const isFuture = idx > activeRound && tournament.status === "active";
       const roundTitle = round.name || `Раунд ${idx + 1}`;
+      
+      (round.matches || []).forEach(m => animateVote(m.id, m.votes1 || 0, m.votes2 || 0));
+
       const matches = (round.matches || []).map((m) => renderMatch(m, isActive)).join("");
       return `
         <section class="round-col ${isActive ? "active" : ""} ${isPast ? "past" : ""} ${isFuture ? "future" : ""}">
@@ -315,15 +216,20 @@
     container.innerHTML = `<div class="bracket-grid">${html}</div>${footer}`;
   }
 
-  window.RenderBracket = { 
-    renderBracket, 
-    animateVote,
-    refreshSingleMatch
-  };
+  window.RenderBracket = { renderBracket, animateVote, castVote };
 
-  if (document.readyState === 'loading') {
-    document.addEventListener("DOMContentLoaded", renderBracket);
-  } else {
-    renderBracket();
-  }
+  document.addEventListener("DOMContentLoaded", () => {
+    let attempts = 0;
+    const checkInit = setInterval(() => {
+      if (window.TH && window.TH.init) {
+        clearInterval(checkInit);
+        const id = getUrlParam("id");
+        if (id) {
+          renderBracket(id, document.getElementById("bracket-container"));
+        }
+      }
+      attempts++;
+      if (attempts > 30) clearInterval(checkInit);
+    }, 100);
+  });
 })();
