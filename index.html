@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/oauth-init.js"></script>
     <script src="js/supabase-client.js"></script>
     <script src="js/db.js"></script>
     <script src="js/engine.js"></script>
@@ -56,12 +57,10 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", async function() {
-            // Supabase инициализируется в db.js автоматически
-            // Не дублируем init() здесь!
-
             Auth.checkFandomAutoAdmin();
+            // FIX: Используем isAdminSync
             const navAdmin = document.getElementById("navAdmin");
-            if (navAdmin && Auth.isAdmin()) {
+            if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) {
                 navAdmin.classList.remove("hidden");
             }
             Auth.renderNavUser();
