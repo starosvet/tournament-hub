@@ -1,12 +1,12 @@
 /* ============================================================
-   Tournament Hub Bracket Renderer (Supabase + Realtime)
+   Tournament Hub Bracket Renderer (FIXED)
    ============================================================ */
 
 (function () {
   'use strict';
 
   function escapeHTML(text) {
-    if (text === null || text === undefined) return "";
+    if (text == null) return "";
     return String(text)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -19,14 +19,12 @@
     return new URLSearchParams(window.location.search).get(name);
   }
 
-  // Храним предыдущие голоса для анимации
   let previousVotes = {};
   let realtimeSubscribed = false;
 
   /* ==========================================================
-     ЗАГРУЗКА ТУРНИРА
+     LOAD TOURNAMENT
      ========================================================== */
-
   async function loadTournament(tournamentId) {
     if (window.TH) {
       try {
@@ -36,8 +34,6 @@
         console.warn('Supabase tournament load failed');
       }
     }
-
-    // Fallback
     return Bracket.getTournamentById(tournamentId);
   }
 
@@ -65,7 +61,8 @@
           votes2: m.votes2 || 0,
           winner: m.winner,
           finished: m.finished,
-          status: m.status
+          status: m.status,
+          tournament_id: t.id
         }))
       })),
       config: t.config || {}
@@ -73,32 +70,18 @@
   }
 
   /* ==========================================================
-     REALTIME ПОДПИСКА
+     REALTIME
      ========================================================== */
-
   function subscribeToRealtime(tournamentId) {
     if (!window.TH || realtimeSubscribed) return;
-
-    // Подписываемся на изменения матчей
-    window.TH.subscribeToMatches(tournamentId, (payload) => {
-      console.log('Match update:', payload);
-      // Перерендериваем сетку
-      renderBracket();
-    });
-
-    // Подписываемся на новые голоса
-    window.TH.subscribeToVotes((payload) => {
-      console.log('Vote update:', payload);
-      renderBracket();
-    });
-
+    window.TH.subscribeToMatches(tournamentId, () => renderBracket());
+    window.TH.subscribeToVotes(() => renderBracket());
     realtimeSubscribed = true;
   }
 
   /* ==========================================================
-     РЕНДЕР МАТЧА
+     RENDER MATCH
      ========================================================== */
-
   function renderMatch(match, isActive) {
     const p1 = match.player1;
     const p2 = match.player2;
@@ -111,7 +94,6 @@
     const p1Win = winner && (winner.id ? winner.id === p1?.id : winner === p1);
     const p2Win = winner && (winner.id ? winner.id === p2?.id : winner === p2);
 
-    // Проверяем, изменились ли голоса для анимации
     const prevKey = match.id;
     const prev = previousVotes[prevKey] || { v1: 0, v2: 0 };
     const v1Changed = prev.v1 !== votes1;
@@ -123,7 +105,6 @@
 
     const canVote = isActive && p1 && p2 && !match.finished;
 
-    // Асинхронная проверка голоса
     const voteBtn1 = canVote
       ? `onclick="handleVote('${match.id}', '${match.tournament_id || ''}', 1)"`
       : "disabled tabindex='-1'";
@@ -149,9 +130,8 @@
   }
 
   /* ==========================================================
-     ГОЛОСОВАНИЕ
+     VOTE
      ========================================================== */
-
   window.handleVote = async function(matchId, tournamentId, playerNum) {
     const user = DB.getCurrentUser();
     if (!user) {
@@ -160,26 +140,20 @@
     }
 
     try {
-      // Проверяем, не голосовал ли уже
       const canVote = await Auth.canUserVote(matchId);
       if (!canVote) {
         toast("Вы уже голосовали в этом матче");
         return;
       }
 
-      // Отправляем голос в Supabase
       const { error } = await window.TH.castVote(matchId, tournamentId, playerNum);
-
       if (error) {
         toast("Ошибка голосования: " + error.message);
         return;
       }
 
-      // Анимация
       animateVote(matchId, playerNum);
       toast("✅ Голос засчитан!");
-
-      // Перерендериваем
       renderBracket();
 
     } catch (e) {
@@ -191,13 +165,11 @@
   function animateVote(matchId, playerNum) {
     const matchEl = document.getElementById(`match-${matchId}`);
     if (!matchEl) return;
-
     const playerBtn = matchEl.querySelectorAll('.player')[playerNum - 1];
     if (playerBtn) {
       playerBtn.classList.add('vote-just-cast');
       setTimeout(() => playerBtn.classList.remove('vote-just-cast'), 500);
     }
-
     const votesEl = document.getElementById(`votes-${matchId}-${playerNum}`);
     if (votesEl) {
       votesEl.style.animation = 'none';
@@ -207,9 +179,8 @@
   }
 
   /* ==========================================================
-     РЕНДЕР СЕТКИ
+     RENDER BRACKET
      ========================================================== */
-
   async function renderBracket() {
     const container = document.querySelector("#bracket-container");
     if (!container) return;
@@ -240,7 +211,6 @@
       return;
     }
 
-    // Подписываемся на realtime
     subscribeToRealtime(tournamentId);
 
     const header = document.querySelector("#bracket-header");
@@ -277,7 +247,7 @@
       const isPast = idx < activeRound || tournament.status === "finished";
       const isFuture = idx > activeRound && tournament.status === "active";
       const roundTitle = round.name || `Раунд ${idx + 1}`;
-      const matches = (round.matches || []).map((m, mi) => renderMatch(m, isActive)).join("");
+      const matches = (round.matches || []).map((m) => renderMatch(m, isActive)).join("");
       return `
         <section class="round-col ${isActive ? "active" : ""} ${isPast ? "past" : ""} ${isFuture ? "future" : ""}">
           <h2 class="round-title">${escapeHTML(roundTitle)}</h2>
@@ -306,7 +276,6 @@
 
   window.RenderBracket = { renderBracket, animateVote };
 
-  // Автоинициализация
   if (document.readyState === 'loading') {
     document.addEventListener("DOMContentLoaded", renderBracket);
   } else {
