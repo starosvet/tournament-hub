@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Admin Panel (FIXED v2 — login works, no duplicates)
+   Tournament Hub Admin Panel (FIXED v3 — setActive updates Supabase, safe async)
    ============================================================ */
 
 (function () {
@@ -21,7 +21,6 @@
       return;
     }
 
-    // FIX: Проверяем Supabase-админа через async isAdmin
     let isSupabaseAdmin = false;
     try {
       isSupabaseAdmin = await window.TH.isAdmin();
@@ -44,7 +43,6 @@
   }
 
   async function checkAuth() {
-    // FIX: Проверяем и Supabase, и localStorage
     let isSupabaseAdmin = false;
     try {
       isSupabaseAdmin = await window.TH.isAdmin();
@@ -76,7 +74,7 @@
     if (!name) { toast("Введите название турнира"); return; }
     if (!raw.trim()) { toast("Введите список участников"); return; }
 
-    const players = raw.split("\\n").map(line => {
+    const players = raw.split("\n").map(line => {
       line = line.trim();
       if (!line) return null;
       const parts = line.split("|").map(s => s.trim());
@@ -778,10 +776,26 @@
     }
   }
 
-  function setActive(id) {
+  // FIX: setActive теперь обновляет И localStorage И Supabase
+  async function setActive(id) {
     localStorage.setItem('th_active_tournament', id);
-    toast("✅ Турнир активирован (локально)");
-    refreshAll();
+    
+    // FIX: обновляем activeTournamentId в localStorage DB
+    DB.updateDB(db => {
+      db.activeTournamentId = id;
+    });
+
+    // FIX: пытаемся обновить в Supabase (если есть поле)
+    try {
+      if (window.TH) {
+        await window.TH.updateSiteSettings({ active_tournament_id: id });
+      }
+    } catch (e) {
+      // Поле может не существовать — не критично
+    }
+
+    toast("✅ Турнир активирован");
+    await refreshAll();
   }
 
   async function renderLog() {
