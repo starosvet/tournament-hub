@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Fandom Wiki Authentication (FIXED)
+   Tournament Hub — Fandom Wiki Verification (FIXED v2 — Profile only)
    ============================================================ */
 
 (function () {
@@ -12,6 +12,9 @@
   const CHECK_INTERVAL = 3000;
   const MAX_CHECKS = 40;
 
+  /* ==========================================================
+     UTILS
+     ========================================================== */
   function generateCode() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let code = CODE_PREFIX;
@@ -54,6 +57,9 @@
     }
   }
 
+  /* ==========================================================
+     FANDOM API
+     ========================================================== */
   async function fetchUserRecentChanges(fandomName, limit) {
     const url = FANDOM_API_BASE + "?action=query&list=recentchanges" +
       "&rcuser=" + encodeURIComponent(fandomName) +
@@ -93,22 +99,54 @@
     return { ok: false, error: "Код не найден. Убедитесь, что вы добавили код в описание правки." };
   }
 
-  function startFandomAuth(fandomName) {
-    if (!fandomName?.trim()) return { ok: false, error: "Введите имя пользователя Fandom" };
-    const cleanName = fandomName.trim();
+  /* ==========================================================
+     PUBLIC API
+     ========================================================== */
+
+  // FIX: Новая функция — начать привязку Fandom (только из профиля!)
+  function startFandomLink(fandomName, currentUsername) {
+    if (!fandomName?.trim()) {
+      return { ok: false, error: "Введите имя пользователя Fandom" };
+    }
+    if (!currentUsername?.trim()) {
+      return { ok: false, error: "Ошибка: не определён текущий пользователь" };
+    }
+
+    const cleanFandom = fandomName.trim();
+
+    // ЖЁСТКАЯ ПРОВЕРКА: ник Fandom должен совпадать с ником на сайте
+    // Сравниваем без учёта регистра и пробелов
+    const normalizedFandom = cleanFandom.toLowerCase().replace(/\s+/g, '');
+    const normalizedCurrent = currentUsername.toLowerCase().replace(/\s+/g, '');
+
+    if (normalizedFandom !== normalizedCurrent) {
+      return {
+        ok: false,
+        error: `❌ Ники не совпадают!\n\nВаш ник на сайте: "${currentUsername}"\nВведённый ник Fandom: "${cleanFandom}"\n\nДля привязки ники должны быть одинаковыми.`
+      };
+    }
+
     const code = generateCode();
-    savePendingAuth(code, cleanName);
-    return { ok: true, code, fandomName: cleanName };
+    savePendingAuth(code, cleanFandom);
+    return { ok: true, code, fandomName: cleanFandom };
   }
 
-  async function checkFandomAuth(fandomName, code) {
-    return await verifyCode(fandomName, code);
+  // FIX: Проверка кода Fandom
+  async function checkFandomLink(fandomName) {
+    const pending = getPendingAuth();
+    if (!pending) return { ok: false, error: "Нет активного кода. Начните привязку заново." };
+    if (pending.fandomName !== fandomName) {
+      return { ok: false, error: "Несоответствие имени пользователя." };
+    }
+
+    return await verifyCode(fandomName, pending.code);
   }
 
-  async function pollFandomAuth(onSuccess, onError, onProgress) {
+  // FIX: Пolling с прогрессом
+  async function pollFandomLink(onSuccess, onError, onProgress) {
     const pending = getPendingAuth();
     if (!pending) {
-      if (onError) onError("Нет активного кода. Начните авторизацию заново.");
+      if (onError) onError("Нет активного кода. Начните привязку заново.");
       return;
     }
 
@@ -124,7 +162,7 @@
       }
       if (checks >= MAX_CHECKS) {
         clearPendingAuth();
-        if (onError) onError("Время ожидания истекло. Код больше не действителен.");
+        if (onError) onError("⏰ Время ожидания истекло. Код больше не действителен.");
         return;
       }
       setTimeout(doCheck, CHECK_INTERVAL);
@@ -132,14 +170,8 @@
     doCheck();
   }
 
-  function isAdminFandomName(fandomName) {
-    const db = DB.getDB();
-    const admins = db.settings?.fandomAdmins || [];
-    return admins.includes(fandomName);
-  }
-
-  // FIX: создаём пользователя в Supabase profiles, а не только в localStorage
-  async function completeFandomAuth(fandomName, isAdmin) {
+  // FIX: Завершение привязки — обновляем профиль в Supabase
+  async function completeFandomLink(fandomName) {
     const pending = getPendingAuth();
     if (!pending || !pending.verified) {
       return { ok: false, error: "Код не подтверждён. Пройдите проверку через Fandom." };
@@ -148,96 +180,103 @@
       return { ok: false, error: "Несоответствие имени пользователя." };
     }
 
-    const shouldBeAdmin = isAdmin || isAdminFandomName(fandomName);
-
-    // FIX: создаём/обновляем пользователя в Supabase
     try {
-      // Создаём анонимного пользователя в Supabase для Fandom-юзера
-      const email = fandomName.toLowerCase().replace(/[^a-z0-9]/g, '') + '@fandom.local';
-      const password = 'fandom_' + Date.now();
-
-      const { data: signUpData, error: signUpError } = await window.TH.signUp(email, password, {
-        username: fandomName,
-        display_name: fandomName,
-        role: shouldBeAdmin ? 'admin' : 'user',
-        fandom_name: fandomName
+      // Обновляем профиль в Supabase
+      const { data, error } = await window.TH.updateProfile({
+        fandom_name: fandomName,
+        fandom_verified: true,
+        fandom_verified_at: new Date().toISOString()
       });
 
-      if (signUpError && !signUpError.message?.includes('already registered')) {
-        return { ok: false, error: signUpError.message };
-      }
+      if (error) throw error;
 
-      // Если уже существует — входим
-      const { data: signInData, error: signInError } = await window.TH.signIn(email, password);
-      if (signInError && !signUpData?.user) {
-        return { ok: false, error: signInError.message };
-      }
-
-      const user = {
-        id: signUpData?.user?.id || signInData?.user?.id,
-        email: email,
-        username: fandomName,
-        displayName: fandomName,
-        role: shouldBeAdmin ? 'admin' : 'user',
-        votes: 0,
-        authType: 'fandom',
-        fandomName: fandomName
-      };
-
-      DB.setCurrentUser(user);
-      clearPendingAuth();
-
-      if (shouldBeAdmin) localStorage.setItem("th_admin", "yes");
-
-      return { ok: true, user };
-    } catch (e) {
-      // Fallback на старый метод
-      const db = DB.getDB();
-      let user = db.users?.find(u => u.fandomName === fandomName);
-
-      if (!user) {
-        user = {
-          id: crypto.randomUUID ? crypto.randomUUID() : ("fandom_" + Date.now()),
-          username: fandomName,
-          password: null,
-          created: Date.now(),
-          votes: 0,
-          role: shouldBeAdmin ? "admin" : "user",
-          authType: "fandom",
-          displayName: fandomName,
-          fandomName: fandomName
-        };
-        db.users = db.users || [];
-        db.users.push(user);
-        DB.saveDB(db);
-      } else {
-        user.authType = "fandom";
+      // Обновляем локального пользователя
+      const user = await DB.getCurrentUser();
+      if (user) {
         user.fandomName = fandomName;
-        if (shouldBeAdmin) user.role = "admin";
-        DB.saveDB(db);
+        user.fandomVerified = true;
+        DB.setCurrentUser(user);
       }
 
-      DB.setCurrentUser(user);
       clearPendingAuth();
-      if (shouldBeAdmin) localStorage.setItem("th_admin", "yes");
 
-      return { ok: true, user };
+      // Проверяем, является ли пользователь админом Fandom
+      const { data: settings } = await window.TH.getSiteSettings();
+      if (settings?.fandom_admins?.includes(fandomName)) {
+        await window.TH.updateProfile({ role: 'admin' });
+        if (user) {
+          user.role = 'admin';
+          DB.setCurrentUser(user);
+        }
+        localStorage.setItem("th_admin", "yes");
+        return { ok: true, isAdmin: true, fandomName };
+      }
+
+      return { ok: true, isAdmin: false, fandomName };
+    } catch (e) {
+      return { ok: false, error: "Ошибка сохранения: " + e.message };
     }
   }
 
-  function isFandomUser() {
-    const user = DB.getCurrentUser();
-    return user && user.authType === "fandom";
+  // FIX: Отмена привязки
+  function cancelFandomLink() {
+    clearPendingAuth();
   }
 
+  // FIX: Проверка, привязан ли Fandom
+  async function isFandomLinked() {
+    const user = await DB.getCurrentUser();
+    if (user?.fandomName) return true;
+
+    // Проверяем в Supabase
+    try {
+      const profile = await window.TH.getProfile();
+      return !!profile?.fandom_name;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // FIX: Получение Fandom-имени текущего пользователя
+  async function getLinkedFandomName() {
+    const user = await DB.getCurrentUser();
+    if (user?.fandomName) return user.fandomName;
+
+    try {
+      const profile = await window.TH.getProfile();
+      return profile?.fandom_name || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /* ==========================================================
+     LEGACY (для обратной совместимости — НЕ ИСПОЛЬЗУЕТСЯ)
+     ========================================================== */
   window.FandomAuth = {
-    startFandomAuth,
-    checkFandomAuth,
-    pollFandomAuth,
-    completeFandomAuth,
-    isFandomUser,
-    getPendingAuth,
+    // Новый API
+    startFandomLink,
+    checkFandomLink,
+    pollFandomLink,
+    completeFandomLink,
+    cancelFandomLink,
+    isFandomLinked,
+    getLinkedFandomName,
+
+    // Legacy — для старого кода, если где-то остался
+    startFandomAuth: function(name) {
+      console.warn('startFandomAuth is deprecated, use startFandomLink from profile');
+      return { ok: false, error: "Fandom-вход перенесён в профиль. Откройте страницу профиля." };
+    },
+    checkFandomAuth: checkFandomLink,
+    pollFandomAuth: pollFandomLink,
+    completeFandomAuth: completeFandomLink,
     clearPendingAuth,
-    isAdminFandomName
+    getPendingAuth,
+    isFandomUser: isFandomLinked,
+    isAdminFandomName: async function(name) {
+      const { data } = await window.TH.getSiteSettings();
+      return data?.fandom_admins?.includes(name);
+    }
   };
 })();
