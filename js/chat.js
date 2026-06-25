@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Chat (FIXED)
+   Tournament Hub Chat (FIXED v2 — async user, proper init)
    ============================================================ */
 
 (function () {
@@ -7,16 +7,6 @@
 
   const CHAT_KEY = "tournament_hub_chat";
   let realtimeSubscribed = false;
-
-  function escapeHTML(text) {
-    if (!text) return "";
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
 
   async function getChatMessages() {
     if (window.TH) {
@@ -36,7 +26,8 @@
   }
 
   async function sendChatMessage(text) {
-    const user = DB.getCurrentUser();
+    // FIX: await для async getCurrentUser
+    const user = await DB.getCurrentUser();
     if (!user) {
       alert("Войдите, чтобы писать в чат");
       return false;
@@ -137,7 +128,8 @@
       });
     }
 
-    const user = DB.getCurrentUser();
+    // FIX: await для async getCurrentUser
+    const user = await DB.getCurrentUser();
     const loginMsg = document.getElementById("chat-login-msg");
     if (loginMsg) {
       loginMsg.style.display = user ? 'none' : 'block';
