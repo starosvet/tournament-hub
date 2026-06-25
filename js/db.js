@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Database Layer (FIXED v5 — inline init)
+   Tournament Hub — Database Layer (FIXED v6 — async fixes, single toast)
    ============================================================ */
 
 (function () {
@@ -156,7 +156,7 @@
   }
 
   /* ==========================================================
-     USER
+     USER (FIXED: async/await везде)
      ========================================================== */
   async function getCurrentUser() {
     if (window.TH && USE_SUPABASE) {
@@ -409,7 +409,7 @@
   }
 
   /* ==========================================================
-     TOAST
+     TOAST (единственная копия)
      ========================================================== */
   function toast(message) {
     const existing = document.getElementById("th-toast");
@@ -427,11 +427,7 @@
      ========================================================== */
   async function init() {
     if (window.TH && USE_SUPABASE) {
-      // Не вызываем window.TH.init() — клиент уже создан inline в login.html
-      // Просто подписываемся на события
-
       window.TH.onAuthStateChange(async (event, session) => {
-        console.log('Auth event:', event);
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           await syncSupabaseUser();
           cleanupLegacyData();
@@ -463,7 +459,7 @@
   window.updateDB = updateDB;
   window.getCurrentUser = getCurrentUser;
   window.setCurrentUser = setCurrentUser;
-  window.toast = window.toast || toast;
+  window.toast = toast;
 
   window.addEventListener("storage", function(e) {
     if (e.key === STORAGE_KEY) {
