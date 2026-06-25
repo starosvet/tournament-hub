@@ -62,52 +62,60 @@
     </footer>
 
     <script>
-        async function postComment() {
-            const text = document.getElementById("commentText").value;
-            const params = new URLSearchParams(window.location.search);
-            const tid = params.get("id");
-            if (!tid) return;
+    async function postComment() {
+        const text = document.getElementById("commentText").value;
+        const params = new URLSearchParams(window.location.search);
+        const tid = params.get("id");
+        if (!tid) return;
 
-            // FIX: await для async getCurrentUser
-            const user = await DB.getCurrentUser();
-            if (!user) {
-                alert("Войдите, чтобы оставлять комментарии");
-                return;
-            }
-
-            const result = await Comments.addComment(tid, text);
-            if (result.error) {
-                alert(result.error.message || "Ошибка отправки");
-                return;
-            }
-
-            document.getElementById("commentText").value = "";
-            await loadComments();
+        const user = await DB.getCurrentUser();
+        if (!user) {
+            alert("Войдите, чтобы оставлять комментарии");
+            return;
         }
 
-        async function loadComments() {
-            const params = new URLSearchParams(window.location.search);
-            const tid = params.get("id");
-            if (!tid) return;
-            await Comments.renderComments(tid, document.getElementById("comments-list"));
-            Comments.subscribeToComments(tid, document.getElementById("comments-list"));
+        const result = await Comments.addComment(tid, text);
+        if (result.error) {
+            alert(result.error.message || "Ошибка отправки");
+            return;
         }
 
-        document.addEventListener("DOMContentLoaded", async function() {
-            Auth.renderNavUser();
-            Auth.checkFandomAutoAdmin();
-            // FIX: Используем isAdminSync
-            const navAdmin = document.getElementById("navAdmin");
-            if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) navAdmin.classList.remove("hidden");
+        document.getElementById("commentText").value = "";
+        await loadComments();
+    }
 
-            // Рендерим сетку
-            if (typeof RenderBracket !== "undefined" && RenderBracket.renderBracket) {
-                await RenderBracket.renderBracket();
+    async function loadComments() {
+        const params = new URLSearchParams(window.location.search);
+        const tid = params.get("id");
+        if (!tid) return;
+        await Comments.renderComments(tid, document.getElementById("comments-list"));
+        Comments.subscribeToComments(tid, document.getElementById("comments-list"));
+    }
+
+    document.addEventListener("DOMContentLoaded", async function() {
+        // 🔧 FIX: Ждём инициализации TH из db.js
+        let attempts = 0;
+        const waitForInit = setInterval(() => {
+            if (window.TH && window.TH.init) {
+                clearInterval(waitForInit);
+                
+                const navAdmin = document.getElementById("navAdmin");
+                if (navAdmin && Auth.isAdminSync && Auth.isAdminSync()) {
+                    navAdmin.classList.remove("hidden");
+                }
+                
+                Auth.renderNavUser();
+                
+                if (typeof RenderBracket !== "undefined" && RenderBracket.renderBracket) {
+                    RenderBracket.renderBracket();
+                }
+                
+                loadComments();
             }
-
-            // Загружаем комментарии
-            await loadComments();
-        });
+            attempts++;
+            if (attempts > 30) clearInterval(waitForInit);
+        }, 100);
+    });
     </script>
 </body>
 </html>
