@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v6 — correct paths, single init)
+   Tournament Hub — Supabase Client (FIXED v7 — upsertProfile, correct paths, safe getProfile)
    ============================================================ */
 
 (function () {
@@ -67,7 +67,7 @@
   }
 
   async function signInWithProvider(provider) {
-    // 🔧 FIX: Правильный redirectTo с учётом подпапки
+    // FIX: Правильный redirectTo с учётом подпапки
     const redirectTo = getBaseUrl() + '/login.html';
     console.log('🔐 OAuth redirectTo:', redirectTo);
     
@@ -94,18 +94,67 @@
     return session;
   }
 
+  // FIX: .maybeSingle() вместо .single() — не падает если профиля нет
   async function getProfile() {
     const user = await getCurrentUser();
     if (!user) return null;
-    const { data } = await getClient().from('profiles').select('*').eq('id', user.id).single();
+    const { data, error } = await getClient()
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (error) {
+      console.warn('getProfile error:', error);
+      return null;
+    }
     return data;
   }
 
+  // FIX: updateProfile — обновляет только существующую запись
   async function updateProfile(updates) {
     const user = await getCurrentUser();
     if (!user) return { error: new Error('Not authenticated') };
-    const { data, error } = await getClient().from('profiles').update(updates).eq('id', user.id).select().single();
+    const { data, error } = await getClient()
+      .from('profiles')
+      .update(updates)
+      .eq('id', user.id)
+      .select()
+      .single();
     return { data, error };
+  }
+
+  // FIX: upsertProfile — создаёт или обновляет профиль (НОВАЯ ФУНКЦИЯ!)
+  async function upsertProfile(updates) {
+    const user = await getCurrentUser();
+    if (!user) return { error: new Error('Not authenticated'), data: null };
+
+    // Сначала проверяем, есть ли профиль
+    const existing = await getProfile();
+    
+    if (existing) {
+      // Обновляем существующий
+      const { data, error } = await getClient()
+        .from('profiles')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', user.id)
+        .select()
+        .single();
+      return { data, error };
+    } else {
+      // Создаём новый
+      const { data, error } = await getClient()
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email,
+          ...updates,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+      return { data, error };
+    }
   }
 
   function onAuthStateChange(callback) {
@@ -245,7 +294,7 @@
      SETTINGS
      ========================================================== */
   async function getSiteSettings() {
-    const { data, error } = await getClient().from('site_settings').select('*').eq('id', 1).single();
+    const { data, error } = await getClient().from('site_settings').select('*').eq('id', 1).maybeSingle();
     return { data, error };
   }
 
@@ -328,9 +377,9 @@
      ========================================================== */
   window.TH = {
     init, getClient,
-    getBasePath, getBaseUrl,  // 🔧 FIX: экспортируем хелперы
+    getBasePath, getBaseUrl,
     signUp, signIn, signInWithProvider, signOut,
-    getCurrentUser, getSession, getProfile, updateProfile, onAuthStateChange,
+    getCurrentUser, getSession, getProfile, updateProfile, upsertProfile, onAuthStateChange,
     getTournaments, getTournament, createTournament, updateTournament, deleteTournament,
     getPlayers, createPlayers,
     getMatches, updateMatch,
