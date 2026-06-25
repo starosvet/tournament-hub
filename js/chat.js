@@ -1,6 +1,5 @@
 /* ============================================================
-   Tournament Hub Chat (Supabase + Realtime)
-   Заменяет inline-скрипт из chat.html
+   Tournament Hub Chat (FIXED)
    ============================================================ */
 
 (function () {
@@ -19,10 +18,6 @@
       .replace(/'/g, "&#039;");
   }
 
-  /* ==========================================================
-     ЗАГРУЗКА СООБЩЕНИЙ
-     ========================================================== */
-
   async function getChatMessages() {
     if (window.TH) {
       try {
@@ -32,8 +27,6 @@
         console.warn('Supabase chat failed');
       }
     }
-
-    // Fallback
     try {
       const raw = localStorage.getItem(CHAT_KEY);
       return raw ? JSON.parse(raw) : [];
@@ -41,10 +34,6 @@
       return [];
     }
   }
-
-  /* ==========================================================
-     ОТПРАВКА СООБЩЕНИЯ
-     ========================================================== */
 
   async function sendChatMessage(text) {
     const user = DB.getCurrentUser();
@@ -66,7 +55,6 @@
       }
     }
 
-    // Fallback
     const msgs = await getChatMessages();
     msgs.push({
       id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
@@ -78,10 +66,6 @@
     localStorage.setItem(CHAT_KEY, JSON.stringify(msgs.slice(-200)));
     return true;
   }
-
-  /* ==========================================================
-     РЕНДЕР
-     ========================================================== */
 
   async function renderChat() {
     const container = document.getElementById("chat-messages");
@@ -111,7 +95,6 @@
 
     container.scrollTop = container.scrollHeight;
 
-    // Статистика
     const stats = document.getElementById("chat-stats");
     if (stats) {
       const uniqueUsers = [...new Set(msgs.map(m => m.user_id || m.userId))];
@@ -122,31 +105,17 @@
     }
   }
 
-  /* ==========================================================
-     REALTIME ПОДПИСКА
-     ========================================================== */
-
   function subscribeToChat() {
     if (!window.TH || realtimeSubscribed) return;
-
-    window.TH.subscribeToChat((message) => {
-      renderChat();
-    });
-
+    window.TH.subscribeToChat(() => renderChat());
     realtimeSubscribed = true;
   }
-
-  /* ==========================================================
-     UI HANDLERS
-     ========================================================== */
 
   window.sendChat = async function() {
     const input = document.getElementById("chat-input");
     if (!input) return;
-
     const text = input.value.trim();
     if (!text) return;
-
     const ok = await sendChatMessage(text);
     if (ok) {
       input.value = "";
@@ -154,15 +123,10 @@
     }
   };
 
-  /* ==========================================================
-     ИНИЦИАЛИЗАЦИЯ
-     ========================================================== */
-
   async function initChat() {
     await renderChat();
     subscribeToChat();
 
-    // Enter для отправки
     const input = document.getElementById("chat-input");
     if (input) {
       input.addEventListener("keydown", function(e) {
@@ -173,26 +137,17 @@
       });
     }
 
-    // Проверяем авторизацию
     const user = DB.getCurrentUser();
     const loginMsg = document.getElementById("chat-login-msg");
     if (loginMsg) {
-      if (user) {
-        loginMsg.style.display = 'none';
-      } else {
-        loginMsg.style.display = 'block';
-      }
+      loginMsg.style.display = user ? 'none' : 'block';
     }
   }
 
   window.Chat = {
-    getChatMessages,
-    sendChatMessage,
-    renderChat,
-    initChat
+    getChatMessages, sendChatMessage, renderChat, initChat
   };
 
-  // Автоинициализация
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initChat);
   } else {
