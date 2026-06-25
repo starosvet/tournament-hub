@@ -243,7 +243,27 @@
             .select('*')
             .eq('id', match.winner_id)
             .single();
-          if (winner) winners.push(winner);
+        if (winner) {
+          winners.push(winner);
+          // Обновляем ELO в Supabase
+          try {
+            const loser = winner.id === match.player1_id ? match.player2 : match.player1;
+            if (winner.elo !== undefined && loser?.elo !== undefined) {
+              const changes = window.TournamentEngine.calculateEloChange(winner, loser);
+              await window.TH.getClient().from('players').update({ 
+                elo: changes.winnerNew,
+                wins: (winner.wins || 0) + 1
+              }).eq('id', winner.id);
+              if (loser?.id) {
+                await window.TH.getClient().from('players').update({ 
+                  elo: changes.loserNew,
+                  losses: (loser.losses || 0) + 1
+                }).eq('id', loser.id);
+              }
+            }
+          } catch (e) {
+            console.warn('ELO update failed:', e);
+          }
         } else if (force && match.player1_id) {
           const { data: p1 } = await window.TH.getClient()
             .from('players')
