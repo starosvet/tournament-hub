@@ -205,7 +205,8 @@
 
   window.Auth = {
     register, login, logout, isAdmin, adminLogin,
-    canUserVote, markVote, renderNavUser, checkFandomAutoAdmin, initAuth
+    canUserVote, markVote, renderNavUser, checkFandomAutoAdmin, initAuth,
+       unlinkFandom  // <-- добавлено
   };
 
   window.escapeHTML = escapeHTML;
@@ -219,4 +220,27 @@
   } else {
     initAuth();
   }
+   
+ /* ==========================================================
+     FANDOM UNLINK (для админов или по запросу)
+     ========================================================== */
+  async function unlinkFandom() {
+    try {
+      await window.TH.updateProfile({
+        fandom_name: null,
+        fandom_verified: false,
+        fandom_verified_at: null
+      });
+      const user = await DB.getCurrentUser();
+      if (user) {
+        user.fandomName = null;
+        user.fandomVerified = false;
+        DB.setCurrentUser(user);
+      }
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+   
 })();
