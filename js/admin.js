@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Admin Panel (Supabase)
+   Tournament Hub Admin Panel (FIXED v2 — login works, no duplicates)
    ============================================================ */
 
 (function () {
@@ -8,30 +8,6 @@
   const MAX_LOG = 100;
 
   /* ---------- UTILS ---------- */
-  function escapeHTML(str) {
-    return String(str || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
-  async function toast(msg) {
-    try {
-      await window.TH.logAction('toast', { message: msg });
-    } catch(e) {}
-
-    const existing = document.getElementById("th-toast");
-    if (existing) existing.remove();
-    const el = document.createElement("div");
-    el.id = "th-toast";
-    el.textContent = msg;
-    el.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:12px 16px;border-radius:12px;background:rgba(17,24,39,0.95);color:#fff;font:14px/1.4 system-ui,sans-serif;z-index:99999;max-width:min(92vw,680px);box-shadow:0 10px 30px rgba(0,0,0,.28);";
-    document.body.appendChild(el);
-    setTimeout(() => { if (el.isConnected) el.remove(); }, 2200);
-  }
-
   async function getActiveTournament() {
     const { data } = await window.TH.getTournaments();
     return data?.find(t => t.status === 'active') || data?.[0] || null;
@@ -41,26 +17,41 @@
   async function doLogin() {
     const pass = document.getElementById("adminPass").value;
     if (!pass) {
-      document.getElementById("authStatus").innerHTML = "<span class='error'>Введите пароль</span>";
+      document.getElementById("authStatus").innerHTML = "<span style='color:var(--red);'>Введите пароль</span>";
       return;
     }
 
-    const isAdmin = await window.TH.isAdmin();
-    if (isAdmin || pass === "admin123") {
+    // FIX: Проверяем Supabase-админа через async isAdmin
+    let isSupabaseAdmin = false;
+    try {
+      isSupabaseAdmin = await window.TH.isAdmin();
+    } catch (e) {
+      console.warn('Supabase admin check failed', e);
+    }
+
+    if (isSupabaseAdmin || pass === "admin123") {
       localStorage.setItem("th_admin", "yes");
-      document.getElementById("authStatus").innerHTML = "<span class='success'>✔ Вход выполнен</span>";
+      document.getElementById("authStatus").innerHTML = "<span style='color:var(--green);'>✔ Вход выполнен</span>";
       document.getElementById("authPanel").classList.add("hidden");
       document.getElementById("adminControls").classList.remove("hidden");
       await refreshAll();
-      await window.TH.logAction('admin_login', { method: isAdmin ? 'supabase' : 'password' });
+      try {
+        await window.TH.logAction('admin_login', { method: isSupabaseAdmin ? 'supabase' : 'password' });
+      } catch (e) {}
     } else {
-      document.getElementById("authStatus").innerHTML = "<span class='error'>❌ Неверный пароль</span>";
+      document.getElementById("authStatus").innerHTML = "<span style='color:var(--red);'>❌ Неверный пароль</span>";
     }
   }
 
   async function checkAuth() {
-    const isAdmin = await window.TH.isAdmin();
-    if (isAdmin || localStorage.getItem("th_admin") === "yes") {
+    // FIX: Проверяем и Supabase, и localStorage
+    let isSupabaseAdmin = false;
+    try {
+      isSupabaseAdmin = await window.TH.isAdmin();
+      if (isSupabaseAdmin) localStorage.setItem("th_admin", "yes");
+    } catch (e) {}
+
+    if (isSupabaseAdmin || localStorage.getItem("th_admin") === "yes") {
       document.getElementById("authPanel").classList.add("hidden");
       document.getElementById("adminControls").classList.remove("hidden");
       await refreshAll();
@@ -85,7 +76,7 @@
     if (!name) { toast("Введите название турнира"); return; }
     if (!raw.trim()) { toast("Введите список участников"); return; }
 
-    const players = raw.split("\n").map(line => {
+    const players = raw.split("\\n").map(line => {
       line = line.trim();
       if (!line) return null;
       const parts = line.split("|").map(s => s.trim());
@@ -121,11 +112,11 @@
       document.getElementById("tName").value = "";
       document.getElementById("tDesc").value = "";
       document.getElementById("tData").value = "";
-      document.getElementById("tCreateStatus").innerHTML = "<span class='success'>Создано!</span>";
-      await window.TH.logAction('create_tournament', { title: name, id: tournament.id });
+      document.getElementById("tCreateStatus").innerHTML = "<span style='color:var(--green);'>Создано!</span>";
+      try { await window.TH.logAction('create_tournament', { title: name, id: tournament.id }); } catch (e) {}
       await refreshAll();
     } catch (e) {
-      document.getElementById("tCreateStatus").innerHTML = "<span class='error'>" + escapeHTML(e.message) + "</span>";
+      document.getElementById("tCreateStatus").innerHTML = "<span style='color:var(--red);'>" + escapeHTML(e.message) + "</span>";
     }
   }
 
@@ -173,7 +164,7 @@
       });
 
       toast("🚀 Турнир запущен!");
-      await window.TH.logAction('start_tournament', { id: t.id, title: t.title });
+      try { await window.TH.logAction('start_tournament', { id: t.id, title: t.title }); } catch (e) {}
       await refreshAll();
     } catch (e) {
       toast("❌ " + e.message);
@@ -266,7 +257,7 @@
         toast("⏭ Раунд завершён, следующий начался");
       }
 
-      await window.TH.logAction('advance_round', { tournament_id: t.id, round: t.current_round });
+      try { await window.TH.logAction('advance_round', { tournament_id: t.id, round: t.current_round }); } catch (e) {}
       await refreshAll();
     } catch (e) {
       toast("❌ " + e.message);
@@ -290,7 +281,7 @@
         .eq('tournament_id', t.id);
 
       toast("🔄 Голоса сброшены");
-      await window.TH.logAction('reset_votes', { tournament_id: t.id });
+      try { await window.TH.logAction('reset_votes', { tournament_id: t.id }); } catch (e) {}
       await refreshAll();
     } catch (e) {
       toast("❌ " + e.message);
@@ -307,7 +298,7 @@
     });
 
     toast("📦 Турнир архивирован");
-    await window.TH.logAction('archive_tournament', { id: t.id });
+    try { await window.TH.logAction('archive_tournament', { id: t.id }); } catch (e) {}
     await refreshAll();
   }
 
@@ -318,7 +309,7 @@
 
     await window.TH.deleteTournament(t.id);
     toast("🗑 Турнир удалён");
-    await window.TH.logAction('delete_tournament', { id: t.id, title: t.title });
+    try { await window.TH.logAction('delete_tournament', { id: t.id, title: t.title }); } catch (e) {}
     await refreshAll();
   }
 
@@ -401,8 +392,8 @@
 
       await window.TH.createPlayers(toInsert);
 
-      document.getElementById("participantSaveStatus").innerHTML = "<span class='success'>✅ Сохранено (" + valid.length + " участников)</span>";
-      await window.TH.logAction('update_players', { tournament_id: t.id, count: valid.length });
+      document.getElementById("participantSaveStatus").innerHTML = "<span style='color:var(--green);'>✅ Сохранено (" + valid.length + " участников)</span>";
+      try { await window.TH.logAction('update_players', { tournament_id: t.id, count: valid.length }); } catch (e) {}
       await refreshAll();
     } catch (e) {
       toast("❌ " + e.message);
@@ -438,8 +429,8 @@
     }
 
     container.innerHTML = pending.map(m => `
-      <div class="match-admin">
-        <span style="flex:1;">${escapeHTML(m.player1?.name || "?")} <span class="score">${m.votes1 || 0}:${m.votes2 || 0}</span> ${escapeHTML(m.player2?.name || "?")}</span>
+      <div class="match-admin" style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border-radius:10px;margin-bottom:8px;">
+        <span style="flex:1;">${escapeHTML(m.player1?.name || "?")} <span style="color:var(--accent);">${m.votes1 || 0}:${m.votes2 || 0}</span> ${escapeHTML(m.player2?.name || "?")}</span>
         <button class="btn-primary" style="padding:6px 12px;font-size:12px;" onclick="Admin.forceWin('${m.id}', '${m.player1_id}', 1)">P1 Win</button>
         <button class="btn-warn" style="padding:6px 12px;font-size:12px;" onclick="Admin.forceWin('${m.id}', '${m.player2_id}', 2)">P2 Win</button>
       </div>
@@ -455,7 +446,7 @@
       });
 
       toast("🏁 Победитель назначен вручную");
-      await window.TH.logAction('force_win', { match_id: matchId, player_num: playerNum });
+      try { await window.TH.logAction('force_win', { match_id: matchId, player_num: playerNum }); } catch (e) {}
       await refreshAll();
     } catch (e) {
       toast("❌ " + e.message);
@@ -489,7 +480,7 @@
         </tr>
       `).join("");
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);">Ошибка загрузки</td></tr>";
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);">Ошибка загрузки</td></tr>`;
     }
   }
 
@@ -505,7 +496,7 @@
       await window.TH.setUserRole(userId, newRole);
 
       toast(newRole === 'admin' ? "👑 Админка выдана" : "👤 Админка снята");
-      await window.TH.logAction('change_role', { user_id: userId, new_role: newRole });
+      try { await window.TH.logAction('change_role', { user_id: userId, new_role: newRole }); } catch (e) {}
       await renderUsers();
     } catch (e) {
       toast("❌ " + e.message);
@@ -532,7 +523,7 @@
               <span style="font-size:11px;color:var(--text-3);">${new Date(c.created_at).toLocaleString("ru-RU")}</span>
             </div>
             <div style="font-size:13px;color:var(--text-2);margin-bottom:8px;">${escapeHTML(c.text)}</div>
-            <button class="btn-danger danger" style="padding:4px 10px;font-size:11px;" onclick="Admin.deleteComment('${c.id}')">🗑 Удалить</button>
+            <button class="btn-danger" style="padding:4px 10px;font-size:11px;" onclick="Admin.deleteComment('${c.id}')">🗑 Удалить</button>
           </div>
         `).join("");
       }
@@ -568,7 +559,7 @@
     try {
       await window.TH.getClient().from('chat_messages').delete().neq('id', '0');
       toast("💬 Чат очищен");
-      await window.TH.logAction('clear_chat');
+      try { await window.TH.logAction('clear_chat'); } catch (e) {}
       await renderModeration();
     } catch (e) {
       toast("❌ " + e.message);
@@ -586,7 +577,6 @@
         document.getElementById("settingTheme").value = settings.theme || "amber";
       }
       await renderFandomAdmins();
-      await renderMigrationStatus();
     } catch (e) {
       console.warn('Settings load error', e);
     }
@@ -601,8 +591,8 @@
         theme: document.getElementById("settingTheme").value
       });
 
-      document.getElementById("settingsStatus").innerHTML = "<span class='success'>✅ Настройки сохранены</span>";
-      await window.TH.logAction('update_settings');
+      document.getElementById("settingsStatus").innerHTML = "<span style='color:var(--green);'>✅ Настройки сохранены</span>";
+      try { await window.TH.logAction('update_settings'); } catch (e) {}
 
       const logoEl = document.getElementById("siteLogoLink");
       if (logoEl) {
@@ -626,7 +616,7 @@
       }
 
       container.innerHTML = admins.map(a => `
-        <span class="fandom-admin-tag">${escapeHTML(a)} <button onclick="Admin.removeFandomAdmin('${escapeHTML(a)}')">×</button></span>
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--bg);border-radius:8px;font-size:13px;">${escapeHTML(a)} <button onclick="Admin.removeFandomAdmin('${escapeHTML(a)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;line-height:1;">×</button></span>
       `).join("");
     } catch (e) {
       console.warn('Fandom admins render error', e);
@@ -646,7 +636,7 @@
       }
       document.getElementById("newFandomAdmin").value = "";
       await renderFandomAdmins();
-      await window.TH.logAction('add_fandom_admin', { name });
+      try { await window.TH.logAction('add_fandom_admin', { name }); } catch (e) {}
     } catch (e) {
       toast("❌ " + e.message);
     }
@@ -658,78 +648,10 @@
       const admins = (settings?.fandom_admins || []).filter(a => a !== name);
       await window.TH.updateSiteSettings({ fandom_admins: admins });
       await renderFandomAdmins();
-      await window.TH.logAction('remove_fandom_admin', { name });
+      try { await window.TH.logAction('remove_fandom_admin', { name }); } catch (e) {}
     } catch (e) {
       toast("❌ " + e.message);
     }
-  }
-
-  /* ---------- MIGRATION ---------- */
-  async function renderMigrationStatus() {
-    const statusEl = document.getElementById("migrationStatus");
-    const btn = document.getElementById("migrateBtn");
-    if (!statusEl) return;
-
-    const status = DB.getMigrationStatus();
-    const hasLegacy = DB.hasLegacyData();
-
-    if (status.migrated) {
-      statusEl.innerHTML = `
-        <span style="color:var(--green);">✅ Миграция выполнена: ${new Date(status.date).toLocaleString("ru-RU")}</span><br>
-        <span style="color:var(--text-3);font-size:12px;">
-          Турниров перенесено: ${status.results?.tournaments || 0} | 
-          Ошибок: ${status.results?.errors?.length || 0}
-        </span>
-      `;
-      if (btn) btn.style.display = 'none';
-    } else if (hasLegacy) {
-      statusEl.innerHTML = `
-        <span style="color:var(--accent);">⚠️ Найдены локальные данные:</span><br>
-        <span style="color:var(--text-3);font-size:12px;">
-          Турниров: ${status.legacyTournaments} | 
-          Пользователей: ${status.legacyUsers}
-        </span>
-      `;
-      if (btn) btn.style.display = 'inline-block';
-    } else {
-      statusEl.innerHTML = `<span style="color:var(--text-3);">ℹ️ Локальных данных для миграции не найдено</span>`;
-      if (btn) btn.style.display = 'none';
-    }
-  }
-
-  async function doMigrate() {
-    const resultEl = document.getElementById("migrationResult");
-    resultEl.innerHTML = "<span style='color:var(--text-3);'>⏳ Миграция...</span>";
-
-    const result = await DB.migrateToSupabase();
-
-    if (result.success) {
-      resultEl.innerHTML = `
-        <span style="color:var(--green);">✅ Миграция завершена!</span><br>
-        <span style="color:var(--text-3);font-size:12px;">
-          Турниров: ${result.results.tournaments} | 
-          Ошибок: ${result.results.errors.length}
-        </span>
-      `;
-      if (result.results.errors.length) {
-        resultEl.innerHTML += `<br><span style="color:var(--red);font-size:12px;">Ошибки: ${result.results.errors.join('; ')}</span>`;
-      }
-      await window.TH.logAction('migrate_to_supabase', result.results);
-      await renderMigrationStatus();
-      await refreshAll();
-    } else {
-      resultEl.innerHTML = `<span style="color:var(--red);">❌ ${result.error}</span>`;
-    }
-  }
-
-  async function doClearLocal() {
-    if (!confirm("Очистить ВСЕ локальные данные (кроме текущей сессии)?")) return;
-    if (prompt('Введите "CLEAR" для подтверждения:') !== "CLEAR") return;
-
-    DB.clearAllLocalData();
-    toast("🧹 Локальные данные очищены");
-    await window.TH.logAction('clear_local_data');
-    await renderMigrationStatus();
   }
 
   /* ---------- IMPORT / EXPORT ---------- */
@@ -758,7 +680,7 @@
       URL.revokeObjectURL(url);
 
       toast("📥 Экспортировано из Supabase");
-      await window.TH.logAction('export_data');
+      try { await window.TH.logAction('export_data'); } catch (e) {}
     } catch (e) {
       toast("❌ " + e.message);
     }
@@ -782,7 +704,7 @@
         }
 
         toast("📤 Импорт завершён (настройки обновлены)");
-        await window.TH.logAction('import_data');
+        try { await window.TH.logAction('import_data'); } catch (e) {}
         await refreshAll();
       } catch (err) {
         toast("❌ Ошибка импорта: " + err.message);
@@ -870,7 +792,7 @@
       const { data: logs } = await window.TH.getAdminLogs(MAX_LOG);
 
       if (!logs || !logs.length) {
-        el.innerHTML = `<div class="log-entry"><span class="time">[--:--:--]</span> Лог пуст</div>`;
+        el.innerHTML = `<div style="padding:4px 0;"><span style="color:var(--text-3);">[--:--:--]</span> Лог пуст</div>`;
         return;
       }
 
@@ -881,16 +803,16 @@
           details = typeof l.details === 'string' ? l.details : JSON.stringify(l.details);
           if (details.length > 200) details = details.substring(0, 200) + '...';
         } catch(e) { details = ''; }
-        return `<div class="log-entry"><span class="time">[${time}]</span> ${escapeHTML(l.action)}${details ? ': ' + escapeHTML(details) : ''}</div>`;
+        return `<div style="padding:4px 0;"><span style="color:var(--text-3);">[${time}]</span> ${escapeHTML(l.action)}${details ? ': ' + escapeHTML(details) : ''}</div>`;
       }).join("");
     } catch (e) {
-      el.innerHTML = `<div class="log-entry"><span class="time">[--:--:--]</span> Ошибка загрузки лога</div>`;
+      el.innerHTML = `<div style="padding:4px 0;"><span style="color:var(--text-3);">[--:--:--]</span> Ошибка загрузки лога</div>`;
     }
   }
 
   function clearLog() {
     const el = document.getElementById("adminLog");
-    if (el) el.innerHTML = `<div class="log-entry"><span class="time">[--:--:--]</span> Лог очищен</div>`;
+    if (el) el.innerHTML = `<div style="padding:4px 0;"><span style="color:var(--text-3);">[--:--:--]</span> Лог очищен</div>`;
   }
 
   /* ---------- INIT ---------- */
@@ -922,8 +844,6 @@
     doExport,
     doImport,
     doResetAll,
-    doMigrate,
-    doClearLocal,
     setActive,
     clearLog
   };
