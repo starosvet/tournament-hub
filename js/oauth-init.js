@@ -1,5 +1,5 @@
 /* ============================================================
-   OAuth Init — Конфигурация Supabase (FIXED v7 — persistent auth)
+   OAuth Init — Конфигурация Supabase (FIXED v8 — persistent auth)
    ============================================================ */
 (function() {
   'use strict';
@@ -8,7 +8,7 @@
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwYWJvb3RlcWZhaGh6b2JjcG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjgwOTIsImV4cCI6MjA5NzkwNDA5Mn0.cc1oG5-73US61LI9uDaPwuQsOjLkIAPxDcfGQvVY9Ac';
 
   if (typeof window.supabase === 'undefined') {
-    console.error('❌ Supabase library not loaded!');
+    console.error('❌ Supabase library not loaded! Check script tags order.');
     return;
   }
 
@@ -28,5 +28,5 @@
     }
   };
 
-  console.log('✅ Supabase config ready');
+  console.log('✅ Supabase config ready and attached to window');
 })();
