@@ -1,9 +1,11 @@
 /* ============================================================
-   Tournament Hub Main Renderer (FIXED v2 — optimized)
+   Tournament Hub Main Renderer (FIXED v3 — waits for TH, safe init)
    ============================================================ */
 
 (function () {
   'use strict';
+
+  let initDone = false;
 
   /* ==========================================================
      НАСТРОЙКИ САЙТА
@@ -117,6 +119,9 @@
           </article>
         `;
       }).join("");
+    }).catch(e => {
+      console.error('renderTournamentList error:', e);
+      container.innerHTML = `<p style="color:var(--red);">Ошибка загрузки турниров</p>`;
     });
   }
 
@@ -187,6 +192,8 @@
           </div>
         </div>
       `;
+    }).catch(e => {
+      console.error('renderStats error:', e);
     });
   }
 
@@ -194,18 +201,32 @@
      ГЛАВНАЯ ИНИЦИАЛИЗАЦИЯ
      ========================================================== */
   async function initRender() {
+    if (initDone) return;
+    initDone = true;
+
+    // FIX: ждём window.TH
+    let attempts = 0;
+    while (!window.TH && attempts < 50) {
+      await new Promise(r => setTimeout(r, 100));
+      attempts++;
+    }
+
     const settings = await loadSiteSettings();
     applySettings(settings);
     renderStats();
     renderTournamentList(document.querySelector("#tournament-list"));
+    
     if (window.Auth && Auth.renderNavUser) Auth.renderNavUser();
   }
 
   window.Render = { initRender, renderTournamentList, renderStats };
 
+  // FIX: не запускаем сразу — ждём DOM и TH
   if (document.readyState === 'loading') {
-    document.addEventListener("DOMContentLoaded", initRender);
+    document.addEventListener("DOMContentLoaded", () => {
+      setTimeout(initRender, 200);
+    });
   } else {
-    initRender();
+    setTimeout(initRender, 200);
   }
 })();
