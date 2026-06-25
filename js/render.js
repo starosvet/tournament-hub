@@ -1,24 +1,14 @@
+
 /* ============================================================
-   Tournament Hub Main Renderer (Supabase)
+   Tournament Hub Main Renderer (FIXED v2 — optimized)
    ============================================================ */
 
 (function () {
   'use strict';
 
-  function escapeHTML(text) {
-    if (text === null || text === undefined) return "";
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
   /* ==========================================================
      НАСТРОЙКИ САЙТА
      ========================================================== */
-
   async function loadSiteSettings() {
     if (window.TH) {
       try {
@@ -64,9 +54,8 @@
   }
 
   /* ==========================================================
-     ТУРНИРЫ — ТОЛЬКО SUPABASE
+     ТУРНИРЫ
      ========================================================== */
-
   async function getTournamentsData() {
     if (!window.TH) return [];
 
@@ -88,7 +77,6 @@
       console.warn('Supabase tournaments failed', e);
     }
 
-    // Запаска: localStorage cache
     const db = DB.getDB();
     return (db.tournaments || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }
@@ -134,9 +122,8 @@
   }
 
   /* ==========================================================
-     СТАТИСТИКА — ТОЛЬКО SUPABASE
+     СТАТИСТИКА
      ========================================================== */
-
   async function getStats() {
     if (!window.TH) {
       const db = DB.getDB();
@@ -207,7 +194,6 @@
   /* ==========================================================
      ГЛАВНАЯ ИНИЦИАЛИЗАЦИЯ
      ========================================================== */
-
   async function initRender() {
     const settings = await loadSiteSettings();
     applySettings(settings);
@@ -217,7 +203,6 @@
   }
 
   window.Render = { initRender, renderTournamentList, renderStats };
-  window.escapeHTML = window.escapeHTML || escapeHTML;
 
   if (document.readyState === 'loading') {
     document.addEventListener("DOMContentLoaded", initRender);
