@@ -97,7 +97,7 @@
         // FIX: ждём инициализации TH из db.js
         let attempts = 0;
         const waitForInit = setInterval(() => {
-            if (window.TH && window.TH.init) {
+            if (window.TH && window.TH.isReady) {
                 clearInterval(waitForInit);
 
                 const navAdmin = document.getElementById("navAdmin");
