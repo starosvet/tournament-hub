@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED)
+   Tournament Hub — Supabase Client (FIXED v2 — OAuth callback)
    ============================================================ */
 
 (function () {
@@ -10,6 +10,7 @@
 
   let supabase = null;
   let realtimeChannels = [];
+  let oauthCallbackHandled = false;
 
   /* ==========================================================
      ИНИЦИАЛИЗАЦИЯ
@@ -19,6 +20,8 @@
       console.error('❌ Supabase library not loaded!');
       return false;
     }
+    if (supabase) return true; // уже инициализирован
+
     supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         autoRefreshToken: true,
@@ -54,11 +57,10 @@
   }
 
   async function signInWithProvider(provider) {
-    // FIX: правильный redirect для GitHub Pages
     const { data, error } = await getClient().auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: 'https://starosvet.github.io/login.html',
+        redirectTo: window.location.origin + '/login.html',
         queryParams: { access_type: 'offline', prompt: 'consent' }
       }
     });
@@ -71,9 +73,10 @@
     return { error };
   }
 
+  // FIX: Используем getSession вместо getUser — getUser требует свежий токен
   async function getCurrentUser() {
-    const { data: { user } } = await getClient().auth.getUser();
-    return user;
+    const { data: { session } } = await getClient().auth.getSession();
+    return session?.user || null;
   }
 
   async function getSession() {
