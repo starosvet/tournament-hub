@@ -1,20 +1,15 @@
 /* ============================================================
-   Tournament Hub — Database Layer (Supabase + localStorage fallback)
+   Tournament Hub — Database Layer (FIXED)
    ============================================================ */
 
 (function () {
   'use strict';
 
   const STORAGE_KEY = "tournament_hub_db";
-  const USE_SUPABASE = true; // Переключатель: true = Supabase, false = localStorage
+  const USE_SUPABASE = true;
 
-  // Дефолтная структура (для fallback и миграции)
   const defaultDB = {
-    users: [],
-    tournaments: [],
-    matches: [],
-    comments: [],
-    subjects: [],
+    users: [], tournaments: [], matches: [], comments: [], subjects: [],
     subjectTypes: [
       { id: "characters", name: "Персонажи", icon: "🙂" },
       { id: "articles", name: "Статьи", icon: "📄" },
@@ -32,10 +27,6 @@
       accent: "amber"
     }
   };
-
-  /* ==========================================================
-     УТИЛИТЫ
-     ========================================================== */
 
   function safeClone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -68,9 +59,8 @@
   }
 
   /* ==========================================================
-     LOCALSTORAGE (fallback)
+     LOCALSTORAGE
      ========================================================== */
-
   function loadDB() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
@@ -107,14 +97,11 @@
   }
 
   /* ==========================================================
-     SUPABASE АДАПТЕР
+     SUPABASE SYNC
      ========================================================== */
-
   async function syncFromSupabase() {
     if (!window.TH || !USE_SUPABASE) return;
-
     try {
-      // Загружаем настройки
       const { data: settings } = await window.TH.getSiteSettings();
       if (settings) {
         updateDB(db => {
@@ -126,7 +113,6 @@
         });
       }
 
-      // Загружаем турниры
       const { data: tournaments } = await window.TH.getTournaments();
       if (tournaments) {
         updateDB(db => {
@@ -167,30 +153,32 @@
   }
 
   /* ==========================================================
-     USER (совместимость со старым кодом)
+     USER
      ========================================================== */
-
   function getCurrentUser() {
-    // Проверяем Supabase auth
+    // FIX: сначала проверяем Supabase auth
     if (window.TH && USE_SUPABASE) {
-      // Асинхронно нельзя, возвращаем из кэша localStorage
-      const id = localStorage.getItem("th_user_id");
-      const email = localStorage.getItem("th_user_email");
-      const username = localStorage.getItem("th_user_name");
-      if (id) {
-        return {
-          id: id,
-          username: username || email || 'user',
-          displayName: username || email || 'user',
-          email: email,
-          role: localStorage.getItem("th_user_role") || 'user',
-          votes: parseInt(localStorage.getItem("th_user_votes") || '0'),
-          authType: 'supabase'
-        };
-      }
+      try {
+        const session = window.TH.getSession();
+        if (session) {
+          const id = localStorage.getItem("th_user_id");
+          const email = localStorage.getItem("th_user_email");
+          const username = localStorage.getItem("th_user_name");
+          if (id) {
+            return {
+              id: id,
+              username: username || email || 'user',
+              displayName: username || email || 'user',
+              email: email,
+              role: localStorage.getItem("th_user_role") || 'user',
+              votes: parseInt(localStorage.getItem("th_user_votes") || '0'),
+              authType: 'supabase'
+            };
+          }
+        }
+      } catch (e) {}
     }
 
-    // Fallback на старый формат
     const id = localStorage.getItem("th_user");
     if (!id) return null;
     const db = loadDB();
@@ -208,7 +196,7 @@
       return;
     }
 
-    if (user.authType === 'supabase') {
+    if (user.authType === 'supabase' || user.id?.length > 20) {
       localStorage.setItem("th_user_id", user.id);
       localStorage.setItem("th_user_email", user.email || '');
       localStorage.setItem("th_user_name", user.displayName || user.username || '');
@@ -219,10 +207,8 @@
     }
   }
 
-  // Синхронизация Supabase user в localStorage
   async function syncSupabaseUser() {
     if (!window.TH || !USE_SUPABASE) return;
-
     try {
       const user = await window.TH.getCurrentUser();
       if (user) {
@@ -247,47 +233,26 @@
   /* ==========================================================
      TOAST
      ========================================================== */
-
   function toast(message) {
-    if (typeof console !== "undefined") console.log("[Tournament Hub]", message);
     const existing = document.getElementById("th-toast");
     if (existing) existing.remove();
-
     const el = document.createElement("div");
     el.id = "th-toast";
     el.textContent = String(message ?? "");
-    el.style.cssText = [
-      "position:fixed",
-      "left:50%",
-      "bottom:24px",
-      "transform:translateX(-50%)",
-      "padding:12px 16px",
-      "border-radius:12px",
-      "background:rgba(17,24,39,0.95)",
-      "color:#fff",
-      "font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif",
-      "z-index:99999",
-      "max-width:min(92vw,680px)",
-      "box-shadow:0 10px 30px rgba(0,0,0,.28)"
-    ].join(";");
-
+    el.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:12px 16px;border-radius:12px;background:rgba(17,24,39,0.95);color:#fff;font:14px/1.4 system-ui,sans-serif;z-index:99999;max-width:min(92vw,680px);box-shadow:0 10px 30px rgba(0,0,0,.28);";
     document.body.appendChild(el);
-    setTimeout(() => {
-      if (el.isConnected) el.remove();
-    }, 2200);
+    setTimeout(() => { if (el.isConnected) el.remove(); }, 2200);
   }
 
   /* ==========================================================
-     ИНИЦИАЛИЗАЦИЯ
+     INIT
      ========================================================== */
-
   async function init() {
     if (window.TH && USE_SUPABASE) {
       window.TH.init();
       await syncSupabaseUser();
       await syncFromSupabase();
 
-      // Подписываемся на изменения auth
       window.TH.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_IN') {
           syncSupabaseUser();
@@ -301,17 +266,6 @@
     }
   }
 
-  // Автоинициализация
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-
-  /* ==========================================================
-     ЭКСПОРТ
-     ========================================================== */
-
   window.DB_KEY = STORAGE_KEY;
   window.DB = { loadDB, getDB, saveDB, updateDB, getCurrentUser, setCurrentUser, syncSupabaseUser };
   window.getDB = getDB;
@@ -321,7 +275,6 @@
   window.setCurrentUser = setCurrentUser;
   window.toast = window.toast || toast;
 
-  // Синхронизация между вкладками
   window.addEventListener("storage", function(e) {
     if (e.key === STORAGE_KEY) {
       window.dispatchEvent(new CustomEvent("th-db-changed", { detail: e.newValue }));
@@ -337,4 +290,9 @@
     if (typeof Auth !== "undefined" && Auth.renderNavUser) Auth.renderNavUser();
   });
 
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();
