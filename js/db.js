@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Database Layer (FIXED v4 — OAuth callback fix)
+   Tournament Hub — Database Layer (FIXED v5 — inline init)
    ============================================================ */
 
 (function () {
@@ -159,7 +159,6 @@
      USER
      ========================================================== */
   async function getCurrentUser() {
-    // ПРИОРИТЕТ 1: Supabase session
     if (window.TH && USE_SUPABASE) {
       try {
         const session = await window.TH.getSession();
@@ -183,7 +182,6 @@
       }
     }
 
-    // ПРИОРИТЕТ 2: localStorage cache
     const id = localStorage.getItem("th_user_id");
     if (id) {
       return {
@@ -200,7 +198,6 @@
       };
     }
 
-    // ПРИОРИТЕТ 3: Legacy
     const oldId = localStorage.getItem("th_user");
     if (!oldId) return null;
     const db = loadDB();
@@ -426,39 +423,13 @@
   }
 
   /* ==========================================================
-     INIT (FIXED: жёсткая обработка OAuth хэша)
+     INIT
      ========================================================== */
   async function init() {
     if (window.TH && USE_SUPABASE) {
-      window.TH.init();
+      // Не вызываем window.TH.init() — клиент уже создан inline в login.html
+      // Просто подписываемся на события
 
-      // FIX: Ждём, пока Supabase обработает detectSessionInUrl
-      await new Promise(r => setTimeout(r, 300));
-
-      // FIX: Если хэш всё ещё есть — принудительно обрабатываем
-      if (window.location.hash && window.location.hash.includes('access_token')) {
-        console.log('🔧 OAuth hash detected, forcing session extraction...');
-        try {
-          // Supabase должен был уже обработать, но на всякий случай ждём ещё
-          await new Promise(r => setTimeout(r, 500));
-
-          // Проверяем, установилась ли сессия
-          const session = await window.TH.getSession();
-          if (!session) {
-            console.warn('⚠️ Session not found after OAuth redirect, hash still present');
-          } else {
-            console.log('✅ OAuth session established');
-            // Очищаем хэш вручную, если Supabase не сделал это
-            if (window.history.replaceState) {
-              window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-            }
-          }
-        } catch (e) {
-          console.error('OAuth processing error:', e);
-        }
-      }
-
-      // Подписка на изменения авторизации
       window.TH.onAuthStateChange(async (event, session) => {
         console.log('Auth event:', event);
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
