@@ -30,19 +30,27 @@
     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
-  async function renderTournamentList(container) {
+async function renderTournamentList(container) {
     if (!container) return;
     container.innerHTML = '<div class="spinner"></div>';
     try {
       let tournaments = [];
 
       if (window.TH) { 
-        const { data } = await window.TH.getTournaments(); 
+        const { data, error } = await window.TH.getTournaments();
+        if (error) {
+          console.error('getTournaments error:', error);
+          container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки: ' + escapeHTML(error.message) + '</p>';
+          return;
+        }
         if (data) tournaments = data; 
       }
       else tournaments = DB.getDB().tournaments || [];
 
-      if (tournaments.length === 0) { container.innerHTML = '<p style="color:var(--text-3); text-align:center; padding:20px;">Нет активных турниров</p>'; return; }
+      if (tournaments.length === 0) { 
+        container.innerHTML = '<p style="color:var(--text-3); text-align:center; padding:20px;">Нет активных турниров</p>'; 
+        return; 
+      }
 
       container.innerHTML = tournaments.map(t => {
         let statusText = 'Черновик', statusClass = 'tournament-badge';
@@ -55,7 +63,8 @@
           statusText = 'Завершён'; 
           statusStyle = 'background:rgba(96,165,250,0.15);color:var(--blue);border:1px solid rgba(96,165,250,0.3);';
         }
-        const participantCount = t.player_count?.[0]?.count || t.players?.length || 0;
+        // ✅ СТАЛО: Берём count из players массива или показываем 0
+        const participantCount = t.players?.length || t.player_count || 0;
         return `
           <div class="card tournament-card page-enter" onclick="window.location.href='bracket.html?id=${t.id}'">
             <div class="tournament-card-header" style="display:flex; justify-content:space-between; align-items:center;">
@@ -70,7 +79,10 @@
             </div>
           </div>`;
       }).join('');
-    } catch (e) { console.error('renderTournamentList error:', e); container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки</p>'; }
+    } catch (e) { 
+      console.error('renderTournamentList error:', e); 
+      container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки: ' + escapeHTML(e.message) + '</p>'; 
+    }
   }
 
   function renderStats() {
