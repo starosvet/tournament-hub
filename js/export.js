@@ -1,4 +1,4 @@
-/* Tournament Hub Export / backup system (безопасная версия) */
+/* Tournament Hub Export / backup system */
 (function () {
   function getBackupData() { const db = DB.getDB(); return { version: 1, exportedAt: new Date().toISOString(), data: db }; }
   function downloadBackup() {
