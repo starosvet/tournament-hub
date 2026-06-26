@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Bracket Controller (FIXED v8 — Swiss Edition)
+   Tournament Hub — Bracket Controller (Безопасная версия)
    ============================================================ */
 (function () {
   'use strict';
