@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Comments (FIXED v5 — safe subscribe, no leaks)
+   Tournament Hub Comments (Безопасная версия с Realtime)
    ============================================================ */
 (function () {
   'use strict';
