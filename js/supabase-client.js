@@ -91,7 +91,7 @@
   async function getTournaments() {
     const client = getClient();
     return await client.from('tournaments')
-      .select('*, player_count:players(count)')
+      .select('*')
       .order('created_at', { ascending: false });
   }
 
