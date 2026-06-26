@@ -33,9 +33,8 @@
         <h1 class="page-title">⚙️ Панель управления</h1>
         <div id="authPanel" class="login-box page-enter" style="max-width:400px;">
             <h2>🔐 Вход в админку</h2>
-            <p>Введите админ-пароль или авторизуйтесь через Supabase с ролью admin</p>
-            <input type="password" id="adminPass" placeholder="••••••••" style="width:100%;padding:14px 18px;background:var(--bg);border:1px solid var(--border-2);border-radius:12px;color:var(--text);font-size:15px;margin-bottom:16px;">
-            <button class="btn-admin" style="width:100%;" onclick="Admin.doLogin()">Войти</button>
+            <p>Авторизуйтесь через Supabase с ролью <strong>admin</strong></p>
+            <button class="btn-admin" style="width:100%;" onclick="Admin.doLogin()">🔐 Войти как администратор</button>
             <div id="authStatus" style="margin-top:16px;text-align:center;font-size:14px;"></div>
         </div>
         <div id="adminControls" class="hidden">
