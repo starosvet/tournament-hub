@@ -59,7 +59,6 @@
                 const navAdmin = document.getElementById("navAdmin");
                 if (navAdmin && window.Auth && window.Auth.isAdminSync && window.Auth.isAdminSync()) navAdmin.classList.remove("hidden");
                 if (window.Auth && window.Auth.renderNavUser) window.Auth.renderNavUser();
-                // Chat init is inside chat.js
             }
             attempts++;
             if (attempts > 60) clearInterval(waitForInit);
