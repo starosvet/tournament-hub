@@ -1,5 +1,5 @@
 /* ============================================================
-   RENDER – Homepage with News (Безопасная версия)
+   RENDER – Homepage with News (исправлен дизайн карточек)
    ============================================================ */
 (function () {
   'use strict';
@@ -32,27 +32,32 @@
 
   async function renderTournamentList(container) {
     if (!container) return;
-    container.innerHTML = '<div class="spinner"></div>';
+    container.innerHTML = '<div class="skeleton" style="height:120px;border-radius:16px;"></div>';
     try {
       let tournaments = [];
       if (window.TH) { const { data } = await window.TH.getTournaments(); if (data) tournaments = data; }
       else tournaments = DB.getDB().tournaments || [];
-      if (tournaments.length === 0) { container.innerHTML = '<p style="color:var(--text-3); text-align:center; padding:20px;">Нет активных турниров</p>'; return; }
+      if (tournaments.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-3); text-align:center; padding:20px;">Нет активных турниров</p>';
+        return;
+      }
       container.innerHTML = tournaments.map(t => {
         let statusText = 'Черновик', statusClass = 'status-draft';
         if (t.status === 'active') { statusText = 'Активен'; statusClass = 'status-active'; }
         if (t.status === 'finished') { statusText = 'Завершён'; statusClass = 'status-finished'; }
         if (t.status === 'archived') { statusText = 'Архивирован'; statusClass = 'status-archived'; }
+        // Получаем количество участников
+        const playerCount = t.players ? t.players.length : 0;
         return `
-          <div class="card tournament-card page-enter" onclick="window.location.href='bracket.html?id=${t.id}'">
-            <div class="tournament-card-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="tournament-card page-enter" onclick="window.location.href='bracket.html?id=${t.id}'">
+            <div class="tournament-card-header">
               <h3>🏆 ${escapeHTML(t.title || t.name)}</h3>
               <span class="badge ${statusClass}">${statusText}</span>
             </div>
             <p style="color:var(--text-2); margin-top:8px; font-size:14px;">${escapeHTML(t.description || 'Без описания')}</p>
             <div class="tournament-card-meta" style="margin-top:12px; font-size:12px; color:var(--text-3);">
-              <span>Участников: ${t.players ? t.players.length : 0}</span>
-              <span style="margin-left:16px;">Групп: ${t.group_count || '?'}</span>
+              <span>👥 Участников: ${playerCount}</span>
+              <span style="margin-left:16px;">📅 Создан: ${new Date(t.created_at).toLocaleDateString('ru-RU')}</span>
             </div>
           </div>`;
       }).join('');
