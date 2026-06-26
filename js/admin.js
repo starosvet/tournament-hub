@@ -12,7 +12,7 @@
 
   async function getActiveTournament() {
     const { data } = await window.TH.getTournaments();
-    return data?.find(t => t.status === 'active') || data?.[0] || null;
+    return data?.find(t => t.status === 'active') || null;
   }
 
   async function doLogin() {
@@ -188,6 +188,7 @@
     const t = await getActiveTournament();
     if (!t) { toast("Нет активного турнира. Создайте сначала."); return; }
     if (t.status !== "draft") { toast("Турнир уже запущен или завершён"); return; }
+    if (!window.SwissEngine) { toast("Ошибка: SwissEngine не загружен. Проверьте подключение swiss-engine.js"); return; }
 
     try {
       const client = window.TH.getClient();
@@ -962,8 +963,9 @@
     const { data: rounds } = await client.from('rounds').select('*').eq('tournament_id', t.id);
     const { data: groups } = await client.from('groups').select('*').eq('tournament_id', t.id);
     const totalRounds = t.total_rounds || 10;
-    const config = `${t.groups_per_round || 1}гр × ${t.players_per_group || players?.length || 0}уч`;
-    el.innerHTML = `<b>${escapeHTML(t.title)}</b> (${t.status}) — ${(players || []).length} участников, ${(rounds || []).length}/${totalRounds} раундов, ${(groups || []).length} групп, текущий: ${(t.current_round || 0) + 1} [${config}]`;
+    const playerCount = (players || []).length;
+    const config = `${t.groups_per_round || 1}гр × ${t.players_per_group || playerCount}уч`;
+    el.innerHTML = `<b>${escapeHTML(t.title)}</b> (${t.status}) — ${playerCount} участников, ${(rounds || []).length}/${totalRounds} раундов, ${(groups || []).length} групп, текущий: ${(t.current_round || 0) + 1} [${config}]`;
   }
 
   async function refreshTournamentList() {
