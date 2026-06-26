@@ -55,6 +55,11 @@
     const input = document.getElementById("inputFandomName");
     const fName = input ? input.value.trim() : "";
     if (!fName) { alert("Укажите никнейм Fandom."); return; }
+    // ⚠️ Требуется реальная верификация через wiki!
+    // Используйте FandomAuth.startFandomLink() и проверку правок
+    alert("Для привязки Fandom используйте страницу профиля с верификацией через правку на вики.");
+    return;
+    /* ОТКЛЮЧЕНО — требуется реальная верификация
     try {
       const updated = await window.TH.updateProfile({ fandom_name: fName, fandom_verified: true, fandom_verified_at: new Date().toISOString() });
       const user = await window.DB.getCurrentUser();
@@ -63,6 +68,7 @@
       if (window.Auth && window.Auth.checkFandomAutoAdmin) await window.Auth.checkFandomAutoAdmin();
       window.location.reload();
     } catch (e) { alert("Не удалось привязать Fandom: " + e.message); }
+    */ 
   }
 
   async function executeFandomUnlink() {
