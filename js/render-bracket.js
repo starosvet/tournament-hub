@@ -519,7 +519,7 @@
 
     // Автоподгрузка недостающих фото
     if (tournament.players) {
-      autoFetchMissingImages(tournament.players);
+      await autoFetchMissingImages(tournament.players);
     }
   }
 
