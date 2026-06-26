@@ -35,21 +35,53 @@
     container.innerHTML = '<div class="spinner"></div>';
     try {
       let tournaments = [];
-      if (window.TH) { const { data } = await window.TH.getTournaments(); if (data) tournaments = data; }
+      let playerCounts = {};
+
+      if (window.TH) { 
+        const { data } = await window.TH.getTournaments(); 
+        if (data) tournaments = data; 
+        // Загружаем количество игроков для каждого турнира
+        try {
+          const { data: playersData } = await window.TH.getClient().from('players')
+            .select('tournament_id', { count: 'exact', head: true })
+            .in('tournament_id', tournaments.map(t => t.id));
+          // Supabase не даёт count per group в одном запросе, делаем отдельно
+          for (const t of tournaments) {
+            const { count } = await window.TH.getClient().from('players')
+              .select('*', { count: 'exact', head: true })
+              .eq('tournament_id', t.id);
+            playerCounts[t.id] = count || 0;
+          }
+        } catch (e) { console.warn('Player count load failed:', e); }
+      }
       else tournaments = DB.getDB().tournaments || [];
+
       if (tournaments.length === 0) { container.innerHTML = '<p style="color:var(--text-3); text-align:center; padding:20px;">Нет активных турниров</p>'; return; }
+
       container.innerHTML = tournaments.map(t => {
-        let statusText = 'Черновик', statusClass = 'status-draft';
-        if (t.status === 'active') { statusText = 'Активен'; statusClass = 'status-active'; }
-        if (t.status === 'finished') { statusText = 'Завершен'; statusClass = 'status-finished'; }
+        let statusText = 'Черновик', statusClass = 'tournament-badge';
+        let statusStyle = 'background:var(--accent-glow);color:var(--accent);border:1px solid rgba(245,158,11,0.2);';
+        if (t.status === 'active') { 
+          statusText = 'Активен'; 
+          statusStyle = 'background:rgba(52,211,153,0.15);color:var(--green);border:1px solid rgba(52,211,153,0.3);';
+        }
+        if (t.status === 'finished') { 
+          statusText = 'Завершён'; 
+          statusStyle = 'background:rgba(96,165,250,0.15);color:var(--blue);border:1px solid rgba(96,165,250,0.3);';
+        }
+        const participantCount = playerCounts[t.id] !== undefined ? playerCounts[t.id] : (t.players ? t.players.length : 0);
         return `
           <div class="card tournament-card page-enter" onclick="window.location.href='bracket.html?id=${t.id}'">
             <div class="tournament-card-header" style="display:flex; justify-content:space-between; align-items:center;">
               <h3>🏆 ${escapeHTML(t.title || t.name)}</h3>
-              <span class="badge ${statusClass}">${statusText}</span>
+              <span style="display:inline-block;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;${statusStyle}">${statusText}</span>
             </div>
             <p style="color:var(--text-2); margin-top:8px; font-size:14px;">${escapeHTML(t.description || 'Без описания')}</p>
-            <div class="tournament-card-meta" style="margin-top:12px; font-size:12px; color:var(--text-3);"><span>Участников: ${t.players ? t.players.length : 0}</span></div>
+            <div class="tournament-card-meta" style="margin-top:12px; font-size:12px; color:var(--text-3);">
+              <span>👥 Участников: ${participantCount}</span>
+              <span style="margin-left:16px;">🎯 Раундов: ${t.total_rounds || 10}</span>
+              <span style="margin-left:16px;">📊 Групп: ${t.groups_per_round || 1}</span>
+            </div>
           </div>`;
       }).join('');
     } catch (e) { console.error('renderTournamentList error:', e); container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки</p>'; }
