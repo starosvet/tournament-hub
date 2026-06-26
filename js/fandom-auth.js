@@ -128,13 +128,13 @@
   async function isFandomLinked() {
     const user = await DB.getCurrentUser();
     if (user?.fandomName) return true;
-    try { const profile = await window.TH.getProfile(); return !!profile?.fandom_name; } catch (e) { return false; }
+    try { const profile = await window.TH.getCurrentUser(); return !!profile?.fandom_name; } catch (e) { return false; }
   }
 
   async function getLinkedFandomName() {
     const user = await DB.getCurrentUser();
     if (user?.fandomName) return user.fandomName;
-    try { const profile = await window.TH.getProfile(); return profile?.fandom_name || null; } catch (e) { return null; }
+    try { const profile = await window.TH.getCurrentUser(); return profile?.fandom_name || null; } catch (e) { return null; }
   }
 
   window.FandomAuth = {
