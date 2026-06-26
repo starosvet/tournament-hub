@@ -11,8 +11,20 @@
   }
 
   async function getActiveTournament() {
+    // 1. Сначала проверяем, какой турнир админ "активировал" через кнопку
+    const activeId = localStorage.getItem('th_active_tournament');
+    if (activeId) {
+      const { data } = await window.TH.getTournament(activeId);
+      if (data) return data;
+    }
+    // 2. Если нет — ищем по статусу active
     const { data } = await window.TH.getTournaments();
-    return data?.find(t => t.status === 'active') || null;
+    const active = data?.find(t => t.status === 'active');
+    if (active) return active;
+    // 3. Если нет active — берём последний draft
+    const drafts = data?.filter(t => t.status === 'draft');
+    if (drafts?.length) return drafts[0];
+    return data?.[0] || null;
   }
 
   async function doLogin() {
@@ -188,7 +200,6 @@
     const t = await getActiveTournament();
     if (!t) { toast("Нет активного турнира. Создайте сначала."); return; }
     if (t.status !== "draft") { toast("Турнир уже запущен или завершён"); return; }
-    if (!window.SwissEngine) { toast("Ошибка: SwissEngine не загружен. Проверьте подключение swiss-engine.js"); return; }
 
     try {
       const client = window.TH.getClient();
@@ -957,15 +968,17 @@
   async function refreshActiveTournament() {
     const t = await getActiveTournament();
     const el = document.getElementById("activeTournamentInfo");
-    if (!t) { el.innerHTML = "Нет активного турнира. Создайте новый выше."; return; }
+    if (!t) { el.innerHTML = "Нет активного турнира. Создайте новый выше и нажмите 'Активировать'."; return; }
     const { data: players } = await window.TH.getPlayers(t.id);
     const client = window.TH.getClient();
     const { data: rounds } = await client.from('rounds').select('*').eq('tournament_id', t.id);
     const { data: groups } = await client.from('groups').select('*').eq('tournament_id', t.id);
     const totalRounds = t.total_rounds || 10;
     const playerCount = (players || []).length;
+    const isStarted = (rounds || []).length > 0;
     const config = `${t.groups_per_round || 1}гр × ${t.players_per_group || playerCount}уч`;
-    el.innerHTML = `<b>${escapeHTML(t.title)}</b> (${t.status}) — ${playerCount} участников, ${(rounds || []).length}/${totalRounds} раундов, ${(groups || []).length} групп, текущий: ${(t.current_round || 0) + 1} [${config}]`;
+    const statusText = isStarted ? `🚀 Запущен` : `📝 Черновик (готов к запуску)`;
+    el.innerHTML = `<b>${escapeHTML(t.title)}</b> — ${statusText}<br>Участников: ${playerCount}, Раундов: ${(rounds || []).length}/${totalRounds}, Групп: ${(groups || []).length}<br>Текущий раунд: ${(t.current_round || 0) + 1} | ${config}`;
   }
 
   async function refreshTournamentList() {
@@ -987,7 +1000,11 @@
   async function setActive(id) {
     localStorage.setItem('th_active_tournament', id);
     if (window.DB) window.DB.updateDB(db => { db.activeTournamentId = id; });
-    try { await window.TH.updateSiteSettings({ active_tournament_id: id }); } catch (e) {}
+    try { 
+      await window.TH.updateSiteSettings({ active_tournament_id: id }); 
+      // Также меняем статус на active, чтобы getActiveTournament его нашёл
+      await window.TH.updateTournament(id, { status: 'active' });
+    } catch (e) { console.warn('Failed to update tournament status:', e); }
     toast("✅ Турнир активирован");
     await refreshAll();
   }
