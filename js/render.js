@@ -1,5 +1,5 @@
 /* ============================================================
-   RENDER – Homepage with News (исправлен дизайн карточек)
+   Tournament Hub Main Renderer (FIXED v5)
    ============================================================ */
 (function () {
   'use strict';
@@ -9,11 +9,11 @@
     if (window.TH) {
       try {
         const { data } = await window.TH.getSiteSettings();
-        if (data) return { siteName: data.site_name || 'Tournament Hub', description: data.description || '', siteLogo: data.site_logo || '🏆', theme: data.theme || 'amber' };
+        if (data) return { siteName: data.site_name || 'Tournament Hub', description: data.description || '', siteLogo: data.site_logo || '🏆', theme: data.theme || 'amber', accent: data.accent || 'amber' };
       } catch (e) { console.warn('Supabase settings failed'); }
     }
     const db = DB.getDB();
-    return { siteName: db.settings?.siteName || 'Tournament Hub', description: db.settings?.description || '', siteLogo: db.settings?.siteLogo || '🏆', theme: db.settings?.theme || 'amber' };
+    return { siteName: db.settings?.siteName || 'Tournament Hub', description: db.settings?.description || '', siteLogo: db.settings?.siteLogo || '🏆', theme: db.settings?.theme || 'amber', accent: db.settings?.accent || 'amber' };
   }
 
   function applySettings(settings) {
@@ -32,33 +32,24 @@
 
   async function renderTournamentList(container) {
     if (!container) return;
-    container.innerHTML = '<div class="skeleton" style="height:120px;border-radius:16px;"></div>';
+    container.innerHTML = '<div class="spinner"></div>';
     try {
       let tournaments = [];
       if (window.TH) { const { data } = await window.TH.getTournaments(); if (data) tournaments = data; }
       else tournaments = DB.getDB().tournaments || [];
-      if (tournaments.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-3); text-align:center; padding:20px;">Нет активных турниров</p>';
-        return;
-      }
+      if (tournaments.length === 0) { container.innerHTML = '<p style="color:var(--text-3); text-align:center; padding:20px;">Нет активных турниров</p>'; return; }
       container.innerHTML = tournaments.map(t => {
         let statusText = 'Черновик', statusClass = 'status-draft';
         if (t.status === 'active') { statusText = 'Активен'; statusClass = 'status-active'; }
-        if (t.status === 'finished') { statusText = 'Завершён'; statusClass = 'status-finished'; }
-        if (t.status === 'archived') { statusText = 'Архивирован'; statusClass = 'status-archived'; }
-        // Получаем количество участников
-        const playerCount = t.players ? t.players.length : 0;
+        if (t.status === 'finished') { statusText = 'Завершен'; statusClass = 'status-finished'; }
         return `
-          <div class="tournament-card page-enter" onclick="window.location.href='bracket.html?id=${t.id}'">
-            <div class="tournament-card-header">
+          <div class="card tournament-card page-enter" onclick="window.location.href='bracket.html?id=${t.id}'">
+            <div class="tournament-card-header" style="display:flex; justify-content:space-between; align-items:center;">
               <h3>🏆 ${escapeHTML(t.title || t.name)}</h3>
               <span class="badge ${statusClass}">${statusText}</span>
             </div>
             <p style="color:var(--text-2); margin-top:8px; font-size:14px;">${escapeHTML(t.description || 'Без описания')}</p>
-            <div class="tournament-card-meta" style="margin-top:12px; font-size:12px; color:var(--text-3);">
-              <span>👥 Участников: ${playerCount}</span>
-              <span style="margin-left:16px;">📅 Создан: ${new Date(t.created_at).toLocaleDateString('ru-RU')}</span>
-            </div>
+            <div class="tournament-card-meta" style="margin-top:12px; font-size:12px; color:var(--text-3);"><span>Участников: ${t.players ? t.players.length : 0}</span></div>
           </div>`;
       }).join('');
     } catch (e) { console.error('renderTournamentList error:', e); container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки</p>'; }
