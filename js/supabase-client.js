@@ -1,7 +1,5 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v15 — SwissEngine Integration)
-   Удалено дублирование generateSwissPairs и calculateStandings.
-   Теперь используется SwissEngine (swiss-engine.js).
+   Tournament Hub — Supabase Client (FIXED v16 — Working Tournaments)
    ============================================================ */
 (function () {
   'use strict';
@@ -22,7 +20,7 @@
     initDone = true;
     if (!window.TH) window.TH = {};
     window.TH.isReady = true;
-    console.log('✅ Supabase client initialized (SwissEngine Edition)');
+    console.log('✅ Supabase client initialized (v16)');
     return true;
   }
 
@@ -90,9 +88,35 @@
   // ========== TOURNAMENTS ==========
   async function getTournaments() {
     const client = getClient();
-    return await client.from('tournaments')
+    // ✅ FIX: Простой запрос без сломанного count синтаксиса
+    const { data, error } = await client.from('tournaments')
       .select('*')
       .order('created_at', { ascending: false });
+    
+    if (error) return { data: null, error };
+    if (!data || !data.length) return { data: [], error: null };
+    
+    // ✅ FIX: Подгружаем количество участников отдельным запросом
+    const tournamentIds = data.map(t => t.id);
+    const { data: playerCounts } = await client
+      .from('players')
+      .select('tournament_id, id')
+      .in('tournament_id', tournamentIds);
+    
+    // Группируем count по tournament_id
+    const counts = {};
+    (playerCounts || []).forEach(p => {
+      counts[p.tournament_id] = (counts[p.tournament_id] || 0) + 1;
+    });
+    
+    // Добавляем count к каждому турниру
+    const tournamentsWithCount = data.map(t => ({
+      ...t,
+      player_count: counts[t.id] || 0,
+      players_count: counts[t.id] || 0
+    }));
+    
+    return { data: tournamentsWithCount, error: null };
   }
 
   async function getTournament(id) {
@@ -103,6 +127,7 @@
     const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', id);
     const { data: rounds } = await client.from('rounds').select('*').eq('tournament_id', id).order('round_number', { ascending: true });
     const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', id);
+    const { data: allGroups } = await client.from('groups').select('*').eq('tournament_id', id);
 
     const playerMap = {};
     (allPlayers || []).forEach(p => { playerMap[p.id] = p; });
@@ -112,7 +137,6 @@
     if (window.SwissEngine) {
       playerScores = window.SwissEngine.calculateStandings(allPlayers || [], allMatches || []);
     } else {
-      // Fallback inline (minimal)
       playerScores = {};
       for (const p of allPlayers || []) playerScores[p.id] = { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 };
       for (const m of allMatches || []) {
@@ -146,12 +170,12 @@
       return (b.score?.wins || 0) - (a.score?.wins || 0);
     });
 
-    // Scores calculated on-the-fly, no N+1 writes needed
-
     tournament.rounds = (rounds || []).map(r => {
       const roundMatches = (allMatches || []).filter(m => m.round_id === r.id);
+      const roundGroups = (allGroups || []).filter(g => g.round_id === r.id);
       return {
         ...r, isActive: r.is_active, startedAt: r.started_at,
+        groups: roundGroups,
         matches: roundMatches.map(m => {
           const v1 = m.votes1 || 0;
           const v2 = m.votes2 || 0;
@@ -174,6 +198,7 @@
     tournament.currentRound = tournament.current_round || 0;
     tournament.totalRounds = tournament.total_rounds || 10;
     tournament.standings = tournament.players;
+    tournament.groups = allGroups || [];
 
     if (tournament.status === 'finished' && tournament.players.length > 0) {
       tournament.winner = tournament.players[0];
@@ -184,11 +209,16 @@
 
   async function createTournament(tournamentData) {
     const client = getClient();
-    const { title, description, status, total_rounds } = tournamentData || {};
+    const { title, description, status, total_rounds, groups_per_round, players_per_group, days_per_group, break_days, top_cut } = tournamentData || {};
     return await client.from('tournaments').insert({ 
       title, description, status, 
       total_rounds: total_rounds || 10,
-      current_round: 0 
+      current_round: 0,
+      groups_per_round: groups_per_round || 1,
+      players_per_group: players_per_group || 8,
+      days_per_group: days_per_group || 1,
+      break_days: break_days || 1,
+      top_cut: top_cut || 50
     }).select().single();
   }
 
@@ -201,6 +231,8 @@
     const client = getClient();
     await client.from('votes').delete().eq('tournament_id', id);
     await client.from('matches').delete().eq('tournament_id', id);
+    await client.from('group_players').delete().eq('tournament_id', id);
+    await client.from('groups').delete().eq('tournament_id', id);
     await client.from('rounds').delete().eq('tournament_id', id);
     await client.from('players').delete().eq('tournament_id', id);
     await client.from('comments').delete().eq('tournament_id', id);
@@ -243,8 +275,16 @@
       if (localStorage.getItem(votedKey)) throw new Error("Вы уже голосовали!");
     }
 
-    const { data: matchData } = await client.from('matches').select('tournament_id').eq('id', matchId).single();
+    const { data: matchData } = await client.from('matches').select('tournament_id,group_id').eq('id', matchId).single();
     const tournamentId = matchData?.tournament_id;
+    
+    // ✅ FIX: Проверяем что группа открыта
+    if (matchData?.group_id) {
+      const { data: groupData } = await client.from('groups').select('status').eq('id', matchData.group_id).single();
+      if (groupData && groupData.status !== 'open' && groupData.status !== 'voting') {
+        throw new Error("Голосование в этой группе закрыто!");
+      }
+    }
 
     const { error } = await client.from('votes').insert({
       match_id: matchId,
@@ -255,7 +295,6 @@
 
     if (error) throw error;
 
-    // Триггер БД пересчитывает голоса автоматически
     if (!user && votedKey) localStorage.setItem(votedKey, 'true');
 
     return { success: true };
@@ -387,7 +426,6 @@
 
   function calculateStandings(allPlayers, allMatches) {
     if (window.SwissEngine) return window.SwissEngine.calculateStandings(allPlayers, allMatches);
-    // Fallback
     const scores = {};
     for (const p of allPlayers) scores[p.id] = { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 };
     for (const m of allMatches) {
