@@ -10,8 +10,6 @@
     <script src="js/supabase-client.js"></script>
     <script src="js/db.js"></script>
     <script src="js/engine.js"></script>
-    <script src="js/tournament.js"></script>
-    <script src="js/bracket.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/render.js"></script>
 </head>
@@ -41,23 +39,20 @@
             <div>
                 <h2 class="section-title">🏆 Турниры</h2>
                 <div id="tournament-list">
-                    <div class="skeleton" style="height:120px;border-radius:16px;"></div>
-                    <div class="skeleton" style="height:120px;border-radius:16px;margin-top:12px;"></div>
+                    <!-- Карточки турниров рендерятся через render.js -->
                 </div>
             </div>
             <div>
                 <h2 class="section-title">📰 Новости</h2>
                 <div class="news-column" id="news-column">
-                    <div class="skeleton" style="height:80px;border-radius:12px;margin-bottom:12px;"></div>
-                    <div class="skeleton" style="height:80px;border-radius:12px;margin-bottom:12px;"></div>
-                    <div class="skeleton" style="height:80px;border-radius:12px;"></div>
+                    <!-- Новости загружаются через JS -->
                 </div>
             </div>
         </div>
 
         <h2 class="section-title" style="margin-top:40px;">📊 Статистика</h2>
         <div id="stats">
-            <div class="skeleton" style="height:60px;border-radius:12px;"></div>
+            <!-- Статистика рендерится через render.js -->
         </div>
     </div>
     <footer><p id="footerText">Tournament Hub — турнирный движок для вики</p></footer>
@@ -67,13 +62,18 @@
         const waitForInit = setInterval(() => {
             if (window.TH && window.TH.isReady) {
                 clearInterval(waitForInit);
-                const navAdmin = document.getElementById("navAdmin");
-                if (navAdmin && window.Auth && window.Auth.isAdminSync && window.Auth.isAdminSync()) {
-                    navAdmin.classList.remove("hidden");
+                // Показываем админ-ссылку только если пользователь админ
+                if (window.Auth && window.Auth.isAdmin) {
+                    window.Auth.isAdmin().then(isAdmin => {
+                        const navAdmin = document.getElementById("navAdmin");
+                        if (navAdmin) {
+                            if (isAdmin) navAdmin.classList.remove("hidden");
+                            else navAdmin.classList.add("hidden");
+                        }
+                    });
                 }
                 if (window.Auth && window.Auth.renderNavUser) window.Auth.renderNavUser();
                 if (window.Render && window.Render.initRender) window.Render.initRender();
-                // Load news
                 loadNews();
             }
             attempts++;
