@@ -1,5 +1,5 @@
 /* ============================================================
-   SUPABASE CLIENT – Swiss + Groups + News
+   SUPABASE CLIENT – Swiss + Groups + News (безопасная версия)
    ============================================================ */
 (function () {
   'use strict';
@@ -25,7 +25,7 @@
 
   function getClient() { if (!initDone) init(); return supabaseInstance; }
 
-  // ===== AUTH (kept from original) =====
+  // ===== AUTH =====
   async function signUp(email, password, metadata) {
     const client = getClient();
     return await client.auth.signUp({ email, password, options: { data: metadata || {} } });
