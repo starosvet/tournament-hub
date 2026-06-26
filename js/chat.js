@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Chat (FIXED v5 — escapeHTML, safe init)
+   Tournament Hub Chat (Безопасная версия с Realtime)
    ============================================================ */
 (function () {
   'use strict';
