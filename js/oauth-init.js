@@ -1,5 +1,5 @@
 /* ============================================================
-   OAuth Init — Supabase Config (безопасная версия)
+   OAuth Init — Supabase Config (FIXED v9 — persistent auth)
    ============================================================ */
 (function() {
   'use strict';
