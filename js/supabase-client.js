@@ -1,42 +1,11 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v17 — Optimized)
+   Tournament Hub — Supabase Client (FIXED v16 — Working Tournaments)
    ============================================================ */
 (function () {
   'use strict';
   let realtimeChannels = [];
   let initDone = false;
   let supabaseInstance = null;
-
-  // ========== CACHE ==========
-  const Cache = {
-    _data: new Map(),
-    _ttl: 30000, // 30 секунд для турниров
-    _ttlLong: 300000, // 5 минут для списка
-
-    get(key) {
-      const item = this._data.get(key);
-      if (!item) return null;
-      if (Date.now() - item.ts > item.ttl) {
-        this._data.delete(key);
-        return null;
-      }
-      return item.value;
-    },
-
-    set(key, value, ttl) {
-      this._data.set(key, { value, ts: Date.now(), ttl: ttl || this._ttl });
-    },
-
-    invalidate(key) {
-      if (key) this._data.delete(key);
-      else this._data.clear();
-    },
-
-    invalidateTournament(id) {
-      this._data.delete('tournament:' + id);
-      this._data.delete('tournaments:list');
-    }
-  };
 
   function init() {
     if (initDone) return true;
@@ -51,7 +20,7 @@
     initDone = true;
     if (!window.TH) window.TH = {};
     window.TH.isReady = true;
-    console.log('✅ Supabase client initialized (v17)');
+    console.log('✅ Supabase client initialized (v16)');
     return true;
   }
 
@@ -77,7 +46,6 @@
   async function signOut() {
     const client = getClient();
     unsubscribeAll();
-    Cache.invalidate();
     return await client.auth.signOut();
   }
 
@@ -117,95 +85,81 @@
     return client.auth.onAuthStateChange(async (event, session) => { await callback(event, session); });
   }
 
-  // ========== TOURNAMENTS (OPTIMIZED) ==========
+  // ========== TOURNAMENTS ==========
   async function getTournaments() {
-    const cached = Cache.get('tournaments:list');
-    if (cached) return { data: cached, error: null };
-
     const client = getClient();
+    // ✅ FIX: Простой запрос без сломанного count синтаксиса
     const { data, error } = await client.from('tournaments')
-      .select('*, players(count)', { count: 'exact' })
+      .select('*')
       .order('created_at', { ascending: false });
-
+    
     if (error) return { data: null, error };
     if (!data || !data.length) return { data: [], error: null };
-
-    // players(count) возвращает объект, извлекаем count
+    
+    // ✅ FIX: Подгружаем количество участников отдельным запросом
+    const tournamentIds = data.map(t => t.id);
+    const { data: playerCounts } = await client
+      .from('players')
+      .select('tournament_id, id')
+      .in('tournament_id', tournamentIds);
+    
+    // Группируем count по tournament_id
+    const counts = {};
+    (playerCounts || []).forEach(p => {
+      counts[p.tournament_id] = (counts[p.tournament_id] || 0) + 1;
+    });
+    
+    // Добавляем count к каждому турниру
     const tournamentsWithCount = data.map(t => ({
       ...t,
-      player_count: t.players?.[0]?.count || 0,
-      players_count: t.players?.[0]?.count || 0
+      player_count: counts[t.id] || 0,
+      players_count: counts[t.id] || 0
     }));
-
-    Cache.set('tournaments:list', tournamentsWithCount, Cache._ttlLong);
+    
     return { data: tournamentsWithCount, error: null };
   }
 
   async function getTournament(id) {
-    const cacheKey = 'tournament:' + id;
-    const cached = Cache.get(cacheKey);
-    if (cached) return { data: cached, error: null };
-
     const client = getClient();
+    const { data: tournament, error: tError } = await client.from('tournaments').select('*').eq('id', id).maybeSingle();
+    if (tError || !tournament) return { data: null, error: tError };
 
-    // ✅ ОДИН запрос вместо 7
-    const { data: tournament, error: tError } = await client.from('tournaments')
-      .select(`
-        *,
-        players(*),
-        rounds(*,
-          matches(*,
-            player1:players!matches_player1_id_fkey(*),
-            player2:players!matches_player2_id_fkey(*)
-          ),
-          groups(*, group_players(*))
-        )
-      `)
-      .eq('id', id)
-      .maybeSingle();
+    const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', id);
+    const { data: rounds } = await client.from('rounds').select('*').eq('tournament_id', id).order('round_number', { ascending: true });
+    const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', id);
+    const { data: allGroups } = await client.from('groups').select('*').eq('tournament_id', id);
 
-    if (tError || !tournament) return { data: null, error: tError || new Error('Турнир не найден') };
-
-    // Построение playerMap для быстрого доступа
     const playerMap = {};
-    (tournament.players || []).forEach(p => { playerMap[p.id] = p; });
+    (allPlayers || []).forEach(p => { playerMap[p.id] = p; });
 
-    // Расчёт standings
+    // Use SwissEngine if available, else fallback
     let playerScores;
     if (window.SwissEngine) {
-      const flatMatches = [];
-      (tournament.rounds || []).forEach(r => {
-        (r.matches || []).forEach(m => flatMatches.push(m));
-      });
-      playerScores = window.SwissEngine.calculateStandings(tournament.players || [], flatMatches);
+      playerScores = window.SwissEngine.calculateStandings(allPlayers || [], allMatches || []);
     } else {
       playerScores = {};
-      for (const p of tournament.players || []) playerScores[p.id] = { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 };
-      for (const r of tournament.rounds || []) {
-        for (const m of r.matches || []) {
-          if (!m.finished) continue;
-          const v1 = m.votes1 || 0, v2 = m.votes2 || 0;
-          if (v1 > v2) { if (m.player1_id) { playerScores[m.player1_id].wins++; playerScores[m.player1_id].points += 1; } if (m.player2_id) playerScores[m.player2_id].losses++; }
-          else if (v2 > v1) { if (m.player2_id) { playerScores[m.player2_id].wins++; playerScores[m.player2_id].points += 1; } if (m.player1_id) playerScores[m.player1_id].losses++; }
-          else if (v1 === v2 && v1 > 0) { if (m.player1_id) { playerScores[m.player1_id].draws++; playerScores[m.player1_id].points += 0.5; } if (m.player2_id) { playerScores[m.player2_id].draws++; playerScores[m.player2_id].points += 0.5; } }
-        }
+      for (const p of allPlayers || []) playerScores[p.id] = { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 };
+      for (const m of allMatches || []) {
+        if (!m.finished) continue;
+        const v1 = m.votes1 || 0, v2 = m.votes2 || 0;
+        if (v1 > v2) { if (m.player1_id) { playerScores[m.player1_id].wins++; playerScores[m.player1_id].points += 1; } if (m.player2_id) playerScores[m.player2_id].losses++; }
+        else if (v2 > v1) { if (m.player2_id) { playerScores[m.player2_id].wins++; playerScores[m.player2_id].points += 1; } if (m.player1_id) playerScores[m.player1_id].losses++; }
+        else if (v1 === v2 && v1 > 0) { if (m.player1_id) { playerScores[m.player1_id].draws++; playerScores[m.player1_id].points += 0.5; } if (m.player2_id) { playerScores[m.player2_id].draws++; playerScores[m.player2_id].points += 0.5; } }
       }
-      for (const p of tournament.players || []) {
+      for (const p of allPlayers || []) {
         let b = 0;
-        for (const r of tournament.rounds || []) {
-          for (const m of r.matches || []) {
-            if (!m.finished) continue;
-            let oid = null;
-            if (m.player1_id === p.id) oid = m.player2_id;
-            else if (m.player2_id === p.id) oid = m.player1_id;
-            if (oid) b += playerScores[oid]?.points || 0;
-          }
+        for (const m of allMatches || []) {
+          if (!m.finished) continue;
+          let oid = null;
+          if (m.player1_id === p.id) oid = m.player2_id;
+          else if (m.player2_id === p.id) oid = m.player1_id;
+          if (oid) b += playerScores[oid]?.points || 0;
         }
         playerScores[p.id].buchholz = b;
       }
     }
 
-    tournament.players = (tournament.players || []).map(p => ({
+    tournament.players = (allPlayers || []).map(p => ({
       ...p,
       score: playerScores[p.id] || { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 }
     })).sort((a, b) => {
@@ -216,54 +170,47 @@
       return (b.score?.wins || 0) - (a.score?.wins || 0);
     });
 
-    // Обработка rounds
-    tournament.rounds = (tournament.rounds || []).map(r => {
-      const roundMatches = (r.matches || []).map(m => {
-        const v1 = m.votes1 || 0;
-        const v2 = m.votes2 || 0;
-        let winnerObj = null;
-        if (m.finished && m.winner_id) winnerObj = playerMap[m.winner_id] || null;
-        return {
-          ...m,
-          player1: m.player1_id ? playerMap[m.player1_id] || m.player1 : null,
-          player2: m.player2_id ? playerMap[m.player2_id] || m.player2 : null,
-          winner: winnerObj,
-          votes1: v1, votes2: v2,
-          finished: m.finished || false,
-          isDraw: m.finished && v1 === v2 && v1 > 0,
-          isBye: m.isBye || (!m.player2_id && m.player1_id)
-        };
-      });
-
+    tournament.rounds = (rounds || []).map(r => {
+      const roundMatches = (allMatches || []).filter(m => m.round_id === r.id);
+      const roundGroups = (allGroups || []).filter(g => g.round_id === r.id);
       return {
-        ...r,
-        isActive: r.is_active,
-        startedAt: r.started_at,
-        groups: r.groups || [],
-        matches: roundMatches
+        ...r, isActive: r.is_active, startedAt: r.started_at,
+        groups: roundGroups,
+        matches: roundMatches.map(m => {
+          const v1 = m.votes1 || 0;
+          const v2 = m.votes2 || 0;
+          let winnerObj = null;
+          if (m.finished && m.winner_id) winnerObj = playerMap[m.winner_id] || null;
+          return {
+            ...m,
+            player1: m.player1_id ? playerMap[m.player1_id] : null,
+            player2: m.player2_id ? playerMap[m.player2_id] : null,
+            winner: winnerObj,
+            votes1: v1, votes2: v2,
+            finished: m.finished || false,
+            isDraw: m.finished && v1 === v2 && v1 > 0,
+            isBye: m.isBye || (!m.player2_id && m.player1_id)
+          };
+        })
       };
     });
 
     tournament.currentRound = tournament.current_round || 0;
     tournament.totalRounds = tournament.total_rounds || 10;
     tournament.standings = tournament.players;
-    tournament.groups = [];
-    (tournament.rounds || []).forEach(r => {
-      if (r.groups) tournament.groups.push(...r.groups);
-    });
+    tournament.groups = allGroups || [];
 
     if (tournament.status === 'finished' && tournament.players.length > 0) {
       tournament.winner = tournament.players[0];
     }
 
-    Cache.set(cacheKey, tournament);
     return { data: tournament, error: null };
   }
 
   async function createTournament(tournamentData) {
     const client = getClient();
     const { title, description, status, total_rounds, groups_per_round, players_per_group, days_per_group, break_days, top_cut } = tournamentData || {};
-    const result = await client.from('tournaments').insert({ 
+    return await client.from('tournaments').insert({ 
       title, description, status, 
       total_rounds: total_rounds || 10,
       current_round: 0,
@@ -273,14 +220,10 @@
       break_days: break_days || 1,
       top_cut: top_cut || 50
     }).select().single();
-    
-    Cache.invalidate('tournaments:list');
-    return result;
   }
 
   async function updateTournament(id, updates) {
     const client = getClient();
-    Cache.invalidateTournament(id);
     return await client.from('tournaments').update(updates).eq('id', id).select().single();
   }
 
@@ -293,9 +236,7 @@
     await client.from('rounds').delete().eq('tournament_id', id);
     await client.from('players').delete().eq('tournament_id', id);
     await client.from('comments').delete().eq('tournament_id', id);
-    const result = await client.from('tournaments').delete().eq('id', id);
-    Cache.invalidateTournament(id);
-    return result;
+    return await client.from('tournaments').delete().eq('id', id);
   }
 
   // ========== PLAYERS ==========
@@ -306,11 +247,7 @@
 
   async function createPlayers(playersArray) {
     const client = getClient();
-    const result = await client.from('players').insert(playersArray).select();
-    if (playersArray.length > 0) {
-      Cache.invalidateTournament(playersArray[0].tournament_id);
-    }
-    return result;
+    return await client.from('players').insert(playersArray).select();
   }
 
   // ========== MATCHES ==========
@@ -321,28 +258,27 @@
 
   async function updateMatch(id, updates) {
     const client = getClient();
-    const result = await client.from('matches').update(updates).eq('id', id).select().single();
-    // Инвалидируем кэш турниров, содержащих этот матч
-    Cache.invalidate();
-    return result;
+    return await client.from('matches').update(updates).eq('id', id).select().single();
   }
 
   // ========== VOTING ==========
   async function castVote(matchId, playerIndex) {
     const client = getClient();
     const user = await getCurrentUser();
+    const votedKey = user ? null : 'th_voted_match_' + matchId;
 
     if (user) {
       const { data: existing } = await client.from('votes')
         .select('id').eq('match_id', matchId).eq('user_id', user.id).maybeSingle();
       if (existing) throw new Error("Вы уже голосовали в этом матче!");
     } else {
-      if (localStorage.getItem('th_voted_match_' + matchId)) throw new Error("Вы уже голосовали!");
+      if (localStorage.getItem(votedKey)) throw new Error("Вы уже голосовали!");
     }
 
     const { data: matchData } = await client.from('matches').select('tournament_id,group_id').eq('id', matchId).single();
     const tournamentId = matchData?.tournament_id;
     
+    // ✅ FIX: Проверяем что группа открыта
     if (matchData?.group_id) {
       const { data: groupData } = await client.from('groups').select('status').eq('id', matchData.group_id).single();
       if (groupData && groupData.status !== 'open' && groupData.status !== 'voting') {
@@ -358,10 +294,8 @@
     });
 
     if (error) throw error;
-    if (!user) localStorage.setItem('th_voted_match_' + matchId, 'true');
 
-    // ✅ Инвалидируем кэш турнира
-    Cache.invalidateTournament(tournamentId);
+    if (!user && votedKey) localStorage.setItem(votedKey, 'true');
 
     return { success: true };
   }
@@ -445,10 +379,10 @@
   async function getSiteStats() {
     try {
       const client = getClient();
-      const { data: tournaments } = await client.from('tournaments').select('id', { count: 'exact', head: true });
-      const { data: users } = await client.from('profiles').select('id', { count: 'exact', head: true });
-      const { data: matches } = await client.from('matches').select('id', { count: 'exact', head: true });
-      return { data: { tournaments: tournaments?.length || 0, users: users?.length || 0, matches: matches?.length || 0 } };
+      const { data: tournaments } = await client.from('tournaments').select('id');
+      const { data: users } = await client.from('profiles').select('id');
+      const { data: matches } = await client.from('matches').select('id');
+      return { data: { tournaments: (tournaments || []).length, users: (users || []).length, matches: (matches || []).length } };
     } catch (e) { return { data: { tournaments: 0, users: 0, matches: 0 } }; }
   }
 
@@ -465,10 +399,7 @@
   function subscribeToMatches(tournamentId, callback) {
     const client = getClient();
     const channel = client.channel('matches-' + tournamentId)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: 'tournament_id=eq.' + tournamentId }, payload => {
-        Cache.invalidateTournament(tournamentId);
-        callback(payload.new);
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: 'tournament_id=eq.' + tournamentId }, payload => callback(payload.new))
       .subscribe();
     realtimeChannels.push(channel);
     return channel;
@@ -535,7 +466,6 @@
     return await getCurrentUser();
   }
 
-  // ✅ Экспортируем Cache для использования в других модулях
   window.TH = {
     init, getClient, isReady: false, getProfile,
     signUp, signIn, signInWithProvider, signOut, getSession, getCurrentUser, updateProfile, onAuthStateChange,
@@ -545,8 +475,7 @@
     getChatMessages, sendChatMessage, getSiteSettings, updateSiteSettings, getSiteStats,
     subscribeToChat, subscribeToMatches, unsubscribeAll,
     isAdmin, getAllUsers, setUserRole, getAdminLogs, logAction,
-    generateSwissPairs, calculateStandings, calculateBuchholz,
-    Cache // ✅ доступ к кэшу
+    generateSwissPairs, calculateStandings, calculateBuchholz
   };
 
   if (document.readyState === 'loading') {
