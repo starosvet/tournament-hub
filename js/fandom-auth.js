@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Fandom Wiki Verification (Безопасная версия)
+   Tournament Hub — Fandom Wiki Verification (FIXED v5)
    ============================================================ */
 (function () {
   'use strict';
