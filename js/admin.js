@@ -10,21 +10,36 @@
     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
-  async function getActiveTournament() {
-    // 1. Сначала проверяем localStorage (кнопка "Активировать")
-    const activeId = localStorage.getItem('th_active_tournament');
-    if (activeId) {
-      const { data } = await window.TH.getTournament(activeId);
-      if (data) return data;
+async function getActiveTournament() {
+    try {
+      // 1. Сначала проверяем localStorage
+      const activeId = localStorage.getItem('th_active_tournament');
+      if (activeId) {
+        const { data, error } = await window.TH.getTournament(activeId);
+        if (!error && data) return data;
+      }
+      
+      // 2. Ищем по статусу active
+      const { data, error } = await window.TH.getTournaments();
+      if (error) {
+        console.error('getActiveTournament error:', error);
+        return null;
+      }
+      if (!data || !data.length) return null;
+      
+      const active = data.find(t => t.status === 'active');
+      if (active) return active;
+      
+      // 3. Берём последний draft
+      const drafts = data.filter(t => t.status === 'draft');
+      if (drafts?.length) return drafts[0];
+      
+      // 4. Просто последний турнир
+      return data[0];
+    } catch (e) {
+      console.error('getActiveTournament exception:', e);
+      return null;
     }
-    // 2. Ищем по статусу active
-    const { data } = await window.TH.getTournaments();
-    const active = data?.find(t => t.status === 'active');
-    if (active) return active;
-    // 3. Берём последний draft
-    const drafts = data?.filter(t => t.status === 'draft');
-    if (drafts?.length) return drafts[0];
-    return data?.[0] || null;
   }
 
   async function doLogin() {
@@ -981,11 +996,22 @@
     el.innerHTML = `<b>${escapeHTML(t.title)}</b> — ${statusText}<br>Участников: ${playerCount}, Раундов: ${(rounds || []).length}/${totalRounds}, Групп: ${(groups || []).length}<br>Текущий раунд: ${(t.current_round || 0) + 1} | ${config}`;
   }
 
-  async function refreshTournamentList() {
+async function refreshTournamentList() {
     try {
-      const { data: tournaments } = await window.TH.getTournaments();
+      const { data: tournaments, error } = await window.TH.getTournaments();
       const el = document.getElementById("tournamentList");
-      if (!tournaments || !tournaments.length) { el.innerHTML = "Нет турниров"; return; }
+      if (!el) return;
+      
+      if (error) {
+        el.innerHTML = '<p style="color:var(--red);">Ошибка: ' + escapeHTML(error.message) + '</p>';
+        return;
+      }
+      
+      if (!tournaments || !tournaments.length) { 
+        el.innerHTML = "Нет турниров"; 
+        return; 
+      }
+      
       el.innerHTML = tournaments.map(t => `
         <div style="margin-bottom:8px;padding:10px;background:var(--bg);border-radius:10px;display:flex;justify-content:space-between;align-items:center;">
           <div><b>${escapeHTML(t.title)}</b> <span style="color:var(--text-3);font-size:12px;">${t.status} | ${t.groups_per_round || 1}гр × ${t.players_per_group || '?'}уч</span></div>
@@ -994,16 +1020,33 @@
             <button class="btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="Admin.setActive('${t.id}')">Активировать</button>
           </div>
         </div>`).join("");
-    } catch (e) { console.warn('Tournament list error', e); }
+    } catch (e) { 
+      console.error('Tournament list error', e); 
+      const el = document.getElementById("tournamentList");
+      if (el) el.innerHTML = '<p style="color:var(--red);">Ошибка загрузки списка</p>';
+    }
   }
 
-  async function setActive(id) {
+async function setActive(id) {
+    if (!id) return;
     localStorage.setItem('th_active_tournament', id);
-    if (window.DB) window.DB.updateDB(db => { db.activeTournamentId = id; });
+    
+    // Обновляем локальную БД если доступна
+    try {
+      if (window.DB && window.DB.updateDB) {
+        window.DB.updateDB(db => { db.activeTournamentId = id; });
+      }
+    } catch(e) { /* ignore */ }
+    
+    // Обновляем на сервере
     try { 
       await window.TH.updateSiteSettings({ active_tournament_id: id }); 
+    } catch (e) { console.warn('Failed to update site settings:', e); }
+    
+    try {
       await window.TH.updateTournament(id, { status: 'active' });
     } catch (e) { console.warn('Failed to update tournament status:', e); }
+    
     toast("✅ Турнир активирован");
     await refreshAll();
   }
