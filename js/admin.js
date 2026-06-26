@@ -1,5 +1,5 @@
 /* ============================================================
-   ADMIN PANEL – Swiss System + Groups + Timing
+   ADMIN PANEL – Безопасная версия (только Supabase-роль)
    ============================================================ */
 (function () {
   'use strict';
@@ -16,21 +16,19 @@
     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
-  // ===== LOGIN =====
+  // ===== LOGIN (только Supabase) =====
   async function doLogin() {
-    const pass = document.getElementById("adminPass").value;
-    if (!pass) { document.getElementById("authStatus").innerHTML = "<span style='color:var(--red);'>Введите пароль</span>"; return; }
     let isSupabaseAdmin = false;
     try { isSupabaseAdmin = await window.TH.isAdmin(); } catch (e) {}
-    if (isSupabaseAdmin || pass === "admin123") {
+    if (isSupabaseAdmin) {
       localStorage.setItem("th_admin", "yes");
       document.getElementById("authStatus").innerHTML = "<span style='color:var(--green);'>✔ Вход выполнен</span>";
       document.getElementById("authPanel").classList.add("hidden");
       document.getElementById("adminControls").classList.remove("hidden");
       await refreshAll();
-      try { await window.TH.logAction('admin_login', { method: isSupabaseAdmin ? 'supabase' : 'password' }); } catch (e) {}
+      try { await window.TH.logAction('admin_login', { method: 'supabase' }); } catch (e) {}
     } else {
-      document.getElementById("authStatus").innerHTML = "<span style='color:var(--red);'>❌ Неверный пароль</span>";
+      document.getElementById("authStatus").innerHTML = "<span style='color:var(--red);'>❌ У вас нет прав администратора</span>";
     }
   }
 
