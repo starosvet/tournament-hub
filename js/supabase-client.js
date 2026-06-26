@@ -90,7 +90,7 @@
   // ========== TOURNAMENTS ==========
   async function getTournaments() {
     const client = getClient();
-    return await client.from('tournaments').select('*, players(count)').order('created_at', { ascending: false });
+    return await client.from('tournaments').select('*').order('created_at', { ascending: false });
   }
 
   async function getTournament(id) {
@@ -144,18 +144,8 @@
       return (b.score?.wins || 0) - (a.score?.wins || 0);
     });
 
-    // Save Buchholz to DB
-    for (const p of tournament.players) {
-      if (p.score?.buchholz !== undefined) {
-        await client.from('players').update({ 
-          score_wins: p.score.wins,
-          score_losses: p.score.losses,
-          score_draws: p.score.draws,
-          score_points: p.score.points,
-          score_buchholz: p.score.buchholz
-        }).eq('id', p.id);
-      }
-    }
+    // Scores are calculated on-the-fly, no need to save back to DB
+    // (Removed N+1 writes loop for performance)
 
     tournament.rounds = (rounds || []).map(r => {
       const roundMatches = (allMatches || []).filter(m => m.round_id === r.id);
@@ -386,9 +376,15 @@
     realtimeChannels = [];
   }
 
-  function isAdmin() {
+  async function isAdmin() {
+    // Check localStorage first (fast path)
     const user = JSON.parse(localStorage.getItem('th_user') || 'null');
-    return user?.role === 'admin' || localStorage.getItem('th_admin') === 'yes';
+    if (user?.role === 'admin' || localStorage.getItem('th_admin') === 'yes') return true;
+    // Verify with server
+    try {
+      const serverUser = await getCurrentUser();
+      return serverUser?.role === 'admin';
+    } catch (e) { return false; }
   }
 
   // ========== DELEGATE TO SwissEngine ==========
@@ -437,8 +433,12 @@
     return b;
   }
 
+  async function getProfile() {
+    return await getCurrentUser();
+  }
+
   window.TH = {
-    init, getClient, isReady: false,
+    init, getClient, isReady: false, getProfile,
     signUp, signIn, signInWithProvider, signOut, getSession, getCurrentUser, updateProfile, onAuthStateChange,
     getTournaments, getTournament, createTournament, updateTournament, deleteTournament,
     getPlayers, createPlayers, getMatches, updateMatch,
