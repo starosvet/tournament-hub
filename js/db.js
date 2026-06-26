@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Data Bridge Layer (Безопасная версия)
+   Tournament Hub — Data Bridge Layer (FIXED v12 — Clean Bridge)
    ============================================================ */
 (function () {
   'use strict';
