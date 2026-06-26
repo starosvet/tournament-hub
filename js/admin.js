@@ -11,17 +11,17 @@
   }
 
   async function getActiveTournament() {
-    // 1. Сначала проверяем, какой турнир админ "активировал" через кнопку
+    // 1. Сначала проверяем localStorage (кнопка "Активировать")
     const activeId = localStorage.getItem('th_active_tournament');
     if (activeId) {
       const { data } = await window.TH.getTournament(activeId);
       if (data) return data;
     }
-    // 2. Если нет — ищем по статусу active
+    // 2. Ищем по статусу active
     const { data } = await window.TH.getTournaments();
     const active = data?.find(t => t.status === 'active');
     if (active) return active;
-    // 3. Если нет active — берём последний draft
+    // 3. Берём последний draft
     const drafts = data?.filter(t => t.status === 'draft');
     if (drafts?.length) return drafts[0];
     return data?.[0] || null;
@@ -1002,7 +1002,6 @@
     if (window.DB) window.DB.updateDB(db => { db.activeTournamentId = id; });
     try { 
       await window.TH.updateSiteSettings({ active_tournament_id: id }); 
-      // Также меняем статус на active, чтобы getActiveTournament его нашёл
       await window.TH.updateTournament(id, { status: 'active' });
     } catch (e) { console.warn('Failed to update tournament status:', e); }
     toast("✅ Турнир активирован");
