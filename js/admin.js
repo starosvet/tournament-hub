@@ -51,13 +51,13 @@
   }
 
   // ===== СОЗДАНИЕ ТУРНИРА С ПАРАМЕТРАМИ ГРУПП =====
-  
+
   async function doCreateTournament() {
     const name = document.getElementById("tName").value.trim();
     const desc = document.getElementById("tDesc").value.trim();
     const raw = document.getElementById("tData").value;
     const totalRounds = parseInt(document.getElementById("totalRounds")?.value) || 10;
-    
+
     // НОВЫЕ ПАРАМЕТРЫ ГРУПП
     const groupsPerRound = parseInt(document.getElementById("groupsPerRound")?.value) || 1;
     const playersPerGroup = parseInt(document.getElementById("playersPerGroup")?.value) || 8;
@@ -81,22 +81,22 @@
       'другое': 'other', 'other': 'other'
     };
 
-    const players = raw.split("\\n").map(line => {
+    const players = raw.split(/\r?\n/).map(line => {
       line = line.trim();
       if (!line) return null;
       const parts = line.split("|").map(s => s.trim());
       const namePart = parts[0] || line;
       let playerType = 'character', playerName = namePart;
-      const typeMatch = namePart.match(/^\\[(.*?)\\]\\s*(.+)$/);
+      const typeMatch = namePart.match(/^\[(.*?)\]\s*(.+)$/);
       if (typeMatch) { playerType = typeMap[typeMatch[1].toLowerCase()] || 'other'; playerName = typeMatch[2]; }
       return { name: playerName, image_url: parts[1] || "", type: playerType, description: parts[2] || "" };
     }).filter(Boolean);
 
     if (players.length < 2) { toast("Минимум 2 участника"); return; }
-    
+
     // Проверка: playersPerGroup должно быть чётным
     if (playersPerGroup % 2 !== 0) { toast("Количество участников в группе должно быть чётным"); return; }
-    
+
     // Проверка: достаточно участников для групп
     const minPlayers = groupsPerRound * playersPerGroup;
     if (players.length < minPlayers && groupsPerRound > 1) {
@@ -147,7 +147,7 @@
   }
 
   // ===== ЗАПУСК ТУРНИРА (РАУНД 1: РАНДОМНЫЕ ГРУППЫ) =====
-  
+
   async function doStartTournament() {
     const t = await getActiveTournament();
     if (!t) { toast("Нет активного турнира. Создайте сначала."); return; }
@@ -175,11 +175,11 @@
 
       // Генерируем группы (РАУНД 1 = рандом)
       const { groups, pairsByGroup } = window.SwissEngine.generateGroups(0, players, config, []);
-      
+
       // Создаём группы в БД
       const groupLetters = 'АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЩЭЮЯ';
       const groupIds = [];
-      
+
       for (let g = 0; g < groups.length; g++) {
         const letter = groupLetters[g] || String.fromCharCode(65 + g);
         const { data: groupData } = await client.from('groups').insert({
@@ -192,9 +192,9 @@
           scheduled_open_at: g === 0 ? new Date().toISOString() : new Date(Date.now() + g * config.days_per_group * 86400000).toISOString(),
           match_order_start: g * 100
         }).select().single();
-        
+
         groupIds.push(groupData.id);
-        
+
         // Сохраняем связь игроков с группой
         const groupPlayerLinks = groups[g].map(p => ({
           group_id: groupData.id,
@@ -203,7 +203,7 @@
           tournament_id: t.id
         }));
         if (groupPlayerLinks.length) await client.from('group_players').insert(groupPlayerLinks);
-        
+
         // Создаём матчи для группы
         const groupPairs = pairsByGroup[g];
         const matches = groupPairs.map((pair, idx) => ({
@@ -216,7 +216,7 @@
           status: 'pending',
           votes1: 0, votes2: 0
         }));
-        
+
         if (matches.length) await client.from('matches').insert(matches);
       }
 
@@ -229,7 +229,7 @@
   }
 
   // ===== ЗАВЕРШЕНИЕ РАУНДА / СЛЕДУЮЩИЙ РАУНД =====
-  
+
   async function doAdvanceRound(force) {
     const t = await getActiveTournament();
     if (!t) { toast("Нет активного турнира"); return; }
@@ -252,12 +252,12 @@
       const { data: currentRounds } = await client.from('rounds')
         .select('*').eq('tournament_id', t.id).eq('is_active', true);
       const currentRound = currentRounds?.[0];
-      
+
       if (currentRound) {
         // Завершаем все незавершённые матчи текущего раунда
         const { data: matches } = await client.from('matches')
           .select('*').eq('round_id', currentRound.id);
-        
+
         for (const match of (matches || [])) {
           if (!match.finished) {
             const v1 = match.votes1 || 0;
@@ -266,18 +266,18 @@
             if (v1 > v2) winnerId = match.player1_id;
             else if (v2 > v1) winnerId = match.player2_id;
             // При ничье winner_id = null (оба получат 0.5)
-            
+
             await client.from('matches').update({
               finished: true, winner_id: winnerId, status: 'done'
             }).eq('id', match.id);
           }
         }
-        
+
         // Закрываем все группы
         await client.from('groups').update({
           status: 'closed', closed_at: new Date().toISOString()
         }).eq('round_id', currentRound.id);
-        
+
         // Закрываем раунд
         await client.from('rounds').update({
           is_active: false, ended_at: new Date().toISOString()
@@ -288,7 +288,7 @@
 
       // Проверяем, финал ли это
       const isFinalRound = nextRoundNum >= totalRounds;
-      
+
       if (isFinalRound) {
         // ===== ФИНАЛ =====
         await doFinalRound(t, config, client);
@@ -303,7 +303,7 @@
   }
 
   // ===== СЛЕДУЮЩИЙ РАУНД (КОРЗИНЫ) =====
-  
+
   async function doNextRound(tournament, roundNum, config, client) {
     // Получаем всех игроков и матчи
     const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', tournament.id);
@@ -346,7 +346,7 @@
 
     // Создаём группы
     const groupLetters = 'АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЩЭЮЯ';
-    
+
     for (let g = 0; g < groups.length; g++) {
       const letter = groupLetters[g] || String.fromCharCode(65 + g);
       const { data: groupData } = await client.from('groups').insert({
@@ -389,7 +389,7 @@
   }
 
   // ===== ФИНАЛЬНЫЙ РАУНД (ТОП-N) =====
-  
+
   async function doFinalRound(tournament, config, client) {
     // Получаем всех игроков и матчи
     const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', tournament.id);
@@ -414,7 +414,7 @@
 
     // Отбираем топ-N
     const topPlayers = window.SwissEngine.getTopPlayers(allPlayers || [], playerScores, config.top_cut);
-    
+
     // Создаём финальный раунд
     const { data: finalRound } = await client.from('rounds').insert({
       tournament_id: tournament.id,
@@ -469,23 +469,23 @@
   }
 
   // ===== ЗАВЕРШЕНИЕ ТУРНИРА (после финала) =====
-  
+
   async function doFinishTournament() {
     const t = await getActiveTournament();
     if (!t) { toast("Нет активного турнира"); return; }
-    
+
     try {
       const client = window.TH.getClient();
-      
+
       // Завершаем финальные матчи
       const { data: finalRounds } = await client.from('rounds')
         .select('*').eq('tournament_id', t.id).eq('name', 'ФИНАЛ');
       const finalRound = finalRounds?.[0];
-      
+
       if (finalRound) {
         const { data: matches } = await client.from('matches')
           .select('*').eq('round_id', finalRound.id);
-        
+
         for (const match of (matches || [])) {
           if (!match.finished) {
             const v1 = match.votes1 || 0;
@@ -493,17 +493,17 @@
             let winnerId = null;
             if (v1 > v2) winnerId = match.player1_id;
             else if (v2 > v1) winnerId = match.player2_id;
-            
+
             await client.from('matches').update({
               finished: true, winner_id: winnerId, status: 'done'
             }).eq('id', match.id);
           }
         }
-        
+
         // Бонус +3 за победу в финале
         const { data: finishedMatches } = await client.from('matches')
           .select('*').eq('round_id', finalRound.id).eq('finished', true);
-        
+
         for (const m of (finishedMatches || [])) {
           if (m.winner_id) {
             const { data: player } = await client.from('players')
@@ -513,11 +513,11 @@
             }).eq('id', m.winner_id);
           }
         }
-        
+
         await client.from('groups').update({
           status: 'closed', closed_at: new Date().toISOString()
         }).eq('round_id', finalRound.id);
-        
+
         await client.from('rounds').update({
           is_active: false, ended_at: new Date().toISOString()
         }).eq('id', finalRound.id);
@@ -526,7 +526,7 @@
       // Определяем победителя по общим очкам
       const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', t.id);
       const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', t.id);
-      
+
       const finalScores = window.SwissEngine.calculateStandings(allPlayers || [], allMatches || []);
       const sortedPlayers = window.SwissEngine.sortPlayersByStandings(allPlayers || [], finalScores);
       const winner = sortedPlayers[0];
@@ -544,11 +544,11 @@
   }
 
   // ===== ОТКРЫТИЕ СЛЕДУЮЩЕЙ ГРУППЫ (по таймеру) =====
-  
+
   async function doOpenNextGroup() {
     const t = await getActiveTournament();
     if (!t || t.status !== 'active') { toast("Нет активного турнира"); return; }
-    
+
     try {
       const client = window.TH.getClient();
       const { data: currentRounds } = await client.from('rounds')
@@ -561,7 +561,7 @@
         .select('*').eq('round_id', currentRound.id).eq('status', 'pending')
         .order('scheduled_open_at', { ascending: true })
         .limit(1);
-      
+
       const nextGroup = groups?.[0];
       if (!nextGroup) { toast("Все группы этого раунда открыты"); return; }
 
@@ -577,7 +577,7 @@
   }
 
   // ===== ОСТАЛЬНЫЕ ФУНКЦИИ (без изменений) =====
-  
+
   async function doResetVotes() {
     const t = await getActiveTournament();
     if (!t) { toast("Нет активного турнира"); return; }
@@ -612,7 +612,7 @@
   }
 
   // ===== РЕДАКТОР УЧАСТНИКОВ =====
-  
+
   let editingParticipants = [];
   async function renderParticipantEditor() {
     const t = await getActiveTournament();
@@ -665,7 +665,7 @@
   }
 
   // ===== ПРИНУДИТЕЛЬНАЯ ПОБЕДА =====
-  
+
   async function renderForceWin() {
     const t = await getActiveTournament();
     const container = document.getElementById("forceWinList");
@@ -679,7 +679,7 @@
     // Получаем открытые группы
     const { data: openGroups } = await client.from('groups')
       .select('*').eq('round_id', round.id).eq('status', 'open');
-    
+
     if (!openGroups || !openGroups.length) { 
       container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Нет открытых групп</p>`; 
       return; 
@@ -720,7 +720,7 @@
   }
 
   // ===== ПОЛЬЗОВАТЕЛИ =====
-  
+
   async function renderUsers() {
     const tbody = document.querySelector("#usersTable tbody");
     if (!tbody) return;
@@ -752,7 +752,7 @@
   }
 
   // ===== МОДЕРАЦИЯ =====
-  
+
   async function renderModeration() {
     try {
       const client = window.TH.getClient();
@@ -790,7 +790,7 @@
   }
 
   // ===== НАСТРОЙКИ =====
-  
+
   async function loadSettings() {
     try {
       const { data: settings } = await window.TH.getSiteSettings();
@@ -857,7 +857,7 @@
   }
 
   // ===== ЭКСПОРТ/ИМПОРТ =====
-  
+
   async function doExport() {
     try {
       const { data: tournaments } = await window.TH.getTournaments();
@@ -905,7 +905,7 @@
   }
 
   // ===== ОБНОВЛЕНИЕ ИНТЕРФЕЙСА =====
-  
+
   async function refreshAll() {
     await refreshActiveTournament();
     await refreshTournamentList();
