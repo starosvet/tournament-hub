@@ -68,8 +68,6 @@
     if (btn) btn.textContent = isRegisterMode ? "🚀 Зарегистрироваться" : "🔐 Войти";
     if (toggle) toggle.textContent = isRegisterMode ? "Уже есть аккаунт? Войти" : "Нет аккаунта? Создать";
     if (usernameContainer) usernameContainer.style.display = isRegisterMode ? "block" : "none";
-    if (usernameLabel) usernameLabel.style.display = isRegisterMode ? "block" : "none";
-    if (usernameInput) usernameInput.style.display = isRegisterMode ? "block" : "none";
     showError("");
   }
 
