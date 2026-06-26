@@ -35,24 +35,10 @@
     container.innerHTML = '<div class="spinner"></div>';
     try {
       let tournaments = [];
-      let playerCounts = {};
 
       if (window.TH) { 
         const { data } = await window.TH.getTournaments(); 
         if (data) tournaments = data; 
-        // Загружаем количество игроков одним запросом
-        try {
-          if (tournaments.length > 0) {
-            const { data: playersData } = await window.TH.getClient()
-              .from('players')
-              .select('tournament_id')
-              .in('tournament_id', tournaments.map(t => t.id));
-            // Подсчитываем вручную
-            for (const t of tournaments) {
-              playerCounts[t.id] = (playersData || []).filter(p => p.tournament_id === t.id).length;
-            }
-          }
-        } catch (e) { console.warn('Player count load failed:', e); }
       }
       else tournaments = DB.getDB().tournaments || [];
 
@@ -69,7 +55,7 @@
           statusText = 'Завершён'; 
           statusStyle = 'background:rgba(96,165,250,0.15);color:var(--blue);border:1px solid rgba(96,165,250,0.3);';
         }
-        const participantCount = playerCounts[t.id] !== undefined ? playerCounts[t.id] : (t.players ? t.players.length : 0);
+        const participantCount = t.player_count?.[0]?.count || t.players?.length || 0;
         return `
           <div class="card tournament-card page-enter" onclick="window.location.href='bracket.html?id=${t.id}'">
             <div class="tournament-card-header" style="display:flex; justify-content:space-between; align-items:center;">
@@ -84,10 +70,7 @@
             </div>
           </div>`;
       }).join('');
-    } catch (e) { 
-      console.error('renderTournamentList error:', e); 
-      container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки: ' + (e.message || 'Неизвестная ошибка') + '</p>'; 
-    }
+    } catch (e) { console.error('renderTournamentList error:', e); container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки</p>'; }
   }
 
   function renderStats() {
