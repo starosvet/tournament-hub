@@ -119,8 +119,8 @@
           </div>
           <div class="shiki-center">
             <div class="shiki-vs">BYE</div>
-            <div class="shiki-vote-count">+1</div>
-            <div style="font-size:11px;color:var(--green);font-weight:700;">Авто-победа</div>
+            <div style="font-size:28px;margin:8px 0;">✅</div>
+            <div style="font-size:11px;color:var(--green);font-weight:700;">Авто-победа (+1 очко)</div>
           </div>
           <div class="shiki-player loser" style="opacity:0.3;">
             <div class="shiki-player-img no-img">—</div>
@@ -160,9 +160,9 @@
               <div class="shiki-bar-right" style="width:${pct2}%"></div>
             </div>
             ${isDraw ? '<div style="font-size:11px;color:var(--accent);font-weight:700;">⚖️ Ничья = 0.5 очка</div>' : ''}
-            ${canVote ? '<div class="shiki-vote-hint">👆 Выбери победителя</div>' : ''}
-            ${!canVote && !isFinished ? '<div class="shiki-voted-mark">✓ Проголосовано</div>' : ''}
-            ${isFinished ? '<div class="shiki-voted-mark">🏁 Завершён</div>' : ''}
+            ${canVote ? '<div class="shiki-vote-hint">👆 Нажми, чтобы проголосовать</div>' : ''}
+            ${!canVote && !isFinished ? '<div class="shiki-voted-mark">✅ Вы проголосовали</div>' : ''}
+            ${isFinished ? '<div class="shiki-voted-mark">🏁 Матч завершён</div>' : ''}
           </div>
 
           <div data-player-id="${p2?.id || ''}" class="shiki-player ${p2Win ? 'winner' : ''} ${!p2Win && isFinished ? 'loser' : ''} ${canVote ? 'can-vote' : ''}" 
@@ -519,7 +519,7 @@
 
     // Автоподгрузка недостающих фото
     if (tournament.players) {
-      await autoFetchMissingImages(tournament.players);
+      autoFetchMissingImages(tournament.players);
     }
   }
 
