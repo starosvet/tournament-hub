@@ -580,3 +580,31 @@ nav a.active::before { width: 60%; }
   .shiki-champion-img { width: 100px; height: 100px; }
   .shiki-champion-name { font-size: 1.3em; }
 }
+
+/* ===== LOGIN BOX ===== */
+.login-box {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 32px;
+  max-width: 500px;
+  margin: 0 auto;
+}
+.login-box h2 { color: var(--accent); margin-bottom: 16px; }
+.login-box label { display: block; color: var(--text-2); font-size: 13px; margin-bottom: 6px; margin-top: 14px; }
+.login-box input { width: 100%; padding: 14px 18px; background: var(--bg); border: 1px solid var(--border-2); border-radius: 12px; color: var(--text); font-size: 15px; transition: all var(--transition-base); }
+.login-box input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-glow); }
+
+/* ===== RULES ===== */
+.rules-box {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 32px;
+}
+.rules-box h3 { color: var(--accent); margin: 24px 0 12px; }
+.rules-box h3:first-child { margin-top: 0; }
+.rules-box ul { list-style: none; padding-left: 0; }
+.rules-box ul li { padding: 6px 0 6px 24px; position: relative; border-bottom: 1px solid var(--border); }
+.rules-box ul li::before { content: '•'; color: var(--accent); position: absolute; left: 0; }
+.rules-box ul li:last-child { border-bottom: none; }
