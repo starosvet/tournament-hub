@@ -6,10 +6,10 @@
     <title>Управление | Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/swiss-engine.js"></script>
     <script src="js/oauth-init.js"></script>
     <script src="js/supabase-client.js"></script>
     <script src="js/db.js"></script>
+    <script src="js/swiss-engine.js"></script>
     <script src="js/engine.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/admin.js"></script>
@@ -54,11 +54,44 @@
                 <div class="admin-grid">
                     <div class="admin-card">
                         <h3>➕ Создать турнир</h3>
-                        <p class="hint">Название, описание и количество раундов. Участников добавите на следующей вкладке.</p>
+                        <p class="hint">Название, описание, параметры групп и участники. Группы формируются автоматически.</p>
                         <input type="text" id="tName" placeholder="Название турнира">
                         <textarea id="tDesc" placeholder="Описание (необязательно)"></textarea>
-                        <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Количество раундов (швейцарская система)</label>
-                        <input type="number" id="totalRounds" value="10" min="1" max="50" style="margin-bottom:14px;">
+                        
+                        <div style="background:var(--bg);border:1px solid var(--border-2);border-radius:12px;padding:16px;margin-bottom:16px;">
+                            <h4 style="margin-bottom:12px;color:var(--accent);font-size:14px;">📊 Параметры групп</h4>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                <div>
+                                    <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Всего раундов</label>
+                                    <input type="number" id="totalRounds" value="10" min="1" max="50" style="margin-bottom:0;">
+                                </div>
+                                <div>
+                                    <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Групп в раунде</label>
+                                    <input type="number" id="groupsPerRound" value="8" min="1" max="50" style="margin-bottom:0;">
+                                </div>
+                                <div>
+                                    <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Участников в группе (чётное)</label>
+                                    <input type="number" id="playersPerGroup" value="8" min="2" max="64" step="2" style="margin-bottom:0;">
+                                </div>
+                                <div>
+                                    <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Дней на группу</label>
+                                    <input type="number" id="daysPerGroup" value="1" min="1" max="30" style="margin-bottom:0;">
+                                </div>
+                                <div>
+                                    <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Перерыв между раундами (дней)</label>
+                                    <input type="number" id="breakDays" value="1" min="0" max="30" style="margin-bottom:0;">
+                                </div>
+                                <div>
+                                    <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Топ-N в финал</label>
+                                    <input type="number" id="topCut" value="50" min="2" max="500" style="margin-bottom:0;">
+                                </div>
+                            </div>
+                            <p style="color:var(--text-3);font-size:12px;margin-top:12px;margin-bottom:0;">
+                                💡 Раунд 1: группы формируются случайно. Раунды 2+: по корзинам (сильные + слабые в одной группе).<br>
+                                💡 Финал: топ-N участников, победитель получает +3 бонусных очка.
+                            </p>
+                        </div>
+                        
                         <textarea id="tData" placeholder="Участники (по одному на строку):&#10;[персонаж] Имя | URL изображения | Описание&#10;[арт] Название арта | https://...&#10;[статья] Название статьи&#10;[оружие] Название оружия | https://...&#10;[локация] Название локации&#10;[скин] Название скина&#10;[босс] Имя босса&#10;[другое] Любой объект&#10;&#10;Типы: [персонаж], [статья], [арт], [оружие], [локация], [скин], [босс], [другое]&#10;Если тип не указан — будет [персонаж]" style="min-height:240px;"></textarea>
                         <div class="btn-row"><button class="btn-primary" onclick="Admin.doCreateTournament()">Создать турнир</button></div>
                         <div id="tCreateStatus" style="margin-top:12px;font-size:13px;"></div>
@@ -90,17 +123,19 @@
                 <div class="admin-grid">
                     <div class="admin-card">
                         <h3>🚀 Запуск и управление</h3>
-                        <p class="hint">Запустите турнир из черновика, завершайте раунды и назначайте победителей.</p>
+                        <p class="hint">Запустите турнир из черновика, управляйте группами и раундами.</p>
                         <div class="btn-row" style="flex-direction:column;gap:10px;">
-                            <button class="btn-primary" onclick="Admin.doStartTournament()">🚀 Запустить турнир</button>
-                            <button class="btn-warn" onclick="Admin.doAdvanceRound(false)">⏭ Завершить раунд</button>
+                            <button class="btn-primary" onclick="Admin.doStartTournament()">🚀 Запустить турнир (Раунд 1)</button>
+                            <button class="btn-warn" onclick="Admin.doAdvanceRound(false)">⏭ Завершить раунд / Следующий раунд</button>
                             <button class="btn-secondary" onclick="Admin.doAdvanceRound(true)">⚡ Принудительно завершить раунд</button>
+                            <button class="btn-secondary" onclick="Admin.doOpenNextGroup()">📂 Открыть следующую группу</button>
+                            <button class="btn-secondary" onclick="Admin.doFinishTournament()">🏁 Завершить турнир (после финала)</button>
                             <button class="btn-secondary" onclick="Admin.doResetVotes()">🔄 Сбросить голоса</button>
                             <button class="btn-secondary" onclick="Admin.doArchiveTournament()">📦 Архивировать</button>
                             <button class="btn-danger" onclick="Admin.doDeleteActiveTournament()">🗑 Удалить турнир</button>
                         </div>
                         <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
-                            <h4 style="margin-bottom:12px;font-size:14px;">⚙️ Настройки раунда</h4>
+                            <h4 style="margin-bottom:12px;font-size:14px;">⚙️ Настройки голосования</h4>
                             <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Длительность голосования (часов)</label>
                             <input type="number" id="voteDuration" value="24" min="1" max="168" style="margin-bottom:12px;">
                             <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Минимум голосов для завершения</label>
@@ -113,7 +148,7 @@
                     </div>
                     <div class="admin-card">
                         <h3>🏁 Принудительная победа</h3>
-                        <p class="hint">Назначьте победителя вручную для незавершённых матчей текущего раунда.</p>
+                        <p class="hint">Назначьте победителя вручную для незавершённых матчей открытых групп.</p>
                         <div id="forceWinList"><p style="color:var(--text-3);font-size:13px;">Загрузка...</p></div>
                     </div>
                 </div>
