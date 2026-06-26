@@ -9,6 +9,7 @@
     <script src="js/oauth-init.js"></script>
     <script src="js/supabase-client.js"></script>
     <script src="js/db.js"></script>
+    <script src="js/fandom-api.js"></script>
     <script src="js/swiss-engine.js"></script>
     <script src="js/engine.js"></script>
     <script src="js/auth.js"></script>
@@ -57,7 +58,7 @@
                         <p class="hint">Название, описание, параметры групп и участники. Группы формируются автоматически.</p>
                         <input type="text" id="tName" placeholder="Название турнира">
                         <textarea id="tDesc" placeholder="Описание (необязательно)"></textarea>
-                        
+
                         <div style="background:var(--bg);border:1px solid var(--border-2);border-radius:12px;padding:16px;margin-bottom:16px;">
                             <h4 style="margin-bottom:12px;color:var(--accent);font-size:14px;">📊 Параметры групп</h4>
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -91,8 +92,8 @@
                                 💡 Финал: топ-N участников, победитель получает +3 бонусных очка.
                             </p>
                         </div>
-                        
-                        <textarea id="tData" placeholder="Участники (по одному на строку):&#10;[персонаж] Имя | URL изображения | Описание&#10;[арт] Название арта | https://...&#10;[статья] Название статьи&#10;[оружие] Название оружия | https://...&#10;[локация] Название локации&#10;[скин] Название скина&#10;[босс] Имя босса&#10;[другое] Любой объект&#10;&#10;Типы: [персонаж], [статья], [арт], [оружие], [локация], [скин], [босс], [другое]&#10;Если тип не указан — будет [персонаж]" style="min-height:240px;"></textarea>
+
+                        <textarea id="tData" placeholder="Участники (по одному на строку):&#10;[персонаж] Имя | URL изображения или Fandom-ссылка | Описание&#10;[статья] Название статьи | https://chickengun-fanon.fandom.com/ru/wiki/Статья&#10;[арт] Название арта | https://...&#10;[оружие] Название оружия | https://...&#10;[локация] Название локации&#10;[скин] Название скина&#10;[босс] Имя босса&#10;[другое] Любой объект&#10;&#10;💡 Если указать ссылку на Fandom — имя станет кликабельным, а фото подгрузится автоматически!&#10;💡 Можно указать прямую ссылку на изображение — оно будет использовано как аватар&#10;Типы: [персонаж], [статья], [арт], [оружие], [локация], [скин], [босс], [другое]&#10;Если тип не указан — будет [персонаж]" style="min-height:240px;"></textarea>
                         <div class="btn-row"><button class="btn-primary" onclick="Admin.doCreateTournament()">Создать турнир</button></div>
                         <div id="tCreateStatus" style="margin-top:12px;font-size:13px;"></div>
                     </div>
