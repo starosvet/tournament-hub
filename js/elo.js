@@ -1,4 +1,4 @@
-/* Tournament Hub ELO rating system (безопасная версия) */
+/* Tournament Hub ELO rating system */
 (function () {
   const DEFAULT_RATING = 1000;
   const K_FACTOR = 32;
