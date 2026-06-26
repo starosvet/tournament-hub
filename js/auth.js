@@ -1,50 +1,35 @@
 /* ============================================================
-   Tournament Hub Authentication (исправлено: логин, админка, голоса)
+   Tournament Hub Authentication (FIXED v8)
    ============================================================ */
 (function () {
   'use strict';
+  const ADMIN_PASSWORD = "admin123";
 
   function inlineEscapeHTML(text) {
     if (!text) return "";
     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
-  // === Регистрация ===
   async function register(username, password, email) {
-    if (!username?.trim()) return { success: false, error: "Введите никнейм" };
+    if (!username?.trim()) return { success: false, error: "Введите корректный никнейм" };
     if (!password || password.length < 6) return { success: false, error: "Пароль минимум 6 символов" };
     if (!email?.includes('@')) return { success: false, error: "Введите валидный email" };
     try {
       const { data, error } = await window.TH.signUp(email, password, {
-        username: username.trim(),
-        display_name: username.trim(),
-        role: 'user'
+        username: username.trim(), display_name: username.trim(), role: 'user'
       });
       if (error) {
-        if (error.message?.includes('already registered')) {
-          return { success: false, error: "Пользователь с таким email уже существует" };
-        }
+        if (error.message?.includes('already registered')) return { success: false, error: "Пользователь с таким email уже существует" };
         return { success: false, error: error.message };
       }
       if (data?.user) {
-        const uObj = {
-          id: data.user.id,
-          email: email,
-          username: username.trim(),
-          displayName: username.trim(),
-          role: 'user',
-          fandomName: null,
-          fandomVerified: false
-        };
+        const uObj = { id: data.user.id, email: email, username: username.trim(), displayName: username.trim(), role: 'user', fandomName: null, fandomVerified: false };
         await window.DB.setCurrentUser(uObj);
       }
       return { success: true, data };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
+    } catch (e) { return { success: false, error: e.message }; }
   }
 
-  // === Логин ===
   async function login(email, password) {
     if (!email || !password) return { success: false, error: "Заполните все поля" };
     try {
@@ -53,15 +38,12 @@
       if (data?.user) {
         const fullUser = await window.TH.getCurrentUser();
         await window.DB.setCurrentUser(fullUser);
-        checkFandomAutoAdmin(); // если привязан Fandom и в списке админов
+        checkFandomAutoAdmin();
       }
       return { success: true };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
+    } catch (e) { return { success: false, error: e.message }; }
   }
 
-  // === Выход ===
   async function logout() {
     try { await window.TH.signOut(); } catch(e) { console.warn("Supabase signOut failed"); }
     await window.DB.setCurrentUser(null);
@@ -70,84 +52,59 @@
     location.reload();
   }
 
-  // === Проверка админа (синхронная для навигации) ===
   function isAdminSync() {
-    // сначала проверяем localStorage (для быстрого отображения)
     if (localStorage.getItem("th_admin") === "yes") return true;
     const raw = localStorage.getItem("tournament_hub_user");
     if (!raw) return false;
-    try {
-      const u = JSON.parse(raw);
-      return u?.role === 'admin';
-    } catch(e) {
-      return false;
-    }
+    try { const u = JSON.parse(raw); return u?.role === 'admin'; } catch(e) { return false; }
   }
 
-  // === Асинхронная проверка админа (точная) ===
   async function isAdmin() {
     const user = await window.TH.getCurrentUser();
     if (user?.role === 'admin') return true;
-    // Если в localStorage есть флаг, но пользователь не admin – сбрасываем
-    if (localStorage.getItem("th_admin") === "yes") {
-      // Проверим профиль на сервере ещё раз
-      try {
-        const serverUser = await window.TH.getCurrentUser();
-        if (serverUser && serverUser.role === 'admin') {
-          return true;
-        } else {
-          localStorage.removeItem("th_admin");
-          return false;
-        }
-      } catch(e) {
-        return false;
-      }
+    return isAdminSync();
+  }
+
+  function adminLogin(password) {
+    if (password === ADMIN_PASSWORD) {
+      localStorage.setItem("th_admin", "yes");
+      window.DB.getCurrentUser().then(user => {
+        if (user) { user.role = "admin"; window.DB.setCurrentUser(user); }
+      });
+      return true;
     }
     return false;
   }
 
-  // === Проверка права голоса ===
   async function canUserVote(matchId) {
+    const db = window.DB.getDB();
+    const activeTourney = db.tournaments?.find(t => t.status === 'active') || db.tournaments?.[0];
     const user = await window.DB.getCurrentUser();
-    if (!user) {
-      return { can: false, reason: "Авторизуйтесь для голосования" };
+    if (activeTourney?.config && !user && !activeTourney.config.allowGuest) {
+      return { can: false, reason: "Голосование гостям запрещено. Авторизуйтесь." };
     }
-    // Проверяем, не голосовал ли уже локально
     const votedList = JSON.parse(localStorage.getItem("th_voted_matches") || "[]");
-    if (votedList.includes(matchId)) {
-      return { can: false, reason: "Вы уже голосовали в этом матче!" };
-    }
-    // Проверяем на сервере
+    if (votedList.includes(matchId)) return { can: false, reason: "Вы уже голосовали в этом матче!" };
     if (window.TH && user) {
       const votedServer = await window.TH.hasVoted(matchId);
-      if (votedServer) {
-        markVote(matchId); // синхронизируем локально
-        return { can: false, reason: "Голос уже учтён на сервере." };
-      }
+      if (votedServer) { markVote(matchId); return { can: false, reason: "Голос уже учтён на сервере." }; }
     }
     return { can: true };
   }
 
   function markVote(matchId) {
     const votedList = JSON.parse(localStorage.getItem("th_voted_matches") || "[]");
-    if (!votedList.includes(matchId)) {
-      votedList.push(matchId);
-      localStorage.setItem("th_voted_matches", JSON.stringify(votedList));
-    }
+    if (!votedList.includes(matchId)) { votedList.push(matchId); localStorage.setItem("th_voted_matches", JSON.stringify(votedList)); }
   }
 
-  // === Рендер пользователя в навигации ===
   function renderNavUser() {
     const box = document.getElementById("navUser");
     if (!box) return;
-    window.DB.getCurrentUser().then(async user => {
+    window.DB.getCurrentUser().then(user => {
       if (user) {
-        const isAdminUser = await isAdmin();
+        const isAdminUser = user.role === 'admin' || localStorage.getItem("th_admin") === "yes";
         const navAdmin = document.getElementById("navAdmin");
-        if (navAdmin) {
-          if (isAdminUser) navAdmin.classList.remove("hidden");
-          else navAdmin.classList.add("hidden");
-        }
+        if (navAdmin) { if (isAdminUser) navAdmin.classList.remove("hidden"); else navAdmin.classList.add("hidden"); }
         const escapeFn = (window.DB && window.DB.escapeHTML) ? window.DB.escapeHTML : inlineEscapeHTML;
         const roleBadge = isAdminUser ? `<span class="badge-admin" style="background:var(--accent);color:var(--bg);font-size:11px;padding:2px 6px;border-radius:4px;font-weight:bold;margin-left:6px;">ADMIN</span>` : '';
         const fandomBadge = user.fandomVerified ? `<span title="Fandom аккаунт подтвержден" style="color:var(--blue);margin-left:4px;font-weight:bold;">✓</span>` : '';
@@ -173,7 +130,6 @@
     });
   }
 
-  // === Авто-админ для Fandom ===
   function checkFandomAutoAdmin() {
     window.DB.getCurrentUser().then(user => {
       if (!user?.fandomName || !user?.fandomVerified) return;
@@ -190,20 +146,17 @@
     }).catch(() => {});
   }
 
-  // === Отвязка Fandom ===
   async function unlinkFandom() {
     try {
       if (window.TH) await window.TH.updateProfile({ fandom_name: null, fandom_verified: false, fandom_verified_at: null });
       const user = await window.DB.getCurrentUser();
       if (user) { user.fandomName = null; user.fandomVerified = false; await window.DB.setCurrentUser(user); }
       return { success: true };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
+    } catch (e) { return { success: false, error: e.message }; }
   }
 
   window.Auth = {
-    register, login, logout, isAdmin, isAdminSync,
+    register, login, logout, isAdmin, isAdminSync, adminLogin,
     canUserVote, markVote, renderNavUser, checkFandomAutoAdmin, unlinkFandom
   };
 })();
