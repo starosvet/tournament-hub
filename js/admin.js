@@ -1,5 +1,5 @@
 /* ============================================================
-   ADMIN PANEL – Безопасная версия (только Supabase-роль)
+   ADMIN PANEL – исправлен вход, скрыт от не-админов
    ============================================================ */
 (function () {
   'use strict';
@@ -16,39 +16,44 @@
     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
-  // ===== LOGIN (только Supabase) =====
+  // === Логин (только Supabase) ===
   async function doLogin() {
-    let isSupabaseAdmin = false;
-    try { isSupabaseAdmin = await window.TH.isAdmin(); } catch (e) {}
-    if (isSupabaseAdmin) {
+    // Проверяем, является ли текущий пользователь админом через Supabase
+    const isAdmin = await window.Auth.isAdmin();
+    if (isAdmin) {
       localStorage.setItem("th_admin", "yes");
       document.getElementById("authStatus").innerHTML = "<span style='color:var(--green);'>✔ Вход выполнен</span>";
       document.getElementById("authPanel").classList.add("hidden");
       document.getElementById("adminControls").classList.remove("hidden");
       await refreshAll();
-      try { await window.TH.logAction('admin_login', { method: 'supabase' }); } catch (e) {}
+      await window.TH.logAction('admin_login', { method: 'supabase' });
     } else {
-      document.getElementById("authStatus").innerHTML = "<span style='color:var(--red);'>❌ У вас нет прав администратора</span>";
+      // Если пользователь не админ, предлагаем войти с другим аккаунтом или выйти
+      const user = await window.DB.getCurrentUser();
+      if (user) {
+        document.getElementById("authStatus").innerHTML = `<span style="color:var(--red);">❌ У пользователя ${escapeHTML(user.username)} нет прав администратора. <a href="#" onclick="Auth.logout()">Выйти</a> и войти под админом.</span>`;
+      } else {
+        document.getElementById("authStatus").innerHTML = `<span style="color:var(--red);">❌ Вы не авторизованы. <a href="login.html">Войти</a> как администратор.</span>`;
+      }
     }
   }
 
+  // === Проверка при загрузке ===
   async function checkAuth() {
-    let isSupabaseAdmin = false;
-    try { isSupabaseAdmin = await window.TH.isAdmin(); if (isSupabaseAdmin) localStorage.setItem("th_admin", "yes"); } catch (e) {}
-    if (isSupabaseAdmin || localStorage.getItem("th_admin") === "yes") {
+    const isAdmin = await window.Auth.isAdmin();
+    if (isAdmin) {
+      localStorage.setItem("th_admin", "yes");
       document.getElementById("authPanel").classList.add("hidden");
       document.getElementById("adminControls").classList.remove("hidden");
       await refreshAll();
+    } else {
+      // Если есть флаг в localStorage, но пользователь не админ – сбрасываем
+      if (localStorage.getItem("th_admin") === "yes") {
+        localStorage.removeItem("th_admin");
+      }
+      document.getElementById("authPanel").classList.remove("hidden");
+      document.getElementById("adminControls").classList.add("hidden");
     }
-  }
-
-  async function switchTab(name) {
-    document.querySelectorAll(".admin-tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-    document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.id === "tab-" + name));
-    if (name === "users") await renderUsers();
-    if (name === "moderation") await renderModeration();
-    if (name === "settings") await loadSettings();
-    if (name === "manage") await renderManageTab();
   }
 
   // ===== CREATE TOURNAMENT =====
@@ -674,7 +679,7 @@
 
   // ===== EXPOSE =====
   window.Admin = {
-    doLogin, switchTab,
+    doLogin, checkAuth,
     doCreateTournament, doStartTournament, doAdvanceRound,
     doResetVotes, doArchiveTournament, doDeleteActiveTournament,
     updateParticipant, removeParticipant, addParticipantRow, saveParticipants,
