@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Main Renderer (FIXED v5)
+   RENDER – Homepage with News
    ============================================================ */
 (function () {
   'use strict';
@@ -9,11 +9,11 @@
     if (window.TH) {
       try {
         const { data } = await window.TH.getSiteSettings();
-        if (data) return { siteName: data.site_name || 'Tournament Hub', description: data.description || '', siteLogo: data.site_logo || '🏆', theme: data.theme || 'amber', accent: data.accent || 'amber' };
+        if (data) return { siteName: data.site_name || 'Tournament Hub', description: data.description || '', siteLogo: data.site_logo || '🏆', theme: data.theme || 'amber' };
       } catch (e) { console.warn('Supabase settings failed'); }
     }
     const db = DB.getDB();
-    return { siteName: db.settings?.siteName || 'Tournament Hub', description: db.settings?.description || '', siteLogo: db.settings?.siteLogo || '🏆', theme: db.settings?.theme || 'amber', accent: db.settings?.accent || 'amber' };
+    return { siteName: db.settings?.siteName || 'Tournament Hub', description: db.settings?.description || '', siteLogo: db.settings?.siteLogo || '🏆', theme: db.settings?.theme || 'amber' };
   }
 
   function applySettings(settings) {
@@ -41,7 +41,8 @@
       container.innerHTML = tournaments.map(t => {
         let statusText = 'Черновик', statusClass = 'status-draft';
         if (t.status === 'active') { statusText = 'Активен'; statusClass = 'status-active'; }
-        if (t.status === 'finished') { statusText = 'Завершен'; statusClass = 'status-finished'; }
+        if (t.status === 'finished') { statusText = 'Завершён'; statusClass = 'status-finished'; }
+        if (t.status === 'archived') { statusText = 'Архивирован'; statusClass = 'status-archived'; }
         return `
           <div class="card tournament-card page-enter" onclick="window.location.href='bracket.html?id=${t.id}'">
             <div class="tournament-card-header" style="display:flex; justify-content:space-between; align-items:center;">
@@ -49,7 +50,10 @@
               <span class="badge ${statusClass}">${statusText}</span>
             </div>
             <p style="color:var(--text-2); margin-top:8px; font-size:14px;">${escapeHTML(t.description || 'Без описания')}</p>
-            <div class="tournament-card-meta" style="margin-top:12px; font-size:12px; color:var(--text-3);"><span>Участников: ${t.players ? t.players.length : 0}</span></div>
+            <div class="tournament-card-meta" style="margin-top:12px; font-size:12px; color:var(--text-3);">
+              <span>Участников: ${t.players ? t.players.length : 0}</span>
+              <span style="margin-left:16px;">Групп: ${t.group_count || '?'}</span>
+            </div>
           </div>`;
       }).join('');
     } catch (e) { console.error('renderTournamentList error:', e); container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки</p>'; }
