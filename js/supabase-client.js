@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Supabase Client (FIXED v13 — Swiss Edition)
+   Tournament Hub — Supabase Client (FIXED v14 — TRUE Shikimori Swiss)
    ============================================================ */
 (function () {
   'use strict';
@@ -20,7 +20,7 @@
     initDone = true;
     if (!window.TH) window.TH = {};
     window.TH.isReady = true;
-    console.log('✅ Supabase client initialized');
+    console.log('✅ Supabase client initialized (Shikimori Swiss Edition)');
     return true;
   }
 
@@ -67,7 +67,7 @@
       role: profile?.role || user.user_metadata?.role || 'user',
       fandomName: profile?.fandom_name || null,
       fandomVerified: profile?.fandom_verified || false,
-      avatar: profile?.avatar || ''
+      avatar: profile?.avatar_url || ''
     };
   }
 
@@ -85,7 +85,59 @@
     return client.auth.onAuthStateChange(async (event, session) => { await callback(event, session); });
   }
 
-  // ========== TOURNAMENTS (Swiss system) ==========
+  // ========== SHIKIMORI SWISS: Buchholz Calculator ==========
+  function calculateBuchholz(playerId, allMatches, playerScores) {
+    // Buchholz = сумма очков всех соперников, с которыми играл данный игрок
+    let buchholz = 0;
+    for (const m of allMatches) {
+      if (!m.finished) continue;
+      let opponentId = null;
+      if (m.player1_id === playerId) opponentId = m.player2_id;
+      else if (m.player2_id === playerId) opponentId = m.player1_id;
+
+      if (opponentId) {
+        buchholz += playerScores[opponentId]?.points || 0;
+      }
+    }
+    return buchholz;
+  }
+
+  function calculateStandings(allPlayers, allMatches) {
+    // 1. Считаем базовые очки (1 за победу, 0.5 за ничью, 0 за поражение)
+    const scores = {};
+    for (const p of allPlayers) {
+      scores[p.id] = { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 };
+    }
+
+    for (const m of allMatches) {
+      if (!m.finished) continue;
+      const v1 = m.votes1 || 0;
+      const v2 = m.votes2 || 0;
+
+      if (v1 > v2) {
+        // Player 1 wins
+        if (m.player1_id) { scores[m.player1_id].wins++; scores[m.player1_id].points += 1; }
+        if (m.player2_id) { scores[m.player2_id].losses++; }
+      } else if (v2 > v1) {
+        // Player 2 wins
+        if (m.player2_id) { scores[m.player2_id].wins++; scores[m.player2_id].points += 1; }
+        if (m.player1_id) { scores[m.player1_id].losses++; }
+      } else {
+        // Draw (ничья) — оба получают 0.5
+        if (m.player1_id) { scores[m.player1_id].draws++; scores[m.player1_id].points += 0.5; }
+        if (m.player2_id) { scores[m.player2_id].draws++; scores[m.player2_id].points += 0.5; }
+      }
+    }
+
+    // 2. Считаем Buchholz
+    for (const p of allPlayers) {
+      scores[p.id].buchholz = calculateBuchholz(p.id, allMatches, scores);
+    }
+
+    return scores;
+  }
+
+  // ========== TOURNAMENTS (TRUE Shikimori Swiss) ==========
   async function getTournaments() {
     const client = getClient();
     return await client.from('tournaments').select('*').order('created_at', { ascending: false });
@@ -99,50 +151,70 @@
     const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', id);
     const { data: rounds } = await client.from('rounds').select('*').eq('tournament_id', id).order('round_number', { ascending: true });
     const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', id);
-    const { data: allVotes } = await client.from('votes').select('*').eq('tournament_id', id);
 
     const playerMap = {};
     (allPlayers || []).forEach(p => { playerMap[p.id] = p; });
 
-    // Calculate scores for Swiss system
-    const playerScores = {};
-    (allPlayers || []).forEach(p => { playerScores[p.id] = { wins: 0, losses: 0, points: 0 }; });
-    (allMatches || []).forEach(m => {
-      if (m.finished && m.winner_id) {
-        if (!playerScores[m.winner_id]) playerScores[m.winner_id] = { wins: 0, losses: 0, points: 0 };
-        playerScores[m.winner_id].wins++;
-        playerScores[m.winner_id].points += 1;
-        const loserId = m.winner_id === m.player1_id ? m.player2_id : m.player1_id;
-        if (loserId) {
-          if (!playerScores[loserId]) playerScores[loserId] = { wins: 0, losses: 0, points: 0 };
-          playerScores[loserId].losses++;
-        }
-      }
-    });
+    // Calculate TRUE Shikimori standings with Buchholz
+    const playerScores = calculateStandings(allPlayers || [], allMatches || []);
 
+    // Update players with scores
     tournament.players = (allPlayers || []).map(p => ({
       ...p,
-      score: playerScores[p.id] || { wins: 0, losses: 0, points: 0 }
-    })).sort((a, b) => (b.score?.points || 0) - (a.score?.points || 0));
+      score: playerScores[p.id] || { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 }
+    })).sort((a, b) => {
+      // Shikimori sort: points DESC, then buchholz DESC, then wins DESC
+      const ptsDiff = (b.score?.points || 0) - (a.score?.points || 0);
+      if (ptsDiff !== 0) return ptsDiff;
+      const buchDiff = (b.score?.buchholz || 0) - (a.score?.buchholz || 0);
+      if (buchDiff !== 0) return buchDiff;
+      return (b.score?.wins || 0) - (a.score?.wins || 0);
+    });
+
+    // Save Buchholz to DB for persistence
+    for (const p of tournament.players) {
+      if (p.score?.buchholz !== undefined) {
+        await client.from('players').update({ 
+          score_wins: p.score.wins,
+          score_losses: p.score.losses,
+          score_points: p.score.points,
+          score_buchholz: p.score.buchholz
+        }).eq('id', p.id);
+      }
+    }
 
     tournament.rounds = (rounds || []).map(r => {
       const roundMatches = (allMatches || []).filter(m => m.round_id === r.id);
       return {
         ...r, isActive: r.is_active, startedAt: r.started_at,
-        matches: roundMatches.map(m => ({
-          ...m,
-          player1: m.player1_id ? playerMap[m.player1_id] : null,
-          player2: m.player2_id ? playerMap[m.player2_id] : null,
-          winner: m.winner_id ? playerMap[m.winner_id] : null,
-          votes1: m.votes1 || 0, votes2: m.votes2 || 0,
-          finished: m.finished || false
-        }))
+        matches: roundMatches.map(m => {
+          const v1 = m.votes1 || 0;
+          const v2 = m.votes2 || 0;
+          let winnerObj = null;
+          if (m.finished && m.winner_id) {
+            winnerObj = playerMap[m.winner_id] || null;
+          }
+          return {
+            ...m,
+            player1: m.player1_id ? playerMap[m.player1_id] : null,
+            player2: m.player2_id ? playerMap[m.player2_id] : null,
+            winner: winnerObj,
+            votes1: v1, votes2: v2,
+            finished: m.finished || false,
+            isDraw: m.finished && v1 === v2 && v1 > 0
+          };
+        })
       };
     });
 
     tournament.currentRound = tournament.current_round || 0;
     tournament.totalRounds = tournament.total_rounds || 10;
     tournament.standings = tournament.players;
+
+    // Winner = top 1 after all rounds finished
+    if (tournament.status === 'finished' && tournament.players.length > 0) {
+      tournament.winner = tournament.players[0];
+    }
 
     return { data: tournament, error: null };
   }
@@ -172,6 +244,65 @@
     return await client.from('tournaments').delete().eq('id', id);
   }
 
+  // ========== SWISS PAIRING (Shikimori style) ==========
+  function generateSwissPairs(players, previousMatches) {
+    // Sort by: points DESC, buchholz DESC, wins DESC
+    const sorted = [...players].sort((a, b) => {
+      const ptsA = a.score?.points || 0;
+      const ptsB = b.score?.points || 0;
+      if (ptsB !== ptsA) return ptsB - ptsA;
+      const buchA = a.score?.buchholz || 0;
+      const buchB = b.score?.buchholz || 0;
+      if (buchB !== buchA) return buchB - buchA;
+      return (b.score?.wins || 0) - (a.score?.wins || 0);
+    });
+
+    // Track who played with whom
+    const playedWith = {};
+    (previousMatches || []).forEach(m => {
+      if (m.player1_id && m.player2_id) {
+        playedWith[m.player1_id] = playedWith[m.player1_id] || new Set();
+        playedWith[m.player2_id] = playedWith[m.player2_id] || new Set();
+        playedWith[m.player1_id].add(m.player2_id);
+        playedWith[m.player2_id].add(m.player1_id);
+      }
+    });
+
+    const pairs = [];
+    const used = new Set();
+
+    for (const p1 of sorted) {
+      if (used.has(p1.id)) continue;
+      let bestOpponent = null;
+      let bestScore = -Infinity;
+
+      for (const p2 of sorted) {
+        if (p1.id === p2.id || used.has(p2.id)) continue;
+        const alreadyPlayed = playedWith[p1.id]?.has(p2.id);
+        const ptsDiff = Math.abs((p1.score?.points || 0) - (p2.score?.points || 0));
+        const buchDiff = Math.abs((p1.score?.buchholz || 0) - (p2.score?.buchholz || 0));
+
+        // Score: prefer same points, close buchholz, never played before
+        let score = 10000 - ptsDiff * 1000 - buchDiff * 10;
+        if (alreadyPlayed) score -= 50000; // Heavy penalty for rematch
+
+        if (score > bestScore) { bestScore = score; bestOpponent = p2; }
+      }
+
+      if (bestOpponent) {
+        pairs.push([p1, bestOpponent]);
+        used.add(p1.id);
+        used.add(bestOpponent.id);
+      } else {
+        // BYE: player gets free win
+        pairs.push([p1, null]);
+        used.add(p1.id);
+      }
+    }
+
+    return pairs;
+  }
+
   // ========== PLAYERS ==========
   async function getPlayers(tournamentId) {
     const client = getClient();
@@ -194,13 +325,12 @@
     return await client.from('matches').update(updates).eq('id', id).select().single();
   }
 
-  // ========== VOTING (NO is_guest!) ==========
+  // ========== VOTING (Shikimori: 1/0/0.5 points) ==========
   async function castVote(matchId, playerIndex) {
     const client = getClient();
     const user = await getCurrentUser();
     const votedKey = user ? null : 'th_voted_match_' + matchId;
 
-    // Check if already voted
     if (user) {
       const { data: existing } = await client.from('votes')
         .select('id').eq('match_id', matchId).eq('user_id', user.id).maybeSingle();
@@ -209,11 +339,9 @@
       if (localStorage.getItem(votedKey)) throw new Error("Вы уже голосовали!");
     }
 
-    // Get tournament_id from match
     const { data: matchData } = await client.from('matches').select('tournament_id').eq('id', matchId).single();
     const tournamentId = matchData?.tournament_id;
 
-    // Insert vote
     const { error } = await client.from('votes').insert({
       match_id: matchId,
       tournament_id: tournamentId,
@@ -223,14 +351,12 @@
 
     if (error) throw error;
 
-    // Update match vote count
     const { data: match } = await client.from('matches').select('votes1,votes2').eq('id', matchId).single();
     const updates = playerIndex === 1 
       ? { votes1: (match.votes1 || 0) + 1 }
       : { votes2: (match.votes2 || 0) + 1 };
     await client.from('matches').update(updates).eq('id', matchId);
 
-    // Mark locally for guests
     if (!user && votedKey) localStorage.setItem(votedKey, 'true');
 
     return { success: true };
@@ -352,12 +478,6 @@
     return user?.role === 'admin' || localStorage.getItem('th_admin') === 'yes';
   }
 
-  // ========== SWISS SYSTEM HELPERS ==========
-  async function getStandings(tournamentId) {
-    const { data: tournament } = await getTournament(tournamentId);
-    return tournament?.standings || [];
-  }
-
   window.TH = {
     init, getClient, isReady: false,
     signUp, signIn, signInWithProvider, signOut, getSession, getCurrentUser, updateProfile, onAuthStateChange,
@@ -367,7 +487,7 @@
     getChatMessages, sendChatMessage, getSiteSettings, updateSiteSettings, getSiteStats,
     subscribeToChat, subscribeToMatches, unsubscribeAll,
     isAdmin, getAllUsers, setUserRole, getAdminLogs, logAction,
-    getStandings
+    generateSwissPairs, calculateStandings, calculateBuchholz
   };
 
   if (document.readyState === 'loading') {
