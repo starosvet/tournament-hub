@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Admin Panel (FIXED v8 — Swiss System Edition)
+   Tournament Hub Admin Panel (FIXED v9 — TRUE Shikimori Swiss)
    ============================================================ */
 (function () {
   'use strict';
@@ -50,15 +50,20 @@
     if (name === "settings") await loadSettings();
   }
 
-  // ===== SWISS SYSTEM: Generate pairs by score =====
+  // ===== SHIKIMORI SWISS: Generate pairs by score + Buchholz =====
   function generateSwissPairs(players, previousMatches) {
+    // Sort by: points DESC, buchholz DESC, wins DESC
     const sorted = [...players].sort((a, b) => {
       const ptsA = a.score?.points || 0;
       const ptsB = b.score?.points || 0;
       if (ptsB !== ptsA) return ptsB - ptsA;
+      const buchA = a.score?.buchholz || 0;
+      const buchB = b.score?.buchholz || 0;
+      if (buchB !== buchA) return buchB - buchA;
       return (b.score?.wins || 0) - (a.score?.wins || 0);
     });
 
+    // Track played pairs
     const playedWith = {};
     (previousMatches || []).forEach(m => {
       if (m.player1_id && m.player2_id) {
@@ -81,8 +86,12 @@
         if (p1.id === p2.id || used.has(p2.id)) continue;
         const alreadyPlayed = playedWith[p1.id]?.has(p2.id);
         const ptsDiff = Math.abs((p1.score?.points || 0) - (p2.score?.points || 0));
-        let score = 1000 - ptsDiff * 10;
-        if (alreadyPlayed) score -= 5000;
+        const buchDiff = Math.abs((p1.score?.buchholz || 0) - (p2.score?.buchholz || 0));
+
+        // Priority: same points > close buchholz > never played
+        let score = 10000 - ptsDiff * 1000 - buchDiff * 10;
+        if (alreadyPlayed) score -= 50000; // Heavy penalty for rematch
+
         if (score > bestScore) { bestScore = score; bestOpponent = p2; }
       }
 
@@ -91,6 +100,7 @@
         used.add(p1.id);
         used.add(bestOpponent.id);
       } else {
+        // BYE: free win
         pairs.push([p1, null]);
         used.add(p1.id);
       }
@@ -139,13 +149,14 @@
       });
       if (error) {
         if (error.message?.includes('total_rounds')) {
-          throw new Error("В БД отсутствует колонка 'total_rounds'. Выполните SQL-скрипт из инструкции!");
+          throw new Error("В БД отсутствует колонка 'total_rounds'. Выполните SQL-скрипт!");
         }
         throw error;
       }
 
       const playersWithTournament = players.map((p, i) => ({ 
-        ...p, tournament_id: tournament.id, seed: i, elo: 1000 
+        ...p, tournament_id: tournament.id, seed: i, elo: 1000,
+        score_wins: 0, score_losses: 0, score_points: 0, score_buchholz: 0
       }));
       const { error: playersError } = await window.TH.createPlayers(playersWithTournament);
       if (playersError) throw playersError;
@@ -183,6 +194,7 @@
         is_active: true, started_at: new Date().toISOString()
       }).select().single();
 
+      // Round 1: RANDOM pairs (Shikimori style)
       const shuffled = [...players].sort(() => Math.random() - 0.5);
       const matches = [];
       for (let i = 0; i < shuffled.length; i += 2) {
@@ -198,7 +210,7 @@
       if (matches.length) await client.from('matches').insert(matches);
       await window.TH.updateTournament(t.id, { status: 'active', current_round: 0 });
 
-      toast("🚀 Турнир запущен! Раунд 1 создан");
+      toast("🚀 Турнир запущен! Раунд 1 создан (случайные пары)");
       try { await window.TH.logAction('start_tournament', { id: t.id, title: t.title }); } catch (e) {}
       await refreshAll();
     } catch (e) { toast("❌ " + e.message); console.error(e); }
@@ -212,26 +224,37 @@
 
     try {
       const client = window.TH.getClient();
+
+      // Get current round
       const { data: rounds } = await client.from('rounds')
         .select('*').eq('tournament_id', t.id).eq('is_active', true);
-
       const currentRound = rounds?.[0];
       if (!currentRound) { toast("Нет текущего раунда"); return; }
 
+      // Get all matches of this round
       const { data: matches } = await client.from('matches')
         .select('*').eq('round_id', currentRound.id);
 
+      // Finish unfinished matches based on votes (Shikimori: 1/0/0.5)
       for (const match of (matches || [])) {
         if (!match.finished) {
-          const winnerId = (match.votes1 || 0) >= (match.votes2 || 0) ? match.player1_id : match.player2_id;
-          if (winnerId) {
-            await client.from('matches').update({ 
-              finished: true, winner_id: winnerId, status: 'done' 
-            }).eq('id', match.id);
-          }
+          const v1 = match.votes1 || 0;
+          const v2 = match.votes2 || 0;
+          let winnerId = null;
+
+          if (v1 > v2) winnerId = match.player1_id;
+          else if (v2 > v1) winnerId = match.player2_id;
+          // If draw (v1 === v2), no winner — both get 0.5 later in standings calc
+
+          await client.from('matches').update({ 
+            finished: true, 
+            winner_id: winnerId, 
+            status: 'done' 
+          }).eq('id', match.id);
         }
       }
 
+      // Close current round
       await client.from('rounds').update({ 
         is_active: false, ended_at: new Date().toISOString() 
       }).eq('id', currentRound.id);
@@ -240,22 +263,34 @@
       const nextRoundNum = (currentRound.round_number || 0) + 1;
 
       if (nextRoundNum >= totalRounds) {
+        // TOURNAMENT FINISHED — calculate final standings with Buchholz
         const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', t.id);
         const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', t.id);
 
-        const scores = {};
-        (allPlayers || []).forEach(p => { scores[p.id] = { wins: 0, points: 0 }; });
-        (allMatches || []).forEach(m => {
-          if (m.finished && m.winner_id) {
-            if (!scores[m.winner_id]) scores[m.winner_id] = { wins: 0, points: 0 };
-            scores[m.winner_id].wins++;
-            scores[m.winner_id].points += 1;
-          }
+        // Use TH.calculateStandings for consistency
+        const playerScores = window.TH.calculateStandings(allPlayers || [], allMatches || []);
+
+        // Save final scores to DB
+        for (const p of (allPlayers || [])) {
+          const s = playerScores[p.id] || { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 };
+          await client.from('players').update({
+            score_wins: s.wins,
+            score_losses: s.losses,
+            score_points: s.points,
+            score_buchholz: s.buchholz
+          }).eq('id', p.id);
+        }
+
+        // Sort to find winner
+        const sortedPlayers = [...(allPlayers || [])].sort((a, b) => {
+          const sa = playerScores[a.id] || {};
+          const sb = playerScores[b.id] || {};
+          if ((sb.points || 0) !== (sa.points || 0)) return (sb.points || 0) - (sa.points || 0);
+          if ((sb.buchholz || 0) !== (sa.buchholz || 0)) return (sb.buchholz || 0) - (sa.buchholz || 0);
+          return (sb.wins || 0) - (sa.wins || 0);
         });
 
-        const winner = allPlayers?.sort((a, b) => 
-          (scores[b.id]?.points || 0) - (scores[a.id]?.points || 0)
-        )[0];
+        const winner = sortedPlayers[0];
 
         await window.TH.updateTournament(t.id, { 
           status: 'finished', completed_at: new Date().toISOString(),
@@ -263,38 +298,40 @@
         });
         toast("🏆 Турнир завершён! Победитель: " + (winner?.name || "?"));
       } else {
+        // NEXT ROUND — Swiss pairing
         const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', t.id);
         const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', t.id);
 
-        const playerScores = {};
-        (allPlayers || []).forEach(p => { 
-          playerScores[p.id] = { wins: 0, losses: 0, points: 0 }; 
-        });
-        (allMatches || []).forEach(m => {
-          if (m.finished && m.winner_id) {
-            if (!playerScores[m.winner_id]) playerScores[m.winner_id] = { wins: 0, losses: 0, points: 0 };
-            playerScores[m.winner_id].wins++;
-            playerScores[m.winner_id].points += 1;
-            const loserId = m.winner_id === m.player1_id ? m.player2_id : m.player1_id;
-            if (loserId) {
-              if (!playerScores[loserId]) playerScores[loserId] = { wins: 0, losses: 0, points: 0 };
-              playerScores[loserId].losses++;
-            }
-          }
-        });
+        // Calculate current standings
+        const playerScores = window.TH.calculateStandings(allPlayers || [], allMatches || []);
 
+        // Save current scores
+        for (const p of (allPlayers || [])) {
+          const s = playerScores[p.id] || { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 };
+          await client.from('players').update({
+            score_wins: s.wins,
+            score_losses: s.losses,
+            score_points: s.points,
+            score_buchholz: s.buchholz
+          }).eq('id', p.id);
+        }
+
+        // Prepare players with scores for pairing
         const playersWithScores = (allPlayers || []).map(p => ({
-          ...p, score: playerScores[p.id] || { wins: 0, losses: 0, points: 0 }
+          ...p, score: playerScores[p.id] || { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 }
         }));
 
+        // Generate Swiss pairs (no rematches!)
         const pairs = generateSwissPairs(playersWithScores, allMatches || []);
 
+        // Create new round
         const { data: newRound } = await client.from('rounds').insert({
           tournament_id: t.id, round_number: nextRoundNum,
           name: "Раунд " + (nextRoundNum + 1), is_active: true,
           started_at: new Date().toISOString()
         }).select().single();
 
+        // Create matches from pairs
         const newMatches = pairs.map((pair, idx) => ({
           round_id: newRound.id, tournament_id: t.id,
           player1_id: pair[0]?.id || null,
@@ -304,7 +341,7 @@
 
         if (newMatches.length) await client.from('matches').insert(newMatches);
         await window.TH.updateTournament(t.id, { current_round: nextRoundNum });
-        toast("⏭ Раунд " + (nextRoundNum + 1) + " начался!");
+        toast("⏭ Раунд " + (nextRoundNum + 1) + " начался! Пары по швейцарской системе");
       }
 
       try { await window.TH.logAction('advance_round', { tournament_id: t.id, round: currentRound.round_number }); } catch (e) {}
@@ -319,7 +356,7 @@
     try {
       const client = window.TH.getClient();
       await client.from('votes').delete().eq('tournament_id', t.id);
-      await client.from('matches').update({ votes1: 0, votes2: 0 }).eq('tournament_id', t.id);
+      await client.from('matches').update({ votes1: 0, votes2: 0, finished: false, winner_id: null, status: 'pending' }).eq('tournament_id', t.id);
       toast("🔄 Голоса сброшены");
       try { await window.TH.logAction('reset_votes', { tournament_id: t.id }); } catch (e) {}
       await refreshAll();
@@ -386,7 +423,8 @@
       await window.TH.getClient().from('players').delete().eq('tournament_id', t.id);
       const toInsert = valid.map((p, i) => ({ 
         tournament_id: t.id, name: p.name, image_url: p.image_url || p.image || '', 
-        type: p.type || 'character', description: p.description || '', seed: i, elo: 1000 
+        type: p.type || 'character', description: p.description || '', seed: i, elo: 1000,
+        score_wins: 0, score_losses: 0, score_points: 0, score_buchholz: 0
       }));
       await window.TH.createPlayers(toInsert);
       document.getElementById("participantSaveStatus").innerHTML = "<span style='color:var(--green);'>✅ Сохранено (" + valid.length + " участников)</span>";
@@ -416,6 +454,7 @@
         <span style="flex:1;">${escapeHTML(m.player1?.name || "?")} <span style="color:var(--accent);">${m.votes1 || 0}:${m.votes2 || 0}</span> ${escapeHTML(m.player2?.name || "?")}</span>
         <button class="btn-primary" style="padding:6px 12px;font-size:12px;" onclick="Admin.forceWin('${m.id}', '${m.player1_id}', 1)">P1 Win</button>
         <button class="btn-warn" style="padding:6px 12px;font-size:12px;" onclick="Admin.forceWin('${m.id}', '${m.player2_id}', 2)">P2 Win</button>
+        <button class="btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="Admin.forceDraw('${m.id}')">Ничья</button>
       </div>`).join("");
   }
 
@@ -424,6 +463,15 @@
       await window.TH.updateMatch(matchId, { winner_id: playerId, finished: true, status: 'done' });
       toast("🏁 Победитель назначен вручную");
       try { await window.TH.logAction('force_win', { match_id: matchId, player_num: playerNum }); } catch (e) {}
+      await refreshAll();
+    } catch (e) { toast("❌ " + e.message); }
+  }
+
+  async function forceDraw(matchId) {
+    try {
+      await window.TH.updateMatch(matchId, { finished: true, status: 'done', winner_id: null });
+      toast("⚖️ Ничья назначена (оба получат 0.5 очка)");
+      try { await window.TH.logAction('force_draw', { match_id: matchId }); } catch (e) {}
       await refreshAll();
     } catch (e) { toast("❌ " + e.message); }
   }
@@ -677,7 +725,7 @@
     doLogin, switchTab, doCreateTournament, doStartTournament, doAdvanceRound,
     doResetVotes, doArchiveTournament, doDeleteActiveTournament,
     updateParticipant, removeParticipant, addParticipantRow, saveParticipants,
-    forceWin, toggleAdmin, deleteComment, doClearChat, saveSiteSettings,
+    forceWin, forceDraw, toggleAdmin, deleteComment, doClearChat, saveSiteSettings,
     addFandomAdmin, removeFandomAdmin, doExport, doImport, doResetAll, setActive, clearLog
   };
 })();

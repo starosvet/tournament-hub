@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Bracket Renderer (v7 — TRUE Shikimori Swiss Edition)
+   Tournament Hub Bracket Renderer (v8 — TRUE Shikimori Swiss)
    ============================================================ */
 (function () {
   'use strict';
@@ -29,14 +29,15 @@
 
   // ========== SHIKIMORI-STYLE MATCH CARD ==========
   async function renderMatch(match, isRoundActive, tournamentStatus) {
-    const p1 = match.player1 || { name: "???", image_url: '', score: { points: 0 } };
-    const p2 = match.player2 || { name: "???", image_url: '', score: { points: 0 } };
+    const p1 = match.player1 || { name: "???", image_url: '', score: { points: 0, wins: 0, losses: 0 } };
+    const p2 = match.player2 || { name: "???", image_url: '', score: { points: 0, wins: 0, losses: 0 } };
     const votes1 = match.votes1 || 0;
     const votes2 = match.votes2 || 0;
     const total = votes1 + votes2;
     const pct1 = total > 0 ? Math.round((votes1 / total) * 100) : 50;
     const pct2 = total > 0 ? Math.round((votes2 / total) * 100) : 50;
     const isFinished = match.finished || match.status === 'done';
+    const isDraw = match.isDraw || (isFinished && votes1 === votes2 && votes1 > 0);
     const wId = match.winner_id || (match.winner ? match.winner.id : null);
     const p1Win = isFinished && wId && p1.id === wId;
     const p2Win = isFinished && wId && p2.id === wId;
@@ -53,9 +54,12 @@
     const p1Image = p1.image_url || p1.image || '';
     const p2Image = p2.image_url || p2.image || '';
 
-    // Shikimori: big image left, big image right, VS center, vote buttons below
+    // Draw indicator
+    const drawBadge = isDraw ? '<span style="position:absolute;top:8px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--bg);padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;">⚖️ НИЧЬЯ</span>' : '';
+
     return `
       <div class="shiki-match ${isFinished ? 'finished' : ''} ${canVote ? 'can-vote' : ''}" id="match-${match.id}">
+        ${drawBadge}
         <div class="shiki-match-inner">
           <!-- Player 1 -->
           <div class="shiki-player ${p1Win ? 'winner' : ''} ${!p1Win && isFinished ? 'loser' : ''}" 
@@ -68,8 +72,8 @@
             <div class="shiki-player-info">
               <div class="shiki-player-name">${escapeHTML(p1.name)}</div>
               <div class="shiki-player-stats">
-                <span class="shiki-points">${p1.score?.points || 0} очков</span>
-                <span class="shiki-wl">${p1.score?.wins || 0}W / ${p1.score?.losses || 0}L</span>
+                <span class="shiki-points">${p1.score?.points !== undefined ? p1.score.points : (p1.score_points || 0)} очков</span>
+                <span class="shiki-wl">${p1.score?.wins !== undefined ? p1.score.wins : (p1.score_wins || 0)}W / ${p1.score?.losses !== undefined ? p1.score.losses : (p1.score_losses || 0)}L</span>
               </div>
             </div>
             ${p1Win ? '<div class="shiki-crown">👑</div>' : ''}
@@ -83,6 +87,7 @@
               <div class="shiki-bar-left" style="width:${pct1}%"></div>
               <div class="shiki-bar-right" style="width:${pct2}%"></div>
             </div>
+            ${isDraw ? '<div style="font-size:11px;color:var(--accent);font-weight:700;">⚖️ Ничья = 0.5 очка каждому</div>' : ''}
             ${canVote ? '<div class="shiki-vote-hint">👆 Выбери победителя</div>' : ''}
             ${!canVote && !isFinished ? '<div class="shiki-voted-mark">✓ Проголосовано</div>' : ''}
           </div>
@@ -98,8 +103,8 @@
             <div class="shiki-player-info">
               <div class="shiki-player-name">${escapeHTML(p2.name)}</div>
               <div class="shiki-player-stats">
-                <span class="shiki-points">${p2.score?.points || 0} очков</span>
-                <span class="shiki-wl">${p2.score?.wins || 0}W / ${p2.score?.losses || 0}L</span>
+                <span class="shiki-points">${p2.score?.points !== undefined ? p2.score.points : (p2.score_points || 0)} очков</span>
+                <span class="shiki-wl">${p2.score?.wins !== undefined ? p2.score.wins : (p2.score_wins || 0)}W / ${p2.score?.losses !== undefined ? p2.score.losses : (p2.score_losses || 0)}L</span>
               </div>
             </div>
             ${p2Win ? '<div class="shiki-crown">👑</div>' : ''}
@@ -108,12 +113,15 @@
       </div>`;
   }
 
-  // ========== STANDINGS TABLE (Swiss system) ==========
+  // ========== STANDINGS TABLE (Shikimori Swiss with Buchholz) ==========
   function renderStandings(players) {
     if (!players || !players.length) return '';
     return `
       <div class="shiki-standings">
-        <h3 class="shiki-section-title">📊 Турнирная таблица</h3>
+        <h3 class="shiki-section-title">📊 Турнирная таблица (Швейцарская система)</h3>
+        <p style="color:var(--text-3);font-size:12px;margin-bottom:12px;">
+          Сортировка: Очки → Коэффициент Бухгольца → Победы
+        </p>
         <table class="shiki-table">
           <thead>
             <tr>
@@ -122,10 +130,19 @@
               <th>Очки</th>
               <th>W</th>
               <th>L</th>
+              <th>D</th>
+              <th title="Сумма очков соперников">Buchholz ⓘ</th>
             </tr>
           </thead>
           <tbody>
-            ${players.map((p, i) => `
+            ${players.map((p, i) => {
+              const score = p.score || {};
+              const points = score.points !== undefined ? score.points : (p.score_points || 0);
+              const wins = score.wins !== undefined ? score.wins : (p.score_wins || 0);
+              const losses = score.losses !== undefined ? score.losses : (p.score_losses || 0);
+              const draws = score.draws !== undefined ? score.draws : (p.score_draws || 0);
+              const buchholz = score.buchholz !== undefined ? score.buchholz : (p.score_buchholz || 0);
+              return `
               <tr class="${i < 3 ? 'top-' + (i+1) : ''}">
                 <td class="shiki-rank">${i + 1}</td>
                 <td class="shiki-name">
@@ -134,11 +151,13 @@
                   </div>
                   ${escapeHTML(p.name)}
                 </td>
-                <td class="shiki-pts">${p.score?.points || 0}</td>
-                <td class="shiki-w">${p.score?.wins || 0}</td>
-                <td class="shiki-l">${p.score?.losses || 0}</td>
-              </tr>
-            `).join('')}
+                <td class="shiki-pts">${points}</td>
+                <td class="shiki-w">${wins}</td>
+                <td class="shiki-l">${losses}</td>
+                <td style="color:var(--accent);font-weight:600;">${draws}</td>
+                <td style="color:var(--text-2);font-weight:600;font-family:monospace;">${buchholz}</td>
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>
       </div>`;
@@ -171,7 +190,6 @@
         await window.TH.castVote(matchId, playerIndex);
         toast('✅ Голос засчитан!');
       } else {
-        // Local fallback
         const db = window.DB ? window.DB.getDB() : { tournaments: [] };
         for (const t of (db.tournaments || [])) {
           if (t.rounds) {
@@ -240,7 +258,7 @@
       const participants = tournament.players?.length || 0;
       const rounds = tournament.total_rounds || tournament.totalRounds || 10;
       sub.innerHTML = `<span class="shiki-status-badge ${tournament.status}">${statusMap[tournament.status] || tournament.status}</span> 
-                       <span class="shiki-meta">${participants} участников · ${rounds} раундов · Швейцарская система</span>`;
+                       <span class="shiki-meta">${participants} участников · ${rounds} раундов · Швейцарская система (как на Shikimori)</span>`;
     }
 
     const rounds = tournament.rounds || [];
@@ -257,15 +275,15 @@
     let roundsHtml = '';
     for (let idx = 0; idx < rounds.length; idx++) {
       const round = rounds[idx];
-      const isActive = idx === activeRound && tournament.status === 'active';
+      const isRoundActive = idx === activeRound && tournament.status === 'active';
 
       const matchesHtml = [];
       for (const m of (round.matches || [])) {
-        matchesHtml.push(await renderMatch(m, isActive, tournament.status));
+        matchesHtml.push(await renderMatch(m, isRoundActive, tournament.status));
       }
 
       roundsHtml += `
-        <div class="shiki-round ${isActive ? 'active' : ''} ${idx < activeRound ? 'past' : ''} ${idx > activeRound ? 'future' : ''}">
+        <div class="shiki-round ${isRoundActive ? 'active' : ''} ${idx < activeRound ? 'past' : ''} ${idx > activeRound ? 'future' : ''}">
           ${renderRoundHeader(round, idx, totalRounds, tournament)}
           <div class="shiki-matches">
             ${matchesHtml.join('') || '<p class="shiki-no-matches">Нет матчей в этом раунде</p>'}
@@ -281,6 +299,7 @@
     if (tournament.status === 'finished' && tournament.winner) {
       const w = tournament.winner;
       const wImage = w.image_url || w.image || '';
+      const wScore = w.score || {};
       championHtml = `
         <div class="shiki-champion">
           <div class="shiki-champion-title">🏆 Победитель турнира</div>
@@ -289,7 +308,7 @@
               ${wImage ? `<img src="${escapeHTML(wImage)}" onerror="this.style.display='none'">` : '<div class="no-img">🏆</div>'}
             </div>
             <div class="shiki-champion-name">${escapeHTML(w.name || w.title || 'Победитель')}</div>
-            <div class="shiki-champion-score">${w.score?.points || 0} очков · ${w.score?.wins || 0} побед</div>
+            <div class="shiki-champion-score">${wScore.points !== undefined ? wScore.points : (w.score_points || 0)} очков · ${wScore.wins !== undefined ? wScore.wins : (w.score_wins || 0)} побед · Buchholz: ${wScore.buchholz !== undefined ? wScore.buchholz : (w.score_buchholz || 0)}</div>
           </div>
         </div>`;
     }
