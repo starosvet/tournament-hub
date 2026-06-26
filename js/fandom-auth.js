@@ -1,11 +1,14 @@
 /* ============================================================
-   Tournament Hub — Fandom Wiki Verification (FIXED v5)
+   Tournament Hub — Fandom Wiki Verification (FIXED v6 — Edge Function)
    ============================================================ */
 (function () {
   'use strict';
   const CODE_PREFIX = "TH-";
   const CODE_LENGTH = 6;
   const CODE_TTL_MS = 10 * 60 * 1000;
+  
+  // ✅ URL твоей Edge Function
+  const EDGE_FUNCTION_URL = 'https://fpabooteqfahhzobcpnh.supabase.co/functions/v1/verify-fandom';
 
   function generateCode() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -31,31 +34,42 @@
   function clearPendingAuth() { localStorage.removeItem("th_fandom_pending"); }
   function markPendingVerified() { const pending = getPendingAuth(); if (pending) { pending.verified = true; localStorage.setItem("th_fandom_pending", JSON.stringify(pending)); } }
 
-  async function fetchUserRecentChanges(fandomName, limit) {
-    const url = "https://chickengun-fanon.fandom.com/ru/api.php" + "?action=query&list=recentchanges" + "&rcuser=" + encodeURIComponent(fandomName) + "&rclimit=" + (limit || 10) + "&rcprop=comment|timestamp|user|title" + "&format=json&origin=*";
+  // ✅ НОВОЕ: Проверка через Edge Function (безопасно!)
+  async function verifyCode(fandomName, code) {
+    const pending = getPendingAuth();
+    if (!pending) return { ok: false, error: "Нет активного кода." };
+
     try {
-      const res = await fetch(url, { method: 'GET', mode: 'cors', cache: 'no-cache', headers: { 'Accept': 'application/json' } });
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.query?.recentchanges || [];
-    } catch (e) { return null; }
+      const response = await fetch(EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwYWJvb3RlcWZhaGh6b2JjcG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMjgwOTIsImV4cCI6MjA5NzkwNDA5Mn0.cc1oG5-73US61LI9uDaPwuQsOjLkIAPxDcfGQvVY9Ac'
+        },
+        body: JSON.stringify({
+          fandomName: fandomName,
+          code: code,
+          since: pending.createdAt
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.ok) {
+        markPendingVerified();
+        return { ok: true, fandomName: result.fandomName, title: result.title };
+      } else {
+        return { ok: false, error: result.error || "Код не найден в недавних правках." };
+      }
+      
+    } catch (e) {
+      // Fallback: если Edge Function недоступна
+      return { ok: false, manual: true, error: "Автопроверка временно недоступна. Используйте ручное подтверждение." };
+    }
   }
 
-  async function verifyCode(fandomName, code) {
-    const changes = await fetchUserRecentChanges(fandomName, 20);
-    if (changes === null) return { ok: false, manual: true, error: "Автоматическая проверка недоступна из-за CORS. Используйте ручное подтверждение." };
-    if (!changes.length) return { ok: false, error: "Нет недавних правок." };
-    const pending = getPendingAuth();
-    if (!pending) return { ok: false, error: "Код устарел." };
-    for (const rc of changes) {
-      const comment = rc.comment || "";
-      if (comment.includes(code)) {
-        const editTime = new Date(rc.timestamp).getTime();
-        if (editTime >= pending.createdAt - 60000) { markPendingVerified(); return { ok: true, fandomName: rc.user, title: rc.title }; }
-      }
-    }
-    return { ok: false, error: "Код не найден." };
-  }
+  // ✅ Старая функция удалена — больше не нужна
+  // async function fetchUserRecentChanges(...) — УДАЛЕНО
 
   function startFandomLink(fandomName, currentUsername) {
     if (!fandomName?.trim()) return { ok: false, error: "Введите имя пользователя Fandom" };
