@@ -90,7 +90,9 @@
   // ========== TOURNAMENTS ==========
   async function getTournaments() {
     const client = getClient();
-    return await client.from('tournaments').select('*, players(count)').order('created_at', { ascending: false });
+    return await client.from('tournaments')
+      .select('*, player_count:players(count)')
+      .order('created_at', { ascending: false });
   }
 
   async function getTournament(id) {
@@ -144,18 +146,7 @@
       return (b.score?.wins || 0) - (a.score?.wins || 0);
     });
 
-    // Save Buchholz to DB
-    for (const p of tournament.players) {
-      if (p.score?.buchholz !== undefined) {
-        await client.from('players').update({ 
-          score_wins: p.score.wins,
-          score_losses: p.score.losses,
-          score_draws: p.score.draws,
-          score_points: p.score.points,
-          score_buchholz: p.score.buchholz
-        }).eq('id', p.id);
-      }
-    }
+    // Scores calculated on-the-fly, no N+1 writes needed
 
     tournament.rounds = (rounds || []).map(r => {
       const roundMatches = (allMatches || []).filter(m => m.round_id === r.id);
@@ -264,10 +255,7 @@
 
     if (error) throw error;
 
-    // ⚠️ НЕ обновляем votes1/votes2 вручную!
-    // Триггер БД (trg_update_match_votes) делает это автоматически.
-    // Ручное обновление давало дублирование: триггер +1, JS +1 = 2 вместо 1
-
+    // Триггер БД пересчитывает голоса автоматически
     if (!user && votedKey) localStorage.setItem(votedKey, 'true');
 
     return { success: true };
@@ -384,9 +372,10 @@
     realtimeChannels = [];
   }
 
-  function isAdmin() {
+  async function isAdmin() {
     const user = JSON.parse(localStorage.getItem('th_user') || 'null');
-    return user?.role === 'admin' || localStorage.getItem('th_admin') === 'yes';
+    if (user?.role === 'admin' || localStorage.getItem('th_admin') === 'yes') return true;
+    try { const u = await getCurrentUser(); return u?.role === 'admin'; } catch(e) { return false; }
   }
 
   // ========== DELEGATE TO SwissEngine ==========
@@ -435,8 +424,12 @@
     return b;
   }
 
+  async function getProfile() {
+    return await getCurrentUser();
+  }
+
   window.TH = {
-    init, getClient, isReady: false,
+    init, getClient, isReady: false, getProfile,
     signUp, signIn, signInWithProvider, signOut, getSession, getCurrentUser, updateProfile, onAuthStateChange,
     getTournaments, getTournament, createTournament, updateTournament, deleteTournament,
     getPlayers, createPlayers, getMatches, updateMatch,
