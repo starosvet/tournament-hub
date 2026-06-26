@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Admin Panel (FIXED v9 — TRUE Shikimori Swiss)
+   Tournament Hub Admin Panel (FIXED v10 — SwissEngine Integration)
    ============================================================ */
 (function () {
   'use strict';
@@ -50,65 +50,7 @@
     if (name === "settings") await loadSettings();
   }
 
-  // ===== SHIKIMORI SWISS: Generate pairs by score + Buchholz =====
-  function generateSwissPairs(players, previousMatches) {
-    // Sort by: points DESC, buchholz DESC, wins DESC
-    const sorted = [...players].sort((a, b) => {
-      const ptsA = a.score?.points || 0;
-      const ptsB = b.score?.points || 0;
-      if (ptsB !== ptsA) return ptsB - ptsA;
-      const buchA = a.score?.buchholz || 0;
-      const buchB = b.score?.buchholz || 0;
-      if (buchB !== buchA) return buchB - buchA;
-      return (b.score?.wins || 0) - (a.score?.wins || 0);
-    });
-
-    // Track played pairs
-    const playedWith = {};
-    (previousMatches || []).forEach(m => {
-      if (m.player1_id && m.player2_id) {
-        playedWith[m.player1_id] = playedWith[m.player1_id] || new Set();
-        playedWith[m.player2_id] = playedWith[m.player2_id] || new Set();
-        playedWith[m.player1_id].add(m.player2_id);
-        playedWith[m.player2_id].add(m.player1_id);
-      }
-    });
-
-    const pairs = [];
-    const used = new Set();
-
-    for (const p1 of sorted) {
-      if (used.has(p1.id)) continue;
-      let bestOpponent = null;
-      let bestScore = -Infinity;
-
-      for (const p2 of sorted) {
-        if (p1.id === p2.id || used.has(p2.id)) continue;
-        const alreadyPlayed = playedWith[p1.id]?.has(p2.id);
-        const ptsDiff = Math.abs((p1.score?.points || 0) - (p2.score?.points || 0));
-        const buchDiff = Math.abs((p1.score?.buchholz || 0) - (p2.score?.buchholz || 0));
-
-        // Priority: same points > close buchholz > never played
-        let score = 10000 - ptsDiff * 1000 - buchDiff * 10;
-        if (alreadyPlayed) score -= 50000; // Heavy penalty for rematch
-
-        if (score > bestScore) { bestScore = score; bestOpponent = p2; }
-      }
-
-      if (bestOpponent) {
-        pairs.push([p1, bestOpponent]);
-        used.add(p1.id);
-        used.add(bestOpponent.id);
-      } else {
-        // BYE: free win
-        pairs.push([p1, null]);
-        used.add(p1.id);
-      }
-    }
-
-    return pairs;
-  }
-
+  // ===== ИСПОЛЬЗУЕМ SwissEngine вместо дублирования =====
   async function doCreateTournament() {
     const name = document.getElementById("tName").value.trim();
     const desc = document.getElementById("tDesc").value.trim();
@@ -130,13 +72,13 @@
       'другое': 'other', 'other': 'other'
     };
 
-    const players = raw.split("\n").map(line => {
+    const players = raw.split("\\n").map(line => {
       line = line.trim();
       if (!line) return null;
       const parts = line.split("|").map(s => s.trim());
       const namePart = parts[0] || line;
       let playerType = 'character', playerName = namePart;
-      const typeMatch = namePart.match(/^\[(.*?)\]\s*(.+)$/);
+      const typeMatch = namePart.match(/^\\[(.*?)\\]\\s*(.+)$/);
       if (typeMatch) { playerType = typeMap[typeMatch[1].toLowerCase()] || 'other'; playerName = typeMatch[2]; }
       return { name: playerName, image_url: parts[1] || "", type: playerType, description: parts[2] || "" };
     }).filter(Boolean);
@@ -156,7 +98,7 @@
 
       const playersWithTournament = players.map((p, i) => ({ 
         ...p, tournament_id: tournament.id, seed: i, elo: 1000,
-        score_wins: 0, score_losses: 0, score_points: 0, score_buchholz: 0
+        score_wins: 0, score_losses: 0, score_points: 0, score_buchholz: 0, score_draws: 0
       }));
       const { error: playersError } = await window.TH.createPlayers(playersWithTournament);
       if (playersError) throw playersError;
@@ -235,7 +177,7 @@
       const { data: matches } = await client.from('matches')
         .select('*').eq('round_id', currentRound.id);
 
-      // Finish unfinished matches based on votes (Shikimori: 1/0/0.5)
+      // Finish unfinished matches
       for (const match of (matches || [])) {
         if (!match.finished) {
           const v1 = match.votes1 || 0;
@@ -244,7 +186,7 @@
 
           if (v1 > v2) winnerId = match.player1_id;
           else if (v2 > v1) winnerId = match.player2_id;
-          // If draw (v1 === v2), no winner — both get 0.5 later in standings calc
+          // Draw: winner_id = null (оба получат 0.5 в standings)
 
           await client.from('matches').update({ 
             finished: true, 
@@ -263,32 +205,44 @@
       const nextRoundNum = (currentRound.round_number || 0) + 1;
 
       if (nextRoundNum >= totalRounds) {
-        // TOURNAMENT FINISHED — calculate final standings with Buchholz
+        // TOURNAMENT FINISHED
         const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', t.id);
         const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', t.id);
 
-        // Use TH.calculateStandings for consistency
-        const playerScores = window.TH.calculateStandings(allPlayers || [], allMatches || []);
+        // Use SwissEngine for consistency
+        let playerScores;
+        if (window.SwissEngine) {
+          playerScores = window.SwissEngine.calculateStandings(allPlayers || [], allMatches || []);
+        } else {
+          // Fallback
+          playerScores = window.TH.calculateStandings(allPlayers || [], allMatches || []);
+        }
 
-        // Save final scores to DB
+        // Save final scores
         for (const p of (allPlayers || [])) {
           const s = playerScores[p.id] || { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 };
           await client.from('players').update({
             score_wins: s.wins,
             score_losses: s.losses,
+            score_draws: s.draws,
             score_points: s.points,
             score_buchholz: s.buchholz
           }).eq('id', p.id);
         }
 
         // Sort to find winner
-        const sortedPlayers = [...(allPlayers || [])].sort((a, b) => {
-          const sa = playerScores[a.id] || {};
-          const sb = playerScores[b.id] || {};
-          if ((sb.points || 0) !== (sa.points || 0)) return (sb.points || 0) - (sa.points || 0);
-          if ((sb.buchholz || 0) !== (sa.buchholz || 0)) return (sb.buchholz || 0) - (sa.buchholz || 0);
-          return (sb.wins || 0) - (sa.wins || 0);
-        });
+        let sortedPlayers;
+        if (window.SwissEngine) {
+          sortedPlayers = window.SwissEngine.sortPlayersByStandings(allPlayers || [], playerScores);
+        } else {
+          sortedPlayers = [...(allPlayers || [])].sort((a, b) => {
+            const sa = playerScores[a.id] || {};
+            const sb = playerScores[b.id] || {};
+            if ((sb.points || 0) !== (sa.points || 0)) return (sb.points || 0) - (sa.points || 0);
+            if ((sb.buchholz || 0) !== (sa.buchholz || 0)) return (sb.buchholz || 0) - (sa.buchholz || 0);
+            return (sb.wins || 0) - (sa.wins || 0);
+          });
+        }
 
         const winner = sortedPlayers[0];
 
@@ -298,31 +252,42 @@
         });
         toast("🏆 Турнир завершён! Победитель: " + (winner?.name || "?"));
       } else {
-        // NEXT ROUND — Swiss pairing
+        // NEXT ROUND — Swiss pairing via SwissEngine
         const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', t.id);
         const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', t.id);
 
-        // Calculate current standings
-        const playerScores = window.TH.calculateStandings(allPlayers || [], allMatches || []);
+        // Calculate standings
+        let playerScores;
+        if (window.SwissEngine) {
+          playerScores = window.SwissEngine.calculateStandings(allPlayers || [], allMatches || []);
+        } else {
+          playerScores = window.TH.calculateStandings(allPlayers || [], allMatches || []);
+        }
 
-        // Save current scores
+        // Save scores
         for (const p of (allPlayers || [])) {
           const s = playerScores[p.id] || { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 };
           await client.from('players').update({
             score_wins: s.wins,
             score_losses: s.losses,
+            score_draws: s.draws,
             score_points: s.points,
             score_buchholz: s.buchholz
           }).eq('id', p.id);
         }
 
-        // Prepare players with scores for pairing
+        // Prepare players with scores
         const playersWithScores = (allPlayers || []).map(p => ({
           ...p, score: playerScores[p.id] || { wins: 0, losses: 0, draws: 0, points: 0, buchholz: 0 }
         }));
 
-        // Generate Swiss pairs (no rematches!)
-        const pairs = generateSwissPairs(playersWithScores, allMatches || []);
+        // Generate pairs via SwissEngine
+        let pairs;
+        if (window.SwissEngine) {
+          pairs = window.SwissEngine.generateSwissPairs(playersWithScores, allMatches || []);
+        } else {
+          pairs = window.TH.generateSwissPairs(playersWithScores, allMatches || []);
+        }
 
         // Create new round
         const { data: newRound } = await client.from('rounds').insert({
@@ -336,7 +301,8 @@
           round_id: newRound.id, tournament_id: t.id,
           player1_id: pair[0]?.id || null,
           player2_id: pair[1]?.id || null,
-          match_order: idx, status: 'pending', votes1: 0, votes2: 0
+          match_order: idx, status: 'pending', votes1: 0, votes2: 0,
+          isBye: !pair[1]
         }));
 
         if (newMatches.length) await client.from('matches').insert(newMatches);
@@ -424,7 +390,7 @@
       const toInsert = valid.map((p, i) => ({ 
         tournament_id: t.id, name: p.name, image_url: p.image_url || p.image || '', 
         type: p.type || 'character', description: p.description || '', seed: i, elo: 1000,
-        score_wins: 0, score_losses: 0, score_points: 0, score_buchholz: 0
+        score_wins: 0, score_losses: 0, score_points: 0, score_buchholz: 0, score_draws: 0
       }));
       await window.TH.createPlayers(toInsert);
       document.getElementById("participantSaveStatus").innerHTML = "<span style='color:var(--green);'>✅ Сохранено (" + valid.length + " участников)</span>";
@@ -612,7 +578,7 @@
       const { data: tournaments } = await window.TH.getTournaments();
       const { data: users } = await window.TH.getAllUsers();
       const { data: settings } = await window.TH.getSiteSettings();
-      const backup = { version: 3, exportedAt: new Date().toISOString(), data: { tournaments, users, settings } };
+      const backup = { version: 4, exportedAt: new Date().toISOString(), data: { tournaments, users, settings } };
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
