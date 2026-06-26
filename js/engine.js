@@ -1,5 +1,5 @@
 /* ============================================================
-   TOURNAMENT ENGINE – Swiss System + Groups
+   TOURNAMENT ENGINE – Swiss System + Groups (безопасная версия)
    ============================================================ */
 (function () {
   'use strict';
