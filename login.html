@@ -37,8 +37,10 @@
                 <input type="email" id="loginEmail" placeholder="your@email.com">
                 <label>Пароль</label>
                 <input type="password" id="loginPassword" placeholder="••••••••">
-                <label id="usernameLabel" style="display:none;">Никнейм</label>
-                <input type="text" id="loginUsername" placeholder="username" style="display:none;">
+                <div id="usernameContainer" style="display:none;">
+                  <label id="usernameLabel">Никнейм</label>
+                  <input type="text" id="loginUsername" placeholder="username">
+                </div>
                 <button class="btn-primary" style="width:100%;margin-top:20px;" id="loginBtn">🔐 Войти</button>
                 <button class="btn-secondary" style="width:100%;margin-top:12px;" id="toggleBtn">📝 Создать аккаунт</button>
                 <div class="error" id="loginError" style="color:var(--red);margin-top:16px;text-align:center;font-size:14px;"></div>
