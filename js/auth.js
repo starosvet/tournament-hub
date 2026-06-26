@@ -1,9 +1,8 @@
 /* ============================================================
-   Tournament Hub Authentication (FIXED v8)
+   Tournament Hub Authentication (только Supabase)
    ============================================================ */
 (function () {
   'use strict';
-  const ADMIN_PASSWORD = "admin123";
 
   function inlineEscapeHTML(text) {
     if (!text) return "";
@@ -65,24 +64,9 @@
     return isAdminSync();
   }
 
-  function adminLogin(password) {
-    if (password === ADMIN_PASSWORD) {
-      localStorage.setItem("th_admin", "yes");
-      window.DB.getCurrentUser().then(user => {
-        if (user) { user.role = "admin"; window.DB.setCurrentUser(user); }
-      });
-      return true;
-    }
-    return false;
-  }
-
   async function canUserVote(matchId) {
-    const db = window.DB.getDB();
-    const activeTourney = db.tournaments?.find(t => t.status === 'active') || db.tournaments?.[0];
     const user = await window.DB.getCurrentUser();
-    if (activeTourney?.config && !user && !activeTourney.config.allowGuest) {
-      return { can: false, reason: "Голосование гостям запрещено. Авторизуйтесь." };
-    }
+    if (!user) return { can: false, reason: "Авторизуйтесь для голосования" };
     const votedList = JSON.parse(localStorage.getItem("th_voted_matches") || "[]");
     if (votedList.includes(matchId)) return { can: false, reason: "Вы уже голосовали в этом матче!" };
     if (window.TH && user) {
@@ -156,7 +140,7 @@
   }
 
   window.Auth = {
-    register, login, logout, isAdmin, isAdminSync, adminLogin,
+    register, login, logout, isAdmin, isAdminSync,
     canUserVote, markVote, renderNavUser, checkFandomAutoAdmin, unlinkFandom
   };
 })();
