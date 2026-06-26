@@ -3107,3 +3107,95 @@ footer {
     gap: 10px;
   }
 }
+
+
+
+
+/* =========================================================
+   ADMIN TABS — Fixed Styling v2
+   ========================================================= */
+
+/* Tab container */
+.admin-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0;
+  position: relative;
+}
+
+/* Individual tab button */
+.admin-tab {
+  background: transparent;
+  color: var(--text-3);
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 14px 24px;
+  border-radius: 12px 12px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  margin-bottom: -2px;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+.admin-tab:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.04);
+  border-bottom-color: var(--border-2);
+}
+
+.admin-tab.active {
+  color: var(--accent);
+  background: linear-gradient(180deg, rgba(245,158,11,0.08) 0%, transparent 100%);
+  border-bottom-color: var(--accent);
+}
+
+.admin-tab.active::before {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 30%;
+  width: 40%;
+  height: 3px;
+  background: var(--accent);
+  border-radius: 3px 3px 0 0;
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* Tab content panels */
+.tab-content {
+  display: none;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.tab-content.active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+  animation: fadeInUp 0.4s ease;
+}
+
+/* Responsive tabs */
+@media (max-width: 768px) {
+  .admin-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .admin-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .admin-tab {
+    padding: 12px 16px;
+    font-size: 13px;
+  }
+}
