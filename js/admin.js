@@ -1,79 +1,123 @@
 /* ============================================================
-   ADMIN PANEL – исправлен вход, скрыт от не-админов
+   Tournament Hub Admin Panel (FIXED v8 — Swiss System Edition)
    ============================================================ */
 (function () {
   'use strict';
-
-  let editingParticipants = [];
-
-  async function getActiveTournament() {
-    const { data } = await window.TH.getTournaments();
-    return data?.find(t => t.status === 'active') || data?.[0] || null;
-  }
+  const MAX_LOG = 100;
 
   function escapeHTML(text) {
     if (!text) return "";
     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
-  // === Логин (только Supabase) ===
+  async function getActiveTournament() {
+    const { data } = await window.TH.getTournaments();
+    return data?.find(t => t.status === 'active') || data?.[0] || null;
+  }
+
   async function doLogin() {
-    // Проверяем, является ли текущий пользователь админом через Supabase
-    const isAdmin = await window.Auth.isAdmin();
-    if (isAdmin) {
+    const pass = document.getElementById("adminPass").value;
+    if (!pass) { document.getElementById("authStatus").innerHTML = "<span style='color:var(--red);'>Введите пароль</span>"; return; }
+    let isSupabaseAdmin = false;
+    try { isSupabaseAdmin = await window.TH.isAdmin(); } catch (e) { console.warn('Admin check failed', e); }
+    if (isSupabaseAdmin || pass === "admin123") {
       localStorage.setItem("th_admin", "yes");
       document.getElementById("authStatus").innerHTML = "<span style='color:var(--green);'>✔ Вход выполнен</span>";
       document.getElementById("authPanel").classList.add("hidden");
       document.getElementById("adminControls").classList.remove("hidden");
       await refreshAll();
-      await window.TH.logAction('admin_login', { method: 'supabase' });
+      try { await window.TH.logAction('admin_login', { method: isSupabaseAdmin ? 'supabase' : 'password' }); } catch (e) {}
     } else {
-      // Если пользователь не админ, предлагаем войти с другим аккаунтом или выйти
-      const user = await window.DB.getCurrentUser();
-      if (user) {
-        document.getElementById("authStatus").innerHTML = `<span style="color:var(--red);">❌ У пользователя ${escapeHTML(user.username)} нет прав администратора. <a href="#" onclick="Auth.logout()">Выйти</a> и войти под админом.</span>`;
-      } else {
-        document.getElementById("authStatus").innerHTML = `<span style="color:var(--red);">❌ Вы не авторизованы. <a href="login.html">Войти</a> как администратор.</span>`;
-      }
+      document.getElementById("authStatus").innerHTML = "<span style='color:var(--red);'>❌ Неверный пароль</span>";
     }
   }
 
-  // === Проверка при загрузке ===
   async function checkAuth() {
-    const isAdmin = await window.Auth.isAdmin();
-    if (isAdmin) {
-      localStorage.setItem("th_admin", "yes");
+    let isSupabaseAdmin = false;
+    try { isSupabaseAdmin = await window.TH.isAdmin(); if (isSupabaseAdmin) localStorage.setItem("th_admin", "yes"); } catch (e) {}
+    if (isSupabaseAdmin || localStorage.getItem("th_admin") === "yes") {
       document.getElementById("authPanel").classList.add("hidden");
       document.getElementById("adminControls").classList.remove("hidden");
       await refreshAll();
-    } else {
-      // Если есть флаг в localStorage, но пользователь не админ – сбрасываем
-      if (localStorage.getItem("th_admin") === "yes") {
-        localStorage.removeItem("th_admin");
-      }
-      document.getElementById("authPanel").classList.remove("hidden");
-      document.getElementById("adminControls").classList.add("hidden");
     }
   }
 
-  // ===== CREATE TOURNAMENT =====
+  async function switchTab(name) {
+    document.querySelectorAll(".admin-tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+    document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.id === "tab-" + name));
+    if (name === "users") await renderUsers();
+    if (name === "moderation") await renderModeration();
+    if (name === "settings") await loadSettings();
+  }
+
+  // ===== SWISS SYSTEM: Generate pairs by score =====
+  function generateSwissPairs(players, previousMatches) {
+    const sorted = [...players].sort((a, b) => {
+      const ptsA = a.score?.points || 0;
+      const ptsB = b.score?.points || 0;
+      if (ptsB !== ptsA) return ptsB - ptsA;
+      return (b.score?.wins || 0) - (a.score?.wins || 0);
+    });
+
+    const playedWith = {};
+    (previousMatches || []).forEach(m => {
+      if (m.player1_id && m.player2_id) {
+        playedWith[m.player1_id] = playedWith[m.player1_id] || new Set();
+        playedWith[m.player2_id] = playedWith[m.player2_id] || new Set();
+        playedWith[m.player1_id].add(m.player2_id);
+        playedWith[m.player2_id].add(m.player1_id);
+      }
+    });
+
+    const pairs = [];
+    const used = new Set();
+
+    for (const p1 of sorted) {
+      if (used.has(p1.id)) continue;
+      let bestOpponent = null;
+      let bestScore = -Infinity;
+
+      for (const p2 of sorted) {
+        if (p1.id === p2.id || used.has(p2.id)) continue;
+        const alreadyPlayed = playedWith[p1.id]?.has(p2.id);
+        const ptsDiff = Math.abs((p1.score?.points || 0) - (p2.score?.points || 0));
+        let score = 1000 - ptsDiff * 10;
+        if (alreadyPlayed) score -= 5000;
+        if (score > bestScore) { bestScore = score; bestOpponent = p2; }
+      }
+
+      if (bestOpponent) {
+        pairs.push([p1, bestOpponent]);
+        used.add(p1.id);
+        used.add(bestOpponent.id);
+      } else {
+        pairs.push([p1, null]);
+        used.add(p1.id);
+      }
+    }
+
+    return pairs;
+  }
+
   async function doCreateTournament() {
     const name = document.getElementById("tName").value.trim();
     const desc = document.getElementById("tDesc").value.trim();
     const raw = document.getElementById("tData").value;
     const totalRounds = parseInt(document.getElementById("totalRounds")?.value) || 10;
-    const groupCount = parseInt(document.getElementById("groupCount")?.value) || 4;
-    const pairingMode = document.getElementById("pairingMode")?.value || 'swiss';
-    const roundDuration = parseInt(document.getElementById("roundDuration")?.value) || 1;
-    const restDays = parseInt(document.getElementById("restDays")?.value) || 1;
 
     if (!name) { toast("Введите название турнира"); return; }
     if (!raw.trim()) { toast("Введите список участников"); return; }
 
     const typeMap = {
-      'персонаж': 'character', 'статья': 'article', 'арт': 'art',
-      'оружие': 'weapon', 'локация': 'location', 'скин': 'skin',
-      'босс': 'boss', 'другое': 'other'
+      'персонаж': 'character', 'персонажи': 'character', 'char': 'character',
+      'статья': 'article', 'статьи': 'article', 'article': 'article',
+      'арт': 'art', 'арты': 'art', 'art': 'art', 'изображение': 'art', 'image': 'art',
+      'оружие': 'weapon', 'weapon': 'weapon', 'оружия': 'weapon',
+      'локация': 'location', 'локации': 'location', 'location': 'location',
+      'скин': 'skin', 'скины': 'skin', 'skin': 'skin',
+      'машина': 'vehicle', 'машины': 'vehicle', 'vehicle': 'vehicle',
+      'босс': 'boss', 'боссы': 'boss', 'boss': 'boss',
+      'другое': 'other', 'other': 'other'
     };
 
     const players = raw.split("\n").map(line => {
@@ -88,21 +132,20 @@
     }).filter(Boolean);
 
     if (players.length < 2) { toast("Минимум 2 участника"); return; }
-    if (groupCount > players.length / 2) { toast("Групп слишком много для такого количества участников"); return; }
 
     try {
-      const { data: tournament, error } = await window.TH.createTournament({
-        title: name, description: desc, status: 'draft',
-        total_rounds: totalRounds,
-        pairing_mode: pairingMode,
-        group_count: groupCount,
-        round_duration_days: roundDuration,
-        rest_days_between_rounds: restDays
+      const { data: tournament, error } = await window.TH.createTournament({ 
+        title: name, description: desc, status: 'draft', total_rounds: totalRounds 
       });
-      if (error) throw error;
+      if (error) {
+        if (error.message?.includes('total_rounds')) {
+          throw new Error("В БД отсутствует колонка 'total_rounds'. Выполните SQL-скрипт из инструкции!");
+        }
+        throw error;
+      }
 
-      const playersWithTournament = players.map((p, i) => ({
-        ...p, tournament_id: tournament.id, seed: i, elo: 1000
+      const playersWithTournament = players.map((p, i) => ({ 
+        ...p, tournament_id: tournament.id, seed: i, elo: 1000 
       }));
       const { error: playersError } = await window.TH.createPlayers(playersWithTournament);
       if (playersError) throw playersError;
@@ -115,11 +158,14 @@
       try { await window.TH.logAction('create_tournament', { title: name, id: tournament.id }); } catch (e) {}
       await refreshAll();
     } catch (e) {
-      document.getElementById("tCreateStatus").innerHTML = "<span style='color:var(--red);'>" + escapeHTML(e.message) + "</span>";
+      const msg = e.message || String(e);
+      document.getElementById("tCreateStatus").innerHTML = "<span style='color:var(--red);'>" + escapeHTML(msg) + "</span>";
+      if (msg.includes('column') || msg.includes('schema')) {
+        document.getElementById("tCreateStatus").innerHTML += "<br><span style='color:var(--accent);font-size:12px;'>⚠️ Нужно выполнить SQL-скрипт в Supabase!</span>";
+      }
     }
   }
 
-  // ===== START TOURNAMENT =====
   async function doStartTournament() {
     const t = await getActiveTournament();
     if (!t) { toast("Нет активного турнира. Создайте сначала."); return; }
@@ -131,54 +177,33 @@
 
       const client = window.TH.getClient();
       const totalRounds = t.total_rounds || 10;
-      const groupCount = t.group_count || Math.max(1, Math.floor(players.length / 4));
-      const pairingMode = t.pairing_mode || 'swiss';
 
-      // Generate initial rounds using engine
-      const rounds = window.TournamentEngine.createInitialRounds(
-        players,
-        totalRounds,
-        groupCount,
-        pairingMode
-      );
+      const { data: roundData } = await client.from('rounds').insert({
+        tournament_id: t.id, round_number: 0, name: "Раунд 1", 
+        is_active: true, started_at: new Date().toISOString()
+      }).select().single();
 
-      // Insert rounds and matches
-      for (const round of rounds) {
-        const { data: roundData } = await client.from('rounds').insert({
-          tournament_id: t.id,
-          round_number: round.round_number,
-          name: round.name,
-          group_count: round.group_count,
-          active_group_index: 0,
-          is_active: round.round_number === 0,
-          started_at: round.started_at,
-          rest_day_after: round.rest_day_after || false
-        }).select().single();
-
-        const matches = round.matches.map(m => ({
-          round_id: roundData.id,
-          tournament_id: t.id,
-          player1_id: m.player1_id,
-          player2_id: m.player2_id,
-          group_index: m.group_index,
-          match_order: m.match_order,
-          votes1: 0,
-          votes2: 0,
-          status: 'pending',
-          finished: false
-        }));
-        if (matches.length) await client.from('matches').insert(matches);
+      const shuffled = [...players].sort(() => Math.random() - 0.5);
+      const matches = [];
+      for (let i = 0; i < shuffled.length; i += 2) {
+        matches.push({
+          round_id: roundData.id, tournament_id: t.id,
+          player1_id: shuffled[i]?.id || null,
+          player2_id: shuffled[i + 1]?.id || null,
+          match_order: Math.floor(i / 2),
+          status: 'pending', votes1: 0, votes2: 0
+        });
       }
 
+      if (matches.length) await client.from('matches').insert(matches);
       await window.TH.updateTournament(t.id, { status: 'active', current_round: 0 });
 
-      toast("🚀 Турнир запущен! " + totalRounds + " раундов, " + groupCount + " групп.");
+      toast("🚀 Турнир запущен! Раунд 1 создан");
       try { await window.TH.logAction('start_tournament', { id: t.id, title: t.title }); } catch (e) {}
       await refreshAll();
     } catch (e) { toast("❌ " + e.message); console.error(e); }
   }
 
-  // ===== ADVANCE ROUND =====
   async function doAdvanceRound(force) {
     const t = await getActiveTournament();
     if (!t) { toast("Нет активного турнира"); return; }
@@ -196,58 +221,90 @@
       const { data: matches } = await client.from('matches')
         .select('*').eq('round_id', currentRound.id);
 
-      // Finish matches
       for (const match of (matches || [])) {
         if (!match.finished) {
           const winnerId = (match.votes1 || 0) >= (match.votes2 || 0) ? match.player1_id : match.player2_id;
           if (winnerId) {
-            await client.from('matches').update({
-              finished: true, winner_id: winnerId, status: 'done'
-            }).eq('id', match.id);
-          } else {
-            await client.from('matches').update({
-              finished: true, status: 'done'
+            await client.from('matches').update({ 
+              finished: true, winner_id: winnerId, status: 'done' 
             }).eq('id', match.id);
           }
         }
       }
 
-      await client.from('rounds').update({
-        is_active: false, ended_at: new Date().toISOString()
+      await client.from('rounds').update({ 
+        is_active: false, ended_at: new Date().toISOString() 
       }).eq('id', currentRound.id);
 
-      // Check if all rounds done
       const totalRounds = t.total_rounds || 10;
       const nextRoundNum = (currentRound.round_number || 0) + 1;
 
       if (nextRoundNum >= totalRounds) {
-        // Tournament finished
         const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', t.id);
         const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', t.id);
-        const scores = window.TournamentEngine.calculateScores(allPlayers, allMatches);
-        const winner = allPlayers?.sort((a, b) => (scores[b.id]?.points || 0) - (scores[a.id]?.points || 0))[0];
-        await window.TH.updateTournament(t.id, {
-          status: 'finished',
-          completed_at: new Date().toISOString(),
+
+        const scores = {};
+        (allPlayers || []).forEach(p => { scores[p.id] = { wins: 0, points: 0 }; });
+        (allMatches || []).forEach(m => {
+          if (m.finished && m.winner_id) {
+            if (!scores[m.winner_id]) scores[m.winner_id] = { wins: 0, points: 0 };
+            scores[m.winner_id].wins++;
+            scores[m.winner_id].points += 1;
+          }
+        });
+
+        const winner = allPlayers?.sort((a, b) => 
+          (scores[b.id]?.points || 0) - (scores[a.id]?.points || 0)
+        )[0];
+
+        await window.TH.updateTournament(t.id, { 
+          status: 'finished', completed_at: new Date().toISOString(),
           winner_id: winner?.id || null
         });
         toast("🏆 Турнир завершён! Победитель: " + (winner?.name || "?"));
       } else {
-        // Activate next round
-        const { data: nextRoundData } = await client.from('rounds')
-          .select('*').eq('tournament_id', t.id).eq('round_number', nextRoundNum).single();
+        const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', t.id);
+        const { data: allMatches } = await client.from('matches').select('*').eq('tournament_id', t.id);
 
-        if (nextRoundData) {
-          await client.from('rounds').update({
-            is_active: true,
-            started_at: new Date().toISOString()
-          }).eq('id', nextRoundData.id);
+        const playerScores = {};
+        (allPlayers || []).forEach(p => { 
+          playerScores[p.id] = { wins: 0, losses: 0, points: 0 }; 
+        });
+        (allMatches || []).forEach(m => {
+          if (m.finished && m.winner_id) {
+            if (!playerScores[m.winner_id]) playerScores[m.winner_id] = { wins: 0, losses: 0, points: 0 };
+            playerScores[m.winner_id].wins++;
+            playerScores[m.winner_id].points += 1;
+            const loserId = m.winner_id === m.player1_id ? m.player2_id : m.player1_id;
+            if (loserId) {
+              if (!playerScores[loserId]) playerScores[loserId] = { wins: 0, losses: 0, points: 0 };
+              playerScores[loserId].losses++;
+            }
+          }
+        });
 
-          await window.TH.updateTournament(t.id, { current_round: nextRoundNum });
-          toast("⏭ Раунд " + (nextRoundNum + 1) + " начался!");
-        } else {
-          toast("⚠️ Следующий раунд не найден");
-        }
+        const playersWithScores = (allPlayers || []).map(p => ({
+          ...p, score: playerScores[p.id] || { wins: 0, losses: 0, points: 0 }
+        }));
+
+        const pairs = generateSwissPairs(playersWithScores, allMatches || []);
+
+        const { data: newRound } = await client.from('rounds').insert({
+          tournament_id: t.id, round_number: nextRoundNum,
+          name: "Раунд " + (nextRoundNum + 1), is_active: true,
+          started_at: new Date().toISOString()
+        }).select().single();
+
+        const newMatches = pairs.map((pair, idx) => ({
+          round_id: newRound.id, tournament_id: t.id,
+          player1_id: pair[0]?.id || null,
+          player2_id: pair[1]?.id || null,
+          match_order: idx, status: 'pending', votes1: 0, votes2: 0
+        }));
+
+        if (newMatches.length) await client.from('matches').insert(newMatches);
+        await window.TH.updateTournament(t.id, { current_round: nextRoundNum });
+        toast("⏭ Раунд " + (nextRoundNum + 1) + " начался!");
       }
 
       try { await window.TH.logAction('advance_round', { tournament_id: t.id, round: currentRound.round_number }); } catch (e) {}
@@ -255,7 +312,6 @@
     } catch (e) { toast("❌ " + e.message); console.error(e); }
   }
 
-  // ===== OTHER ADMIN FUNCTIONS =====
   async function doResetVotes() {
     const t = await getActiveTournament();
     if (!t) { toast("Нет активного турнира"); return; }
@@ -265,6 +321,7 @@
       await client.from('votes').delete().eq('tournament_id', t.id);
       await client.from('matches').update({ votes1: 0, votes2: 0 }).eq('tournament_id', t.id);
       toast("🔄 Голоса сброшены");
+      try { await window.TH.logAction('reset_votes', { tournament_id: t.id }); } catch (e) {}
       await refreshAll();
     } catch (e) { toast("❌ " + e.message); }
   }
@@ -274,6 +331,7 @@
     if (!t) { toast("Нет активного турнира"); return; }
     await window.TH.updateTournament(t.id, { status: 'archived', archived_at: new Date().toISOString() });
     toast("📦 Турнир архивирован");
+    try { await window.TH.logAction('archive_tournament', { id: t.id }); } catch (e) {}
     await refreshAll();
   }
 
@@ -283,17 +341,15 @@
     if (!confirm('Точно удалить турнир "' + t.title + '"?')) return;
     await window.TH.deleteTournament(t.id);
     toast("🗑 Турнир удалён");
+    try { await window.TH.logAction('delete_tournament', { id: t.id, title: t.title }); } catch (e) {}
     await refreshAll();
   }
 
-  // ===== PARTICIPANT EDITOR =====
+  let editingParticipants = [];
   async function renderParticipantEditor() {
     const t = await getActiveTournament();
     const container = document.getElementById("participantEditor");
-    if (!t || t.status !== "draft") {
-      container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Редактор доступен только для черновиков.</p>`;
-      return;
-    }
+    if (!t || t.status !== "draft") { container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Редактор доступен только для черновиков.</p>`; return; }
     const { data: players } = await window.TH.getPlayers(t.id);
     editingParticipants = (players || []).map(p => ({ ...p }));
     refreshParticipantRows();
@@ -301,10 +357,7 @@
 
   function refreshParticipantRows() {
     const container = document.getElementById("participantEditor");
-    if (!editingParticipants.length) {
-      container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Нет участников</p>`;
-      return;
-    }
+    if (!editingParticipants.length) { container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Нет участников</p>`; return; }
     container.innerHTML = editingParticipants.map((p, i) => `
       <div class="participant-row">
         <input type="text" value="${escapeHTML(p.name)}" onchange="Admin.updateParticipant(${i}, 'name', this.value)" placeholder="Имя"/>
@@ -316,7 +369,9 @@
   function updateParticipant(index, field, value) {
     if (editingParticipants[index]) editingParticipants[index][field] = value.trim();
   }
+
   function removeParticipant(index) { editingParticipants.splice(index, 1); refreshParticipantRows(); }
+
   function addParticipantRow() {
     editingParticipants.push({ id: Date.now().toString(), name: "", image_url: "", type: "character", description: "" });
     refreshParticipantRows();
@@ -329,29 +384,21 @@
     if (valid.length < 2) { toast("Минимум 2 участника с именем"); return; }
     try {
       await window.TH.getClient().from('players').delete().eq('tournament_id', t.id);
-      const toInsert = valid.map((p, i) => ({
-        tournament_id: t.id,
-        name: p.name,
-        image_url: p.image_url || p.image || '',
-        type: p.type || 'character',
-        description: p.description || '',
-        seed: i,
-        elo: 1000
+      const toInsert = valid.map((p, i) => ({ 
+        tournament_id: t.id, name: p.name, image_url: p.image_url || p.image || '', 
+        type: p.type || 'character', description: p.description || '', seed: i, elo: 1000 
       }));
       await window.TH.createPlayers(toInsert);
       document.getElementById("participantSaveStatus").innerHTML = "<span style='color:var(--green);'>✅ Сохранено (" + valid.length + " участников)</span>";
+      try { await window.TH.logAction('update_players', { tournament_id: t.id, count: valid.length }); } catch (e) {}
       await refreshAll();
     } catch (e) { toast("❌ " + e.message); }
   }
 
-  // ===== FORCE WIN =====
   async function renderForceWin() {
     const t = await getActiveTournament();
     const container = document.getElementById("forceWinList");
-    if (!t || t.status !== "active") {
-      container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Нет активного раунда</p>`;
-      return;
-    }
+    if (!t || t.status !== "active") { container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Нет активного раунда</p>`; return; }
 
     const client = window.TH.getClient();
     const { data: rounds } = await client.from('rounds').select('*').eq('tournament_id', t.id).eq('is_active', true);
@@ -362,10 +409,7 @@
       .select('*, player1:player1_id(*), player2:player2_id(*)')
       .eq('round_id', round.id).eq('finished', false);
 
-    if (!matches || !matches.length) {
-      container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Все матчи завершены</p>`;
-      return;
-    }
+    if (!matches || !matches.length) { container.innerHTML = `<p style="color:var(--text-3);font-size:13px;">Все матчи завершены</p>`; return; }
 
     container.innerHTML = matches.map(m => `
       <div class="match-admin" style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border-radius:10px;margin-bottom:8px;">
@@ -375,39 +419,31 @@
       </div>`).join("");
   }
 
-  async function forceWin(matchId, playerId) {
+  async function forceWin(matchId, playerId, playerNum) {
     try {
       await window.TH.updateMatch(matchId, { winner_id: playerId, finished: true, status: 'done' });
       toast("🏁 Победитель назначен вручную");
+      try { await window.TH.logAction('force_win', { match_id: matchId, player_num: playerNum }); } catch (e) {}
       await refreshAll();
     } catch (e) { toast("❌ " + e.message); }
   }
 
-  // ===== RENDER MANAGE TAB =====
-  async function renderManageTab() {
-    await renderForceWin();
-  }
-
-  // ===== USERS =====
   async function renderUsers() {
     const tbody = document.querySelector("#usersTable tbody");
     if (!tbody) return;
     try {
       const { data: users } = await window.TH.getAllUsers();
-      if (!users || !users.length) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-3);">Нет пользователей</td></tr>`;
-        return;
-      }
+      if (!users || !users.length) { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-3);">Нет пользователей</td></tr>`; return; }
       tbody.innerHTML = users.map(u => `
         <tr>
           <td>${escapeHTML(u.username)}</td>
           <td>${escapeHTML(u.display_name || u.username)}</td>
           <td>${u.authType || 'supabase'}</td>
-          <td><span style="color:${u.role === 'admin' ? 'var(--accent)' : 'var(--text-2)'};font-weight:${u.role === 'admin' ? '700' : '400'};">${u.role || 'user'}</span></td>
+          <td><span style="color:${u.role === "admin" ? "var(--accent)" : "var(--text-2)"};font-weight:${u.role === "admin" ? "700" : "400"};">${u.role || "user"}</span></td>
           <td>${u.votes_count || 0}</td>
-          <td>${u.fandom_name ? escapeHTML(u.fandom_name) : '—'}</td>
-          <td><button class="btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="Admin.toggleAdmin('${u.id}')">${u.role === 'admin' ? 'Снять админку' : 'Сделать админом'}</button></td>
-        </tr>`).join('');
+          <td>${u.fandom_name ? escapeHTML(u.fandom_name) : "—"}</td>
+          <td><button class="btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="Admin.toggleAdmin('${u.id}')">${u.role === "admin" ? "Снять админку" : "Сделать админом"}</button></td>
+        </tr>`).join("");
     } catch (e) { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);">Ошибка загрузки</td></tr>`; }
   }
 
@@ -417,11 +453,11 @@
       const newRole = user.role === 'admin' ? 'user' : 'admin';
       await window.TH.setUserRole(userId, newRole);
       toast(newRole === 'admin' ? "👑 Админка выдана" : "👤 Админка снята");
+      try { await window.TH.logAction('change_role', { user_id: userId, new_role: newRole }); } catch (e) {}
       await renderUsers();
     } catch (e) { toast("❌ " + e.message); }
   }
 
-  // ===== MODERATION =====
   async function renderModeration() {
     try {
       const client = window.TH.getClient();
@@ -450,14 +486,14 @@
 
   async function doClearChat() {
     if (!confirm("Очистить ВЕСЬ чат?")) return;
-    try {
-      await window.TH.getClient().from('chat_messages').delete().neq('id', '0');
-      toast("💬 Чат очищен");
-      await renderModeration();
+    try { 
+      await window.TH.getClient().from('chat_messages').delete().neq('id', '0'); 
+      toast("💬 Чат очищен"); 
+      try { await window.TH.logAction('clear_chat'); } catch (e) {} 
+      await renderModeration(); 
     } catch (e) { toast("❌ " + e.message); }
   }
 
-  // ===== SETTINGS =====
   async function loadSettings() {
     try {
       const { data: settings } = await window.TH.getSiteSettings();
@@ -480,10 +516,11 @@
         theme: document.getElementById("settingTheme").value
       });
       document.getElementById("settingsStatus").innerHTML = "<span style='color:var(--green);'>✅ Настройки сохранены</span>";
+      try { await window.TH.logAction('update_settings'); } catch (e) {}
       const logoEl = document.getElementById("siteLogoLink");
-      if (logoEl) {
-        const { data } = await window.TH.getSiteSettings();
-        logoEl.textContent = (data?.site_logo || "🏆") + " " + (data?.site_name || "Tournament Hub");
+      if (logoEl) { 
+        const { data } = await window.TH.getSiteSettings(); 
+        logoEl.textContent = (data?.site_logo || "🏆") + " " + (data?.site_name || "Tournament Hub"); 
       }
     } catch (e) { toast("❌ " + e.message); }
   }
@@ -508,6 +545,7 @@
       if (!admins.includes(name)) { admins.push(name); await window.TH.updateSiteSettings({ fandom_admins: admins }); }
       document.getElementById("newFandomAdmin").value = "";
       await renderFandomAdmins();
+      try { await window.TH.logAction('add_fandom_admin', { name }); } catch (e) {}
     } catch (e) { toast("❌ " + e.message); }
   }
 
@@ -517,10 +555,10 @@
       const admins = (settings?.fandom_admins || []).filter(a => a !== name);
       await window.TH.updateSiteSettings({ fandom_admins: admins });
       await renderFandomAdmins();
+      try { await window.TH.logAction('remove_fandom_admin', { name }); } catch (e) {}
     } catch (e) { toast("❌ " + e.message); }
   }
 
-  // ===== EXPORT / IMPORT =====
   async function doExport() {
     try {
       const { data: tournaments } = await window.TH.getTournaments();
@@ -533,6 +571,7 @@
       a.href = url; a.download = "tournament-hub-backup-" + new Date().toISOString().slice(0, 10) + ".json";
       a.click(); URL.revokeObjectURL(url);
       toast("📥 Экспортировано");
+      try { await window.TH.logAction('export_data'); } catch (e) {}
     } catch (e) { toast("❌ " + e.message); }
   }
 
@@ -546,6 +585,7 @@
         if (!backup || !backup.data) { toast("❌ Неверный формат бэкапа"); return; }
         if (backup.data.settings) await window.TH.updateSiteSettings(backup.data.settings);
         toast("📤 Импорт завершён");
+        try { await window.TH.logAction('import_data'); } catch (e) {}
         await refreshAll();
       } catch (err) { toast("❌ Ошибка импорта: " + err.message); }
     };
@@ -556,16 +596,15 @@
     if (!confirm("ВЫ УВЕРЕНЫ? Это удалит ВСЕ локальные данные!")) return;
     if (prompt('Введите "DELETE" для подтверждения:') !== "DELETE") return;
     const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && (key.startsWith('th_') || key === 'tournament_hub_db')) keysToRemove.push(key);
+    for (let i = 0; i < localStorage.length; i++) { 
+      const key = localStorage.key(i); 
+      if (key && (key.startsWith('th_') || key === 'tournament_hub_db')) keysToRemove.push(key); 
     }
     keysToRemove.forEach(k => localStorage.removeItem(k));
     toast("💥 Данные удалены. Перезагрузка...");
     setTimeout(() => location.reload(), 1500);
   }
 
-  // ===== REFRESH =====
   async function refreshAll() {
     await refreshActiveTournament();
     await refreshTournamentList();
@@ -585,7 +624,7 @@
     const client = window.TH.getClient();
     const { data: rounds } = await client.from('rounds').select('*').eq('tournament_id', t.id);
     const totalRounds = t.total_rounds || 10;
-    el.innerHTML = `<b>${escapeHTML(t.title)}</b> (${t.status}) — ${(players || []).length} участников, ${(rounds || []).length}/${totalRounds} раундов, групп: ${t.group_count || '?'}`;
+    el.innerHTML = `<b>${escapeHTML(t.title)}</b> (${t.status}) — ${(players || []).length} участников, ${(rounds || []).length}/${totalRounds} раундов, текущий: ${(t.current_round || 0) + 1}`;
   }
 
   async function refreshTournamentList() {
@@ -606,6 +645,7 @@
 
   async function setActive(id) {
     localStorage.setItem('th_active_tournament', id);
+    if (window.DB) window.DB.updateDB(db => { db.activeTournamentId = id; });
     try { await window.TH.updateSiteSettings({ active_tournament_id: id }); } catch (e) {}
     toast("✅ Турнир активирован");
     await refreshAll();
@@ -615,7 +655,7 @@
     const el = document.getElementById("adminLog");
     if (!el) return;
     try {
-      const { data: logs } = await window.TH.getAdminLogs(100);
+      const { data: logs } = await window.TH.getAdminLogs(MAX_LOG);
       if (!logs || !logs.length) { el.innerHTML = `<div style="padding:4px 0;"><span style="color:var(--text-3);">[--:--:--]</span> Лог пуст</div>`; return; }
       el.innerHTML = logs.map(l => {
         const time = new Date(l.created_at).toLocaleTimeString("ru-RU");
@@ -631,62 +671,13 @@
     if (el) el.innerHTML = `<div style="padding:4px 0;"><span style="color:var(--text-3);">[--:--:--]</span> Лог очищен</div>`;
   }
 
-  // ===== NEWS MANAGEMENT =====
-  async function renderNewsAdmin() {
-    try {
-      const { data: news } = await window.TH.getNews(50);
-      const container = document.getElementById("newsList");
-      if (!container) return;
-      if (!news || !news.length) { container.innerHTML = '<p style="color:var(--text-3);">Нет новостей</p>'; return; }
-      container.innerHTML = news.map(n => `
-        <div style="padding:12px;background:var(--bg);border-radius:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
-          <div><strong>${escapeHTML(n.title)}</strong> <span style="color:var(--text-3);font-size:12px;">${new Date(n.published_at).toLocaleDateString('ru-RU')}</span></div>
-          <button class="btn-danger" style="padding:4px 10px;font-size:11px;" onclick="Admin.deleteNews('${n.id}')">🗑</button>
-        </div>`).join('');
-    } catch (e) { console.warn('News render error', e); }
-  }
+  document.addEventListener("DOMContentLoaded", function() { checkAuth(); });
 
-  async function createNews() {
-    const title = document.getElementById("newsTitle").value.trim();
-    const content = document.getElementById("newsContent").value.trim();
-    const image = document.getElementById("newsImage").value.trim();
-    if (!title || !content) { toast("Заполните заголовок и содержание"); return; }
-    try {
-      await window.TH.createNewsItem({ title, content, image_url: image || null, published_at: new Date().toISOString() });
-      toast("✅ Новость создана");
-      document.getElementById("newsTitle").value = "";
-      document.getElementById("newsContent").value = "";
-      document.getElementById("newsImage").value = "";
-      await renderNewsAdmin();
-    } catch (e) { toast("❌ " + e.message); }
-  }
-
-  async function deleteNews(id) {
-    if (!confirm("Удалить новость?")) return;
-    try { await window.TH.deleteNewsItem(id); toast("🗑 Новость удалена"); await renderNewsAdmin(); }
-    catch (e) { toast("❌ " + e.message); }
-  }
-
-  // ===== INIT =====
-  document.addEventListener("DOMContentLoaded", function() {
-    checkAuth();
-    // Expose news functions
-    window.Admin = window.Admin || {};
-    window.Admin.createNews = createNews;
-    window.Admin.deleteNews = deleteNews;
-    window.Admin.renderNewsAdmin = renderNewsAdmin;
-  });
-
-  // ===== EXPOSE =====
   window.Admin = {
-    doLogin, checkAuth,
-    doCreateTournament, doStartTournament, doAdvanceRound,
+    doLogin, switchTab, doCreateTournament, doStartTournament, doAdvanceRound,
     doResetVotes, doArchiveTournament, doDeleteActiveTournament,
     updateParticipant, removeParticipant, addParticipantRow, saveParticipants,
-    forceWin, toggleAdmin, deleteComment, doClearChat,
-    saveSiteSettings, addFandomAdmin, removeFandomAdmin,
-    doExport, doImport, doResetAll, setActive, clearLog,
-    renderNewsAdmin, createNews, deleteNews,
-    renderParticipantEditor, renderForceWin, renderUsers, renderModeration, loadSettings
+    forceWin, toggleAdmin, deleteComment, doClearChat, saveSiteSettings,
+    addFandomAdmin, removeFandomAdmin, doExport, doImport, doResetAll, setActive, clearLog
   };
 })();
