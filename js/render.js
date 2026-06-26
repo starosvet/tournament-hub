@@ -40,17 +40,17 @@
       if (window.TH) { 
         const { data } = await window.TH.getTournaments(); 
         if (data) tournaments = data; 
-        // Загружаем количество игроков для каждого турнира
+        // Загружаем количество игроков одним запросом
         try {
-          const { data: playersData } = await window.TH.getClient().from('players')
-            .select('tournament_id', { count: 'exact', head: true })
-            .in('tournament_id', tournaments.map(t => t.id));
-          // Supabase не даёт count per group в одном запросе, делаем отдельно
-          for (const t of tournaments) {
-            const { count } = await window.TH.getClient().from('players')
-              .select('*', { count: 'exact', head: true })
-              .eq('tournament_id', t.id);
-            playerCounts[t.id] = count || 0;
+          if (tournaments.length > 0) {
+            const { data: playersData } = await window.TH.getClient()
+              .from('players')
+              .select('tournament_id')
+              .in('tournament_id', tournaments.map(t => t.id));
+            // Подсчитываем вручную
+            for (const t of tournaments) {
+              playerCounts[t.id] = (playersData || []).filter(p => p.tournament_id === t.id).length;
+            }
           }
         } catch (e) { console.warn('Player count load failed:', e); }
       }
@@ -84,7 +84,10 @@
             </div>
           </div>`;
       }).join('');
-    } catch (e) { console.error('renderTournamentList error:', e); container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки</p>'; }
+    } catch (e) { 
+      console.error('renderTournamentList error:', e); 
+      container.innerHTML = '<p style="color:var(--red);">Ошибка загрузки: ' + (e.message || 'Неизвестная ошибка') + '</p>'; 
+    }
   }
 
   function renderStats() {
