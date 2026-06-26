@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub Bracket Renderer (v10 — Group Swiss System)
+   Tournament Hub Bracket Renderer (v11 — Fixed Group Voting)
    ============================================================ */
 (function () {
   'use strict';
@@ -9,6 +9,7 @@
   let realtimeSubscribed = false;
   let currentTournamentId = null;
   let isRendering = false;
+  let groupStatusMap = {}; // ✅ FIX: Кэш статусов групп
 
   async function loadTournament(tournamentId) {
     if (window.TH && window.TH.getTournament) {
@@ -27,23 +28,16 @@
     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
-  // ========== RENDER PLAYER NAME (clickable) ==========
   function renderPlayerName(player, isWinner) {
     if (!player) return '<span style="color:var(--text-3);">???</span>';
-
     const name = escapeHTML(player.name || '???');
     const articleUrl = player.article_url || '';
-    const imageUrl = player.image_url || player.image || '';
-
-    // Если есть ссылка на статью — имя кликабельное
     if (articleUrl) {
       return `<a href="${escapeHTML(articleUrl)}" target="_blank" class="shiki-player-name-link" style="color:${isWinner ? 'var(--green)' : 'var(--text)'};text-decoration:none;font-weight:700;" onclick="event.stopPropagation();">${name} 🔗</a>`;
     }
-
     return `<span style="font-weight:700;">${name}</span>`;
   }
 
-  // ========== RENDER PLAYER IMAGE (with fallback) ==========
   function renderPlayerImage(player) {
     const imageUrl = player?.image_url || player?.image || '';
     if (imageUrl) {
@@ -52,16 +46,13 @@
     return '';
   }
 
-  // ========== AUTO-FETCH IMAGE for players without image ==========
   async function autoFetchMissingImages(players) {
     if (!window.FandomAPI) return;
-
     for (const p of players) {
       if (p && !p.image_url && p.article_url && window.FandomAPI.isFandomUrl(p.article_url)) {
         const img = await window.FandomAPI.fetchImageFromUrl(p.article_url);
         if (img) {
           p.image_url = img;
-          // Обновляем в DOM если элемент уже отрендерен
           const imgEl = document.querySelector(`[data-player-id="${p.id}"] .shiki-player-img img`);
           if (imgEl) imgEl.src = img;
         }
@@ -69,9 +60,27 @@
     }
   }
 
+  // ✅ FIX: Проверка canVote с учётом статуса группы
+  async function canVoteForMatch(match, groupStatus, tournamentStatus) {
+    const isFinished = match.finished || match.status === 'done';
+    const isBye = match.isBye || (!match.player2_id && match.player1_id);
+    
+    // ✅ FIX: Группа должна быть открыта (open или voting)
+    const isGroupOpen = groupStatus === 'open' || groupStatus === 'voting';
+    
+    if (!isGroupOpen || isFinished || tournamentStatus !== 'active' || isBye) {
+      return false;
+    }
+    
+    // Проверяем голосовал ли пользователь
+    if (window.TH && window.TH.hasVoted) {
+      try { return !(await window.TH.hasVoted(match.id)); } catch (e) { return true; }
+    } else {
+      return !localStorage.getItem('th_voted_match_' + match.id);
+    }
+  }
 
-  // ========== MATCH CARD (Shikimori style) ==========
-  async function renderMatch(match, isGroupOpen, tournamentStatus) {
+  async function renderMatch(match, groupStatus, tournamentStatus) {
     const p1 = match.player1 || { name: "???", image_url: '', score: { points: 0, wins: 0, losses: 0 } };
     const p2 = match.player2 || { name: "???", image_url: '', score: { points: 0, wins: 0, losses: 0 } };
     const votes1 = match.votes1 || 0;
@@ -86,17 +95,8 @@
     const p2Win = isFinished && wId && p2.id === wId;
     const isBye = match.isBye || (!p2.id && p1.id);
 
-    let canVote = false;
-    if (isGroupOpen && !isFinished && tournamentStatus === 'active' && !isBye) {
-      if (window.TH && window.TH.hasVoted) {
-        try { canVote = !(await window.TH.hasVoted(match.id)); } catch (e) { canVote = true; }
-      } else {
-        canVote = !localStorage.getItem('th_voted_match_' + match.id);
-      }
-    }
-
-    const p1Image = p1.image_url || p1.image || '';
-    const p2Image = p2.image_url || p2.image || '';
+    // ✅ FIX: Используем groupStatus из параметра
+    const canVote = await canVoteForMatch(match, groupStatus, tournamentStatus);
 
     if (isBye) {
       return `
@@ -184,7 +184,6 @@
       </div>`;
   }
 
-  // ========== STANDINGS TABLE ==========
   function renderStandings(players) {
     if (!players || !players.length) return '';
     return `
@@ -235,7 +234,6 @@
       </div>`;
   }
 
-  // ========== GROUP CARD ==========
   function renderGroupHeader(group, roundIdx, totalRounds) {
     const isOpen = group.status === 'open' || group.status === 'voting';
     const isClosed = group.status === 'closed';
@@ -257,7 +255,6 @@
       </div>`;
   }
 
-  // ========== VOTE ==========
   async function castVote(matchId, playerIndex, el) {
     if (el) {
       el.style.transform = 'scale(0.97)';
@@ -305,7 +302,6 @@
     });
   }
 
-  // ========== MAIN RENDER ==========
   async function renderBracket(tournamentOrId, container) {
     if (isRendering) return;
     isRendering = true;
@@ -346,74 +342,52 @@
     let rounds = [];
     let groups = [];
     let matches = [];
-    let loadError = false;
 
     if (window.TH && window.TH.getClient) {
       try {
         const client = window.TH.getClient();
-
-        // Загружаем раунды
         const { data: roundsData } = await client.from('rounds').select('*').eq('tournament_id', tournament.id).order('round_number', { ascending: true });
         rounds = roundsData || [];
-
-        // Загружаем группы (может не существовать таблица)
-        let groupsData = [];
-        try {
-          const g = await client.from('groups').select('*').eq('tournament_id', tournament.id).order('match_order_start', { ascending: true });
-          groupsData = g.data || [];
-        } catch (groupsErr) {
-          console.warn('Groups table not available:', groupsErr.message);
-        }
-        groups = groupsData;
-
-        // Загружаем матчи (простой запрос без relations — надёжнее)
-        let matchesData = [];
-        try {
-          const m = await client.from('matches').select('*').eq('tournament_id', tournament.id);
-          matchesData = m.data || [];
-        } catch (matchesErr) {
-          console.warn('Matches load error:', matchesErr.message);
-        }
-
-        // Если матчи загрузились без relations, подгружаем игроков отдельно
-        if (matchesData.length > 0 && !matchesData[0].player1) {
+        
+        const { data: groupsData } = await client.from('groups').select('*').eq('tournament_id', tournament.id).order('match_order_start', { ascending: true });
+        groups = groupsData || [];
+        
+        const { data: matchesData } = await client.from('matches').select('*').eq('tournament_id', tournament.id);
+        
+        // Подгружаем игроков отдельно если нужно
+        if (matchesData && matchesData.length > 0 && !matchesData[0].player1) {
           const { data: allPlayers } = await client.from('players').select('*').eq('tournament_id', tournament.id);
           const playerMap = {};
           (allPlayers || []).forEach(p => { playerMap[p.id] = p; });
-
+          
           matches = matchesData.map(m => ({
             ...m,
             player1: m.player1_id ? playerMap[m.player1_id] : null,
             player2: m.player2_id ? playerMap[m.player2_id] : null
           }));
         } else {
-          matches = matchesData;
+          matches = matchesData || [];
         }
-
       } catch (e) { 
         console.warn('Failed to load from Supabase:', e);
-        loadError = true;
       }
     }
 
-    // Fallback: если из Supabase ничего не загрузилось, используем tournament.rounds
-    if (!rounds.length && tournament.rounds) {
-      rounds = tournament.rounds;
-    }
+    // Fallback
+    if (!rounds.length && tournament.rounds) rounds = tournament.rounds;
     if (!matches.length && tournament.rounds) {
-      // Собираем матчи из tournament.rounds
       matches = [];
       for (const r of tournament.rounds) {
         for (const m of (r.matches || [])) {
-          matches.push({
-            ...m,
-            round_id: r.id,
-            player1: m.player1,
-            player2: m.player2
-          });
+          matches.push({ ...m, round_id: r.id, player1: m.player1, player2: m.player2 });
         }
       }
     }
+    if (!groups.length && tournament.groups) groups = tournament.groups;
+
+    // ✅ FIX: Строим мапу статусов групп
+    groupStatusMap = {};
+    groups.forEach(g => { groupStatusMap[g.id] = g.status; });
 
     if (!rounds.length) {
       container.innerHTML = `<div class="empty-state"><h3>Турнир ещё не запущен</h3><p>Администратор должен запустить первый раунд</p></div>`;
@@ -421,22 +395,21 @@
       return;
     }
 
-    // Build rounds HTML with groups
+    // Build rounds HTML
     let roundsHtml = '';
     const roundsToRender = rounds.length ? rounds : (tournament.rounds || []);
 
     for (let idx = 0; idx < roundsToRender.length; idx++) {
       const round = roundsToRender[idx];
       const roundGroups = groups.filter(g => g.round_id === round.id);
+      const isRoundActive = idx === (tournament.current_round || tournament.currentRound || 0) && tournament.status === 'active';
 
       if (roundGroups.length === 0) {
-        // Fallback: старая логика без групп
+        // Fallback: без групп
         const roundMatches = matches.filter(m => m.round_id === round.id);
-        const isRoundActive = idx === (tournament.current_round || tournament.currentRound || 0) && tournament.status === 'active';
-
         const matchesHtml = [];
         for (const m of roundMatches) {
-          matchesHtml.push(await renderMatch(m, isRoundActive, tournament.status));
+          matchesHtml.push(await renderMatch(m, 'open', tournament.status));
         }
 
         roundsHtml += `
@@ -450,17 +423,16 @@
             </div>
           </div>`;
       } else {
-        // Новая логика с группами
-        const isRoundActive = idx === (tournament.current_round || tournament.currentRound || 0) && tournament.status === 'active';
-
+        // С группами
         let groupsHtml = '';
         for (const group of roundGroups) {
           const groupMatches = matches.filter(m => m.group_id === group.id);
-          const isGroupOpen = group.status === 'open' || group.status === 'voting';
-
+          // ✅ FIX: Передаём реальный статус группы
+          const groupStatus = group.status || 'pending';
+          
           const matchesHtml = [];
           for (const m of groupMatches) {
-            matchesHtml.push(await renderMatch(m, isGroupOpen, tournament.status));
+            matchesHtml.push(await renderMatch(m, groupStatus, tournament.status));
           }
 
           groupsHtml += `
@@ -517,10 +489,7 @@
 
     isRendering = false;
 
-    // Автоподгрузка недостающих фото
-    if (tournament.players) {
-      autoFetchMissingImages(tournament.players);
-    }
+    if (tournament.players) autoFetchMissingImages(tournament.players);
   }
 
   window.RenderBracket = { renderBracket, castVote };
