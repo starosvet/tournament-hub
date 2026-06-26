@@ -89,7 +89,35 @@
       let playerType = 'character', playerName = namePart;
       const typeMatch = namePart.match(/^\[(.*?)\]\s*(.+)$/);
       if (typeMatch) { playerType = typeMap[typeMatch[1].toLowerCase()] || 'other'; playerName = typeMatch[2]; }
-      return { name: playerName, image_url: parts[1] || "", type: playerType, description: parts[2] || "" };
+
+      // Парсинг: name | image_url_or_fandom_url | description
+      // Если parts[1] содержит fandom.com — это ссылка на статью
+      let imageUrl = "";
+      let articleUrl = "";
+      let description = "";
+
+      if (parts[1]) {
+        if (parts[1].includes('fandom.com') || parts[1].startsWith('http')) {
+          articleUrl = parts[1];
+          // Если это прямая ссылка на изображение
+          if (parts[1].match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i)) {
+            imageUrl = parts[1];
+          }
+        } else {
+          imageUrl = parts[1];
+        }
+      }
+
+      // Описание может быть в parts[2] или parts[1] если parts[1] — ссылка
+      description = parts[2] || "";
+
+      return { 
+        name: playerName, 
+        image_url: imageUrl, 
+        article_url: articleUrl,
+        type: playerType, 
+        description: description 
+      };
     }).filter(Boolean);
 
     if (players.length < 2) { toast("Минимум 2 участника"); return; }
@@ -127,6 +155,14 @@
         ...p, tournament_id: tournament.id, seed: i, elo: 1000,
         score_wins: 0, score_losses: 0, score_points: 0, score_buchholz: 0, score_draws: 0
       }));
+
+      // Автоподгрузка фото с Fandom (если указана ссылка на статью, но нет фото)
+      for (const p of playersWithTournament) {
+        if (p.article_url && !p.image_url && window.FandomAPI) {
+          const fetchedImage = await window.FandomAPI.fetchImageFromUrl(p.article_url);
+          if (fetchedImage) p.image_url = fetchedImage;
+        }
+      }
       const { error: playersError } = await window.TH.createPlayers(playersWithTournament);
       if (playersError) throw playersError;
 
