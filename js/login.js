@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Login Page Controller (Безопасная версия)
+   Tournament Hub — Login Page Controller (FIXED v5)
    ============================================================ */
 (function () {
   'use strict';
