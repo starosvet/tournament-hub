@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Управление | Tournament Hub</title>
+    <title>Управление · Tournament Hub</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/oauth-init.js"></script>
@@ -12,7 +12,6 @@
     <script src="js/engine.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/admin.js"></script>
-    <script src="js/tournament.js"></script>
 </head>
 <body>
     <header>
@@ -47,6 +46,7 @@
                 <button class="admin-tab" data-tab="users" onclick="Admin.switchTab('users')">👤 Пользователи</button>
                 <button class="admin-tab" data-tab="moderation" onclick="Admin.switchTab('moderation')">🛡 Модерация</button>
                 <button class="admin-tab" data-tab="settings" onclick="Admin.switchTab('settings')">⚙️ Настройки</button>
+                <button class="admin-tab" data-tab="news" onclick="Admin.switchTab('news')">📰 Новости</button>
                 <button class="admin-tab" data-tab="log" onclick="Admin.switchTab('log')">📋 Лог</button>
             </div>
             <div id="tab-tournaments" class="tab-content active">
@@ -58,7 +58,18 @@
                         <textarea id="tDesc" placeholder="Описание (необязательно)"></textarea>
                         <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Количество раундов (швейцарская система)</label>
                         <input type="number" id="totalRounds" value="10" min="1" max="50" style="margin-bottom:14px;">
-                        <textarea id="tData" placeholder="Участники (по одному на строку):&#10;[персонаж] Имя | URL изображения | Описание&#10;[арт] Название арта | https://...&#10;[статья] Название статьи&#10;[оружие] Название оружия | https://...&#10;[локация] Название локации&#10;[скин] Название скина&#10;[босс] Имя босса&#10;[другое] Любой объект&#10;&#10;Типы: [персонаж], [статья], [арт], [оружие], [локация], [скин], [босс], [другое]&#10;Если тип не указан — будет [персонаж]" style="min-height:240px;"></textarea>
+                        <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Количество групп в раунде</label>
+                        <input type="number" id="groupCount" value="4" min="1" max="20" style="margin-bottom:14px;">
+                        <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Режим жеребьёвки</label>
+                        <select id="pairingMode" style="margin-bottom:14px;">
+                            <option value="swiss">Швейцарская (сильные с сильными)</option>
+                            <option value="random">Случайная</option>
+                        </select>
+                        <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Длительность раунда (дней)</label>
+                        <input type="number" id="roundDuration" value="1" min="1" max="30" style="margin-bottom:14px;">
+                        <label style="display:block;color:var(--text-2);font-size:13px;margin-bottom:6px;">Дней отдыха между раундами</label>
+                        <input type="number" id="restDays" value="1" min="0" max="7" style="margin-bottom:14px;">
+                        <textarea id="tData" placeholder="Участники (по одному на строку):&#10;[персонаж] Имя | URL изображения | Описание&#10;[арт] Название арта | https://...&#10;[статья] Название статьи&#10;[оружие] Название оружия | https://...&#10;[локация] Название локации&#10;[скин] Название скина&#10;[босс] Имя босса&#10;[другое] Любой объект&#10;&#10;Типы: [персонаж], [статья], [арт], [оружие], [локация], [скин], [босс], [другое]" style="min-height:240px;"></textarea>
                         <div class="btn-row"><button class="btn-primary" onclick="Admin.doCreateTournament()">Создать турнир</button></div>
                         <div id="tCreateStatus" style="margin-top:12px;font-size:13px;"></div>
                     </div>
@@ -98,17 +109,6 @@
                             <button class="btn-secondary" onclick="Admin.doArchiveTournament()">📦 Архивировать</button>
                             <button class="btn-danger" onclick="Admin.doDeleteActiveTournament()">🗑 Удалить турнир</button>
                         </div>
-                        <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
-                            <h4 style="margin-bottom:12px;font-size:14px;">⚙️ Настройки раунда</h4>
-                            <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Длительность голосования (часов)</label>
-                            <input type="number" id="voteDuration" value="24" min="1" max="168" style="margin-bottom:12px;">
-                            <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Минимум голосов для завершения</label>
-                            <input type="number" id="minVotes" value="1" min="1" style="margin-bottom:12px;">
-                            <label style="display:flex;align-items:center;gap:8px;color:var(--text-2);font-size:13px;margin-bottom:8px;"><input type="checkbox" id="useElo" checked> Использовать ELO-рейтинг</label>
-                            <label style="display:block;color:var(--text-2);font-size:12px;margin-bottom:6px;">Тай-брейк при ничьей</label>
-                            <select id="tieBreaker" style="margin-bottom:12px;"><option value="elo">По ELO (выше рейтинг)</option><option value="random">Случайный выбор</option><option value="admin">Решение администратора</option></select>
-                            <button class="btn-secondary" onclick="window.saveVoteSettings()">💾 Сохранить настройки</button>
-                        </div>
                     </div>
                     <div class="admin-card">
                         <h3>🏁 Принудительная победа</h3>
@@ -122,7 +122,7 @@
                     <h3>👥 Пользователи</h3>
                     <div style="overflow-x:auto;">
                         <table id="usersTable" style="width:100%;border-collapse:collapse;font-size:14px;">
-                            <thead><tr style="border-bottom:2px solid var(--border);text-align:left;"><th style="padding:10px;">Ник</th><th style="padding:10px;">Отображаемое имя</th><th style="padding:10px;">Тип</th><th style="padding:10px;">Роль</th><th style="padding:10px;">Голосов</th><th style="padding:10px;">Fandom</th><th style="padding:10px;">Действие</th></tr></thead>
+                            <thead><tr style="border-bottom:2px solid var(--border);text-align:left;"><th style="padding:10px;">Ник</th><th style="padding:10px;">Отобр. имя</th><th style="padding:10px;">Тип</th><th style="padding:10px;">Роль</th><th style="padding:10px;">Голосов</th><th style="padding:10px;">Fandom</th><th style="padding:10px;">Действие</th></tr></thead>
                             <tbody><tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:20px;">Загрузка...</td></tr></tbody>
                         </table>
                     </div>
@@ -173,6 +173,20 @@
                     </div>
                 </div>
             </div>
+            <div id="tab-news" class="tab-content">
+                <div class="admin-card">
+                    <h3>📰 Новости</h3>
+                    <p class="hint">Новости отображаются на главной странице.</p>
+                    <input type="text" id="newsTitle" placeholder="Заголовок новости" style="margin-bottom:10px;">
+                    <textarea id="newsContent" placeholder="Текст новости..." style="min-height:100px;margin-bottom:10px;"></textarea>
+                    <input type="text" id="newsImage" placeholder="URL изображения (необязательно)" style="margin-bottom:10px;">
+                    <button class="btn-primary" onclick="Admin.createNews()">➕ Опубликовать</button>
+                    <div style="margin-top:20px;">
+                        <h4 style="font-size:14px;margin-bottom:12px;">Опубликованные</h4>
+                        <div id="newsList"><p style="color:var(--text-3);">Загрузка...</p></div>
+                    </div>
+                </div>
+            </div>
             <div id="tab-log" class="tab-content">
                 <div class="admin-card">
                     <h3>📋 Лог действий</h3>
@@ -184,15 +198,16 @@
     </div>
     <footer><p>Tournament Hub</p></footer>
     <script>
-    window.saveVoteSettings = function() { toast("Настройки сохранены (заглушка)"); };
     document.addEventListener("DOMContentLoaded", async function() {
         let attempts = 0;
         const waitForInit = setInterval(() => {
             if (window.TH && window.TH.isReady) {
                 clearInterval(waitForInit);
-                const navAdmin = document.getElementById("navAdmin");
-                if (navAdmin && window.Auth && window.Auth.isAdminSync && window.Auth.isAdminSync()) navAdmin.classList.remove("hidden");
                 if (window.Auth && window.Auth.renderNavUser) window.Auth.renderNavUser();
+                // Render news if tab exists
+                if (document.getElementById("tab-news")) {
+                    setTimeout(() => { if (window.Admin && window.Admin.renderNewsAdmin) window.Admin.renderNewsAdmin(); }, 500);
+                }
             }
             attempts++;
             if (attempts > 60) clearInterval(waitForInit);
