@@ -1,5 +1,5 @@
 /* ============================================================
-   Tournament Hub — Tournament Manager (безопасная версия)
+   Tournament Hub — Tournament Manager (FIXED v4)
    ============================================================ */
 (function () {
   'use strict';
