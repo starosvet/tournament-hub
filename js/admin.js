@@ -116,13 +116,13 @@
       'другое': 'other', 'other': 'other'
     };
 
-    const players = raw.split(/\\r?\\n/).map(line => {
+    const players = raw.split(/\r?\n/).map(line => {
       line = line.trim();
       if (!line) return null;
       const parts = line.split("|").map(s => s.trim());
       const namePart = parts[0] || line;
       let playerType = 'character', playerName = namePart;
-      const typeMatch = namePart.match(/^\\[(.*?)\\]\\s*(.+)$/);
+      const typeMatch = namePart.match(/^\[(.*?)\]\s*(.+)$/);
       if (typeMatch) { playerType = typeMap[typeMatch[1].toLowerCase()] || 'other'; playerName = typeMatch[2]; }
 
       let imageUrl = "";
@@ -132,7 +132,7 @@
       if (parts[1]) {
         if (parts[1].includes('fandom.com') || parts[1].startsWith('http')) {
           articleUrl = parts[1];
-          if (parts[1].match(/\\.(jpg|jpeg|png|gif|webp)(\\?|$)/i)) imageUrl = parts[1];
+          if (parts[1].match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i)) imageUrl = parts[1];
         } else {
           imageUrl = parts[1];
         }
